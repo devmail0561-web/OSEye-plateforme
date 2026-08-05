@@ -203,7 +203,7 @@
     "regex": "prevent_decision_update|prevent_custody",
     "script": "",
     "enabled": true,
-    "hit_count": 1,
+    "hit_count": 2,
     "false_positive_count": 0,
     "added_date": "2026-08-05",
     "added_by": "init",
