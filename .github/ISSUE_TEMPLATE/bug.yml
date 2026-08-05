@@ -1,0 +1,108 @@
+name: 🐛 Bug report
+description: Signaler un bug dans OSEye
+title: "[BUG] <Description courte>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de remplir ce formulaire pour nous aider à reproduire et corriger le bug.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Composant affecté
+      options:
+        - Agent (Go)
+        - Server (Python)
+        - UI (React)
+        - API REST
+        - Rule Engine
+        - ML Engine
+        - Decision Engine
+        - Correlation Engine
+        - Storage
+        - Event Bus
+        - Documentation
+        - Autre
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Sévérité
+      options:
+        - Critical — Le système est inutilisable
+        - High — Fonctionnalité majeure cassée
+        - Medium — Fonctionnalité mineure cassée
+        - Low — Amélioration / cosmétique
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      description: Que se passe-t-il ? Quel est le comportement attendu ?
+      placeholder: |
+        Comportement observé : ...
+        Comportement attendu : ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      description: Comment reproduire le bug ?
+      placeholder: |
+        1. Lancer l'agent avec le profil `investigation`
+        2. Exécuter `chmod 777 /etc/shadow`
+        3. Observer que...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Stack trace
+      description: Logs pertinents (JSON structuré si possible)
+      placeholder: |
+        {"timestamp": "...", "level": "ERROR", "msg": "..."}
+      render: json
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environnement
+      description: OS, versions, déploiement
+      value: |
+        - OS :
+        - Version OSEye :
+        - Go version (agent) :
+        - Python version (server) :
+        - Déploiement : Docker Compose / Kubernetes / bare metal
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration (si pertinent)
+      description: Extraits de config / profil de surveillance / règles custom
+      render: yaml
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: J'ai cherché dans les issues existantes (pas de doublon)
+          required: true
+        - label: J'ai testé sur la dernière version `main`
+          required: false

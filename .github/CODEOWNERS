@@ -1,0 +1,37 @@
+# Code owners — reviewers automatiques selon le fichier modifié
+
+# Documentation
+/docs/                          @virus-one
+*.md                            @virus-one
+
+# Architecture & contrats
+/proto/                         @virus-one
+/agent/internal/platform/interface.go    @virus-one
+/agent/internal/collector/interface.go   @virus-one
+/server/oseye/bus/interface.py          @virus-one
+/server/oseye/storage/interface.py      @virus-one
+/server/oseye/core/schema.py            @virus-one
+
+# Agent Go
+/agent/                         @virus-one
+/agent/internal/platform/linux/ @senior-go-dev
+/agent/internal/platform/windows/ @senior-windows-dev
+/agent/internal/platform/darwin/  @senior-macos-dev
+
+# Server Python
+/server/                        @virus-one
+/server/oseye/ml_engine/        @senior-ml-dev
+/server/oseye/rule_engine/      @senior-python-dev
+/server/oseye/decision/         @virus-one
+
+# UI React
+/ui/                            @senior-frontend-dev
+
+# CI/CD & infra
+/.github/workflows/             @virus-one
+/infra/k8s/                     @senior-devops
+/infra/ansible/                 @senior-devops
+
+# Règles de détection
+/rules/builtin/                 @virus-one @senior-security-analyst
+/rules/custom/                  @senior-security-analyst

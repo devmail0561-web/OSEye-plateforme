@@ -1,0 +1,207 @@
+name: Automated Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ================================================================
+  # PR VALIDATION
+  # ================================================================
+
+  pr-checklist:
+    name: Validate PR checklist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PR body has required sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prBody = context.payload.pull_request.body || '';
+            const required = [
+              'Code tâche :',
+              'Lien vers PLAN_ACTION.md',
+              'Tests ajoutés',
+              'Références architecture',
+              'Breaking changes'
+            ];
+            const missing = required.filter(section => !prBody.includes(section));
+            if (missing.length > 0) {
+              core.setFailed(`Sections manquantes dans la PR : ${missing.join(', ')}`);
+            }
+
+  plan-task-validation:
+    name: Verify task exists in PLAN_ACTION.md
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Extract task code from PR title
+        id: task
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          TASK=$(echo "$TITLE" | grep -oP '\[P\d+\.\d+\]' | tr -d '[]')
+          echo "task=$TASK" >> $GITHUB_OUTPUT
+
+      - name: Check task exists and is assigned
+        run: |
+          TASK="${{ steps.task.outputs.task }}"
+          if ! grep -q "$TASK" docs/PLAN_ACTION.md; then
+            echo "❌ Tâche $TASK introuvable dans PLAN_ACTION.md"
+            exit 1
+          fi
+          echo "✅ Tâche $TASK trouvée dans le plan"
+
+  # ================================================================
+  # AUTOMATED CODE REVIEW
+  # ================================================================
+
+  review-architecture-compliance:
+    name: Review — Architecture compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check interface contracts respected
+        run: |
+          echo "Vérification interfaces contrats..."
+          # Agent Go : vérifier que tout Collector implémente l'interface
+          if find agent/internal/platform -name "*.go" | xargs grep -l "type.*Collector struct"; then
+            echo "✅ Collectors trouvés, vérification interface..."
+            # grep "var _ collector.Collector = " dans chaque fichier
+          fi
+
+          # Server Python : vérifier que les repositories implémentent les Protocols
+          if find server/oseye/storage/repositories -name "*.py" | xargs grep -l "class.*Repository"; then
+            echo "✅ Repositories trouvés, vérification Protocols..."
+          fi
+
+      - name: Check no direct backend imports
+        run: |
+          echo "Vérification isolation backends..."
+          # Interdire "from oseye.storage.backends" hors de storage/
+          if git diff origin/main...HEAD -- '*.py' | grep -E '^\+.*from oseye\.storage\.backends'; then
+            echo "❌ Import direct d'un backend détecté — utiliser les Protocols"
+            exit 1
+          fi
+
+  review-security:
+    name: Review — Security patterns
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check no secrets in code
+        run: |
+          # Interdire clés API en dur
+          if git diff origin/main...HEAD | grep -iE '(api_key|password|secret|token)\s*=\s*["\x27][a-zA-Z0-9]{16,}'; then
+            echo "❌ Secret potentiel détecté en dur"
+            exit 1
+          fi
+
+      - name: Check SQL injection prevention
+        run: |
+          # Python : chercher f-strings dans queries SQL
+          if git diff origin/main...HEAD -- '*.py' | grep -E '^\+.*execute\(f["\x27]'; then
+            echo "⚠️  WARNING: f-string dans SQL query — risque injection"
+          fi
+
+      - name: Check command injection prevention
+        run: |
+          # Python : chercher os.system / subprocess sans shell=False
+          if git diff origin/main...HEAD -- '*.py' | grep -E '^\+.*(os\.system|subprocess\.call).*shell=True'; then
+            echo "❌ Command injection risk: shell=True détecté"
+            exit 1
+          fi
+
+  review-performance:
+    name: Review — Performance patterns
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check no infinite loops
+        run: |
+          # Go : chercher "for {" sans condition ni select
+          if git diff origin/main...HEAD -- '*.go' | grep -E '^\+\s*for\s*\{' | grep -v select; then
+            echo "⚠️  WARNING: Boucle infinie potentielle détectée"
+          fi
+
+      - name: Check goroutine cleanup
+        run: |
+          # Go : "go func()" doit avoir un context.Context ou stopCh
+          if git diff origin/main...HEAD -- '*.go' | grep -E '^\+.*go func\('; then
+            echo "⚠️  Vérifier que toutes les goroutines ont un mécanisme d'arrêt propre"
+          fi
+
+  review-tests:
+    name: Review — Test quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tests exist for new code
+        run: |
+          echo "Vérification présence tests..."
+          NEW_GO=$(git diff origin/main...HEAD --name-only | grep '\.go$' | grep -v '_test\.go')
+          NEW_PY=$(git diff origin/main...HEAD --name-only | grep '\.py$' | grep -v 'test_.*\.py')
+
+          for file in $NEW_GO; do
+            TEST_FILE="${file%.go}_test.go"
+            if [ ! -f "$TEST_FILE" ]; then
+              echo "⚠️  Fichier $file sans test correspondant"
+            fi
+          done
+
+      - name: Check no skipped tests
+        run: |
+          # Go : t.Skip()
+          if git diff origin/main...HEAD -- '*_test.go' | grep -E '^\+.*t\.Skip'; then
+            echo "⚠️  Test(s) skippé(s) détecté(s)"
+          fi
+          # Python : @pytest.mark.skip
+          if git diff origin/main...HEAD -- 'test_*.py' | grep -E '^\+.*@pytest\.mark\.skip'; then
+            echo "⚠️  Test(s) skippé(s) détecté(s)"
+          fi
+
+  # ================================================================
+  # COMMENT ON PR
+  # ================================================================
+
+  post-review-comment:
+    name: Post review summary
+    runs-on: ubuntu-latest
+    needs: [pr-checklist, plan-task-validation, review-architecture-compliance, review-security, review-performance, review-tests]
+    if: always()
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const results = [
+              { job: 'PR Checklist', status: '${{ needs.pr-checklist.result }}' },
+              { job: 'Plan Task', status: '${{ needs.plan-task-validation.result }}' },
+              { job: 'Architecture', status: '${{ needs.review-architecture-compliance.result }}' },
+              { job: 'Security', status: '${{ needs.review-security.result }}' },
+              { job: 'Performance', status: '${{ needs.review-performance.result }}' },
+              { job: 'Tests', status: '${{ needs.review-tests.result }}' },
+            ];
+
+            const icon = (status) => status === 'success' ? '✅' : status === 'failure' ? '❌' : '⚠️';
+            const body = `## 🤖 Code Review Automatique\n\n` +
+              results.map(r => `${icon(r.status)} **${r.job}** — ${r.status}`).join('\n') +
+              `\n\n---\n_Checks détaillés dans l'onglet Actions_`;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: body
+            });

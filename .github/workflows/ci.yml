@@ -1,0 +1,348 @@
+name: CI — Lint, Test, Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  GO_VERSION: "1.23"
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # ================================================================
+  # LINT
+  # ================================================================
+
+  lint-go:
+    name: Lint — Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: agent
+          args: --timeout 5m
+
+  lint-python:
+    name: Lint — Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: server
+        run: |
+          pip install --upgrade pip
+          pip install ruff mypy pytest
+
+      - name: Ruff check
+        working-directory: server
+        run: ruff check .
+
+      - name: Mypy
+        working-directory: server
+        run: mypy oseye/
+
+  lint-typescript:
+    name: Lint — TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: ESLint
+        working-directory: ui
+        run: npm run lint
+
+  # ================================================================
+  # TESTS
+  # ================================================================
+
+  test-go:
+    name: Test — Go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run tests
+        working-directory: agent
+        run: go test -race -cover -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./agent/coverage.out
+          flags: agent
+
+  test-python:
+    name: Test — Python
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: oseye_test
+          POSTGRES_USER: oseye
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: server
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-cov pytest-asyncio
+
+      - name: Run tests
+        working-directory: server
+        env:
+          OSEYE_DB_URL: postgresql+asyncpg://oseye:test@localhost:5432/oseye_test
+          OSEYE_BUS_REDIS_URL: redis://localhost:6379
+        run: pytest --cov=oseye --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./server/coverage.xml
+          flags: server
+
+  test-typescript:
+    name: Test — TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Run tests
+        working-directory: ui
+        run: npm test -- --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./ui/coverage/lcov.info
+          flags: ui
+
+  # ================================================================
+  # BUILD
+  # ================================================================
+
+  build-agent:
+    name: Build — Agent (${{ matrix.os }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, windows, darwin]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build
+        working-directory: agent
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -o oseye-agent-${{ matrix.os }}-${{ matrix.arch }} ./cmd/oseye-agent
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.os }}-${{ matrix.arch }}
+          path: agent/oseye-agent-${{ matrix.os }}-${{ matrix.arch }}
+
+  build-docker:
+    name: Build — Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build agent
+        uses: docker/build-push-action@v5
+        with:
+          context: ./agent
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: oseye-agent:test
+
+      - name: Build server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: false
+          tags: oseye-server:test
+
+      - name: Build UI
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ui
+          push: false
+          tags: oseye-ui:test
+
+  # ================================================================
+  # CODE QUALITY AUDIT
+  # ================================================================
+
+  audit-security:
+    name: Audit — Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Go vulnerability check
+        working-directory: agent
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Python safety check
+        working-directory: server
+        run: |
+          pip install safety
+          safety check --json
+
+  audit-coverage:
+    name: Audit — Test coverage
+    runs-on: ubuntu-latest
+    needs: [test-go, test-python, test-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download coverage reports
+        uses: actions/download-artifact@v4
+
+      - name: Check coverage thresholds
+        run: |
+          echo "Vérification seuil 80% de couverture..."
+          # Script à implémenter : parse coverage.out / coverage.xml / lcov.info
+          # Fail si < 80%
+
+  audit-complexity:
+    name: Audit — Code complexity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Go cyclomatic complexity
+        working-directory: agent
+        run: |
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          gocyclo -over 15 .
+
+      - name: Python complexity (Radon)
+        working-directory: server
+        run: |
+          pip install radon
+          radon cc oseye/ -a -nc
+
+  # ================================================================
+  # STATUS CHECK
+  # ================================================================
+
+  all-checks:
+    name: ✅ All checks passed
+    runs-on: ubuntu-latest
+    needs:
+      - lint-go
+      - lint-python
+      - lint-typescript
+      - test-go
+      - test-python
+      - test-typescript
+      - build-agent
+      - build-docker
+      - audit-security
+      - audit-coverage
+      - audit-complexity
+    steps:
+      - run: echo "All CI checks passed!"

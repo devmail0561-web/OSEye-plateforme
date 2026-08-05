@@ -1,0 +1,66 @@
+# Go
+agent/bin/
+agent/*.test
+agent/coverage.out
+agent/internal/platform/linux/ebpf/*_bpfel.go
+agent/internal/platform/linux/ebpf/*_bpfeb.go
+agent/internal/platform/linux/ebpf/*.o
+agent/gen/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+server/.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+server/gen/
+
+# Proto generated files
+*_pb2.py
+*_pb2_grpc.py
+*.pb.go
+
+# Certs (dev uniquement — jamais en prod)
+infra/certs/
+
+# Node.js / UI
+ui/node_modules/
+ui/dist/
+ui/.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# SQLite dev buffers
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets (ne jamais committer)
+*.pem
+*.key
+*.p12
+.env
+.env.*
+!.env.example

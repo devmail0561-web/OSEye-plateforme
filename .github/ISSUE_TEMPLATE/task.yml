@@ -1,0 +1,106 @@
+name: 📋 Claim a task from PLAN_ACTION.md
+description: S'assigner une tâche du plan d'action
+title: "[TASK] P<n>.<m> — <Description courte>"
+labels: ["task", "help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Utilisez ce template pour vous assigner une tâche du `PLAN_ACTION.md`.
+
+  - type: input
+    id: task-code
+    attributes:
+      label: Code de la tâche
+      description: Ex. P2.03
+      placeholder: P2.03
+    validations:
+      required: true
+
+  - type: input
+    id: task-line
+    attributes:
+      label: Ligne dans PLAN_ACTION.md
+      description: Numéro de ligne où se trouve la tâche
+      placeholder: "142"
+    validations:
+      required: true
+
+  - type: textarea
+    id: task-description
+    attributes:
+      label: Description de la tâche
+      description: Copier-coller la description depuis PLAN_ACTION.md
+      placeholder: |
+        **P2.03** — `platform/linux/netlink/` : collecteur netlink (connexions réseau kernel)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: expertise
+    attributes:
+      label: Expertise requise
+      description: Domaine de compétence principal
+      options:
+        - Go / eBPF
+        - Python / FastAPI
+        - TypeScript / React
+        - ML / Data Science
+        - DevOps / K8s
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dépendances
+      description: Tâches bloquantes (doivent être [x] avant de commencer)
+      placeholder: |
+        - P1.17 — LinuxDriver
+        - P1.18 — eBPF loader
+    validations:
+      required: false
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: Plan d'approche
+      description: Comment comptez-vous implémenter cette tâche ?
+      placeholder: |
+        1. Lire ARCHITECTURE.md §3.1
+        2. Créer agent/internal/platform/linux/netlink/collector.go
+        3. Implémenter l'interface Collector
+        4. Ajouter l'adapter normalizer Python
+        5. Écrire tests unitaires (> 80%)
+    validations:
+      required: true
+
+  - type: input
+    id: estimated-time
+    attributes:
+      label: Estimation
+      description: Temps estimé (heures ou jours)
+      placeholder: "2 jours"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist avant de commencer
+      options:
+        - label: J'ai lu `CONTRIBUTING.md`
+          required: true
+        - label: J'ai lu `ARCHITECTURE.md` section(s) pertinente(s)
+          required: true
+        - label: Toutes les dépendances de cette tâche sont `[x]`
+          required: true
+        - label: J'ai accès à un environnement de dev local fonctionnel
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        Une fois validé, cette issue sera assignée à vous et la tâche marquée `[~] [@votre_nom]` dans `PLAN_ACTION.md`.

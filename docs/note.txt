@@ -1,0 +1,66 @@
+↓
+ 
+Actions
+```
+ 
+Le **Decision Engine** est celui qui décide :
+ 
+* faut-il alerter ?
+* faut-il ignorer ?
+* faut-il augmenter le niveau de surveillance ?
+* faut-il lancer une investigation ?
+* faut-il isoler le processus ?
+* faut-il demander une validation humaine ?
+ 
+Ainsi OSEye ne devient pas seulement un observateur, mais un système capable de prendre des décisions cohérentes à partir de plusieurs sources d'information.
+ 
+## Ma vision de l'architecture finale
+ 
+J'imaginerais OSEye organisé autour de composants spécialisés :
+ 
+```text
+                +----------------------+
+                |   Collecteurs        |
+                | auditd • eBPF • ...  |
+                +----------+-----------+
+                           |
+                           v
+                +----------------------+
+                | Event Bus            |
+                +----------+-----------+
+                           |
+        +------------------+------------------+
+        |                  |                  |
+        v                  v                  v
++---------------+  +----------------+  +----------------+
+| Rule Engine   |  | ML Engine      |  | Threat Intel   |
++-------+-------+  +--------+-------+  +--------+-------+
+        \                  |                   /
+         \                 |                  /
+          +----------------+-----------------+
+                           |
+                           v
+                +----------------------+
+                | Correlation Engine   |
+                +----------+-----------+
+                           |
+                           v
+                +----------------------+
+                | Decision Engine      |
+                +----------+-----------+
+                           |
+          +----------------+----------------+
+          |                |                |
+          v                v                v
+     Alertes        Investigation      Réponse
+                           |
+                           v
+                +----------------------+
+                | Dashboard / API      |
+                +----------------------+
+```
+ 
+### Ma recommandation
+ 
+Avant d'ajouter toutes ces fonctionnalités, je transformerais ton cahier des charges en un **document d'architecture (Software Architecture Document)** de 50 à 80 pages. Il inclurait les exigences fonctionnelles, les exigences non fonctionnelles, les composants, les diagrammes (C4, UML, séquences), les flux d'événements, les interfaces entre modules, le modèle de données et la feuille de route. Ce document deviendrait la référence unique du projet et faciliterait le développement, les tests et l'arrivée de nouveaux contributeurs.
+ 
