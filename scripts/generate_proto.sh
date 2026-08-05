@@ -21,7 +21,8 @@ protoc \
   "$PROTO_DIR/event.proto"
 
 # Python: standard protobuf + gRPC
-python -m grpc_tools.protoc \
+PYTHON="${VENV_PYTHON:-python3}"
+"$PYTHON" -m grpc_tools.protoc \
   -I"$PROTO_DIR" \
   --python_out="$PY_OUT" \
   --grpc_python_out="$PY_OUT" \
