@@ -64,3 +64,5 @@ logs/
 .env
 .env.*
 !.env.example
+tools/audit_state.json
+tools/audit_reports/
