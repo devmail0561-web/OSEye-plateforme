@@ -258,6 +258,104 @@ DEFAULT_PATTERNS: list[dict] = [
         "added_date": "2026-08-05", "added_by": "init",
         "notes": "Informatif — indique le périmètre non encore implémenté",
     },
+    # ── SELF-AUDIT : tools/audit/ ─────────────────────────────────────────
+    # The audit engine audits itself. These patterns cover the same quality
+    # rules as the project code, scoped to tools/audit/*.py
+    {
+        "id": "TOOL-P001", "category": "debug", "module": "M0", "severity": "BLOCKER",
+        "name": "[tools] except bare dans l'engine",
+        "description": "except: sans type dans tools/audit/ — masque les erreurs du scanner",
+        "targets": ["tools/audit/*.py"],
+        "regex": r"^\s*except\s*:",
+        "script": "", "enabled": True, "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "BLOCKER dans l'engine : une exception avalée = finding manquant sans avertissement",
+    },
+    {
+        "id": "TOOL-P002", "category": "debug", "module": "M0", "severity": "CRITICAL",
+        "name": "[tools] pattern sans targets ni script",
+        "description": "Pattern avec targets=[] ET script='' ET pas inversé — ne scanne rien",
+        "targets": [],
+        "regex": "",
+        "script": (
+            "python3 -c \""
+            "import json, sys; "
+            "pats = json.loads(open('{ROOT}/tools/audit_patterns.json').read()); "
+            "bad = [p['id'] for p in pats if not p.get('targets') and not p.get('script') "
+            "and p['id'] not in {'SEC-P011','SEC-P012','DBG-P002','DBG-P003','DBG-P006'}]; "
+            "[print(i) for i in bad]\""
+        ),
+        "enabled": True, "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "Un pattern qui ne pointe nulle part n'audite rien — silencieux et trompeur",
+    },
+    {
+        "id": "TOOL-P003", "category": "security", "module": "M0", "severity": "CRITICAL",
+        "name": "[tools] shell=True dans scanner sans validation",
+        "description": "scan_script() exécute du shell — vérifier qu'aucun input utilisateur n'est injecté",
+        "targets": ["tools/audit/scanner.py"],
+        "regex": r"shell\s*=\s*True",
+        "script": "", "enabled": True, "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "Accepté ICI car le script vient de audit_patterns.json, pas d'input utilisateur direct. Vérifier à chaque modification de scan_script().",
+    },
+    {
+        "id": "TOOL-P004", "category": "debug", "module": "M0", "severity": "MAJOR",
+        "name": "[tools] DEFAULT_PATTERNS désynchronisé de audit_patterns.json",
+        "description": "Un pattern existe dans audit_patterns.json mais pas dans DEFAULT_PATTERNS (ou vice-versa)",
+        "targets": [],
+        "regex": "",
+        "script": (
+            "python3 -c \""
+            "import json, sys; "
+            "pats_file = {p['id'] for p in json.loads(open('{ROOT}/tools/audit_patterns.json').read())}; "
+            "import ast, pathlib; "
+            "src = pathlib.Path('{ROOT}/tools/audit/persistence.py').read_text(); "
+            "tree = ast.parse(src); "
+            "ids_in_code = set(); "
+            "[ids_in_code.update(v.s for kv in node.keys for v in [kv] if isinstance(v, ast.Constant) and v.s == 'id') "
+            " for node in ast.walk(tree)]; "
+            "diff = pats_file.symmetric_difference(ids_in_code); "
+            "[print(i) for i in sorted(diff)]\""
+        ),
+        "enabled": False,
+        "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "Désactivé par défaut (AST parsing fragile) — activer manuellement pour vérification ponctuelle",
+    },
+    {
+        "id": "TOOL-P005", "category": "debug", "module": "M0", "severity": "MAJOR",
+        "name": "[tools] TODO/FIXME non justifié dans l'engine",
+        "description": "TODO ou FIXME sans ticket dans tools/audit/",
+        "targets": ["tools/audit/*.py", "tools/oseye_audit.py"],
+        "regex": r"#\s*(?:TODO|FIXME|HACK|XXX)(?!\s*\()",
+        "script": "", "enabled": True, "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "",
+    },
+    {
+        "id": "TOOL-P006", "category": "debug", "module": "M0", "severity": "MAJOR",
+        "name": "[tools] print() de debug dans l'engine",
+        "description": "print() de debug laissé dans tools/audit/ (hors reporter.py)",
+        "targets": ["tools/audit/models.py", "tools/audit/persistence.py",
+                    "tools/audit/modules.py", "tools/audit/scanner.py",
+                    "tools/audit/verifier.py", "tools/audit/commands.py"],
+        "regex": r"^\s*print\s*\(",
+        "script": "", "enabled": True, "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "reporter.py et cli.py sont exemptés — c'est leur rôle d'afficher",
+    },
+    {
+        "id": "TOOL-P007", "category": "security", "module": "M0", "severity": "MAJOR",
+        "name": "[tools] état audit_state.json commité",
+        "description": "audit_state.json ne doit pas être dans le dépôt git",
+        "targets": [],
+        "regex": "",
+        "script": "git -C {ROOT} ls-files tools/audit_state.json",
+        "enabled": True, "hit_count": 0, "false_positive_count": 0,
+        "added_date": "2026-08-05", "added_by": "init",
+        "notes": "L'état contient des chemins absolus locaux — ne doit pas être partagé",
+    },
 ]
 
 

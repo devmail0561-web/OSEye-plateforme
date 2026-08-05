@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
 from .models import ROOT, AuditState, Finding, Pattern, SEVERITY_ORDER
 from .modules import resolve_globs
+
+
+def _warn(msg: str) -> None:
+    print(f"  [AUDIT-WARN] {msg}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -19,15 +24,19 @@ def scan_regex(pattern: Pattern, files: list[Path]) -> list[tuple[Path, int, str
     """Search for pattern.regex in each file. Returns (path, line_no, line_text)."""
     if not pattern.regex or not files:
         return []
-    rx = re.compile(pattern.regex, re.IGNORECASE)
+    try:
+        rx = re.compile(pattern.regex, re.IGNORECASE)
+    except re.error as exc:
+        _warn(f"Pattern {pattern.id} — regex invalide ({exc}): {pattern.regex!r}")
+        return []
     results: list[tuple[Path, int, str]] = []
     for path in files:
         try:
             for i, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
                 if rx.search(line):
                     results.append((path, i, line.strip()))
-        except Exception:
-            pass
+        except OSError as exc:
+            _warn(f"Pattern {pattern.id} — lecture impossible {path}: {exc}")
     return results
 
 
@@ -40,12 +49,18 @@ def scan_script(pattern: Pattern) -> list[tuple[str, int, str]]:
         result = subprocess.run(
             cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=ROOT,
         )
+        if result.returncode not in (0, 1) and result.stderr.strip():
+            _warn(f"Pattern {pattern.id} — script exit {result.returncode}: {result.stderr.strip()[:120]}")
         return [
             (line.strip(), -1, line.strip())
             for line in result.stdout.splitlines()
             if line.strip()
         ]
-    except Exception:
+    except subprocess.TimeoutExpired:
+        _warn(f"Pattern {pattern.id} — script timeout (30s)")
+        return []
+    except Exception as exc:
+        _warn(f"Pattern {pattern.id} — script error: {exc}")
         return []
 
 
@@ -53,8 +68,13 @@ def scan_inverse(pattern: Pattern) -> list[tuple[str, int, str]]:
     """Inverse pattern: fire when regex is ABSENT from target files."""
     targets = resolve_globs(pattern.targets)
     if not targets:
+        # Targets resolved to nothing — don't fire silently on missing files
         return []
-    rx = re.compile(pattern.regex, re.IGNORECASE)
+    try:
+        rx = re.compile(pattern.regex, re.IGNORECASE)
+    except re.error as exc:
+        _warn(f"Pattern {pattern.id} — regex invalide ({exc}): {pattern.regex!r}")
+        return []
     results: list[tuple[str, int, str]] = []
     for path in targets:
         try:
@@ -62,8 +82,8 @@ def scan_inverse(pattern: Pattern) -> list[tuple[str, int, str]]:
             if not rx.search(content):
                 rel = str(path.relative_to(ROOT))
                 results.append((rel, -1, f"Pattern '{pattern.regex}' absent de {path.name}"))
-        except Exception:
-            pass
+        except OSError as exc:
+            _warn(f"Pattern {pattern.id} — lecture impossible {path}: {exc}")
     return results
 
 
