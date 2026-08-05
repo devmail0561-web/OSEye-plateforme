@@ -2,18 +2,20 @@
 CLI entry point and orchestration for the OSEye Audit Engine.
 
 Usage (from repo root):
-    python -m tools.audit                          # full scan, all modes
-    python -m tools.audit --mode security          # security patterns only
-    python -m tools.audit --mode debug             # debug patterns only
-    python -m tools.audit --module M1              # target a single module
-    python -m tools.audit --diff                   # incremental (changed files only)
-    python -m tools.audit --verify                 # verify all open findings
-    python -m tools.audit --verify SEC-0001        # verify one specific finding
-    python -m tools.audit --report                 # consolidated report
-    python -m tools.audit --list-patterns          # list all patterns
-    python -m tools.audit --add-pattern            # add a pattern interactively
-    python -m tools.audit --fix SEC-0001 --note "" # mark a finding as fixed
-    python -m tools.audit --fp  SEC-0001           # mark as false positive
+    python -m tools.audit                            # full scan + verify existing findings
+    python -m tools.audit --mode security            # security patterns only
+    python -m tools.audit --mode debug               # debug patterns only
+    python -m tools.audit --module M1                # target a single module
+    python -m tools.audit --diff                     # changed files: scan new code
+                                                     #   AND re-verify old findings on those files
+    python -m tools.audit --verify                   # re-verify all open findings
+    python -m tools.audit --verify SEC-0001          # re-verify one finding by ID
+    python -m tools.audit --verify-files "server/oseye/api/**"  # re-verify findings on a glob
+    python -m tools.audit --report                   # consolidated report
+    python -m tools.audit --list-patterns            # list all patterns
+    python -m tools.audit --add-pattern              # add a pattern interactively
+    python -m tools.audit --fix SEC-0001 --note ""   # mark a finding as fixed
+    python -m tools.audit --fp  SEC-0001             # mark as false positive
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ import sys
 from datetime import datetime
 
 from .commands import cmd_add_pattern, cmd_false_positive, cmd_mark_fixed, get_sorted_patterns
-from .modules import detect_modules, get_changed_files, update_file_hashes, all_source_files
+from .modules import detect_modules, get_changed_files, update_file_hashes, all_source_files, resolve_globs
 from .persistence import load_patterns, load_state, save_patterns, save_report, save_state
 from .reporter import (
     build_json_report,
@@ -33,7 +35,7 @@ from .reporter import (
     print_verify_report,
 )
 from .scanner import run_scan
-from .verifier import verify_findings, verify_regressions
+from .verifier import verify_findings, verify_findings_for_files, verify_regressions
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,6 +67,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fix", metavar="ID", help="Mark a finding as fixed")
     p.add_argument("--fp", metavar="ID", help="Mark a finding as false positive")
     p.add_argument("--note", default="", help="Note to attach to --fix or --fp")
+    p.add_argument(
+        "--verify-files", metavar="GLOB", dest="verify_files",
+        help=(
+            "Re-verify existing open findings on files matching GLOB. "
+            "E.g. 'server/oseye/api/**' or 'agent/internal/chain/*.go'. "
+            "Also scans those files for new findings."
+        ),
+    )
+    p.add_argument(
+        "--no-verify-existing", action="store_true", dest="no_verify_existing",
+        help="Skip re-verification of old findings on changed files (--diff only).",
+    )
 
     return p
 
@@ -97,7 +111,7 @@ def main() -> int:
         cmd_false_positive(state, patterns, args.fp, args.note)
         return 0
 
-    # ── Verify ─────────────────────────────────────────────────────────────
+    # ── Verify (findings only, no new scan) ───────────────────────────────
 
     if args.verify is not None:
         finding_id = None if args.verify is True else args.verify
@@ -120,6 +134,63 @@ def main() -> int:
         report_path = save_report(report, f"verify_{finding_id or 'all'}")
         print(f"  Rapport JSON : {report_path}\n")
         return 0
+
+    # ── Verify-files: re-verify old findings + scan new code on a file glob ─
+
+    if args.verify_files:
+        target_files = resolve_globs([args.verify_files])
+        if not target_files:
+            print(f"\n  Aucun fichier trouvé pour le glob : {args.verify_files}\n")
+            return 2
+
+        print(f"\n{'='*70}")
+        print(f"  OSEye Audit — verify-files: {args.verify_files} ({len(target_files)} fichier(s))")
+        print(f"{'='*70}\n")
+
+        # 1. Re-verify existing findings on these files
+        print("Re-vérification des findings existants sur ces fichiers...")
+        confirmed, resolved = verify_findings_for_files(state, patterns, target_files)
+        if confirmed:
+            print(f"  ✗  {len(confirmed)} finding(s) toujours présent(s)")
+        if resolved:
+            print(f"  ✓  {len(resolved)} finding(s) auto-résolu(s)")
+
+        # 2. Scan the same files for new findings
+        print("Scan du nouveau/modifié code sur ces fichiers...")
+        new_findings = run_scan(
+            state=state,
+            patterns=patterns,
+            mode=args.mode,
+            module_filter=args.module,
+            changed_files=target_files,
+        )
+
+        update_file_hashes(state, target_files)
+        save_state(state)
+        save_patterns(patterns)
+
+        print_verify_report(confirmed, resolved, f"glob:{args.verify_files}")
+        if new_findings:
+            module_status = detect_modules()
+            print_scan_report(state, new_findings, [], module_status, args.mode, incremental=True)
+
+        report = {
+            "generated_at": datetime.now().isoformat(),
+            "label": f"verify_files",
+            "glob": args.verify_files,
+            "files_checked": [str(f) for f in target_files],
+            "confirmed": [f.id for f in confirmed],
+            "resolved": [f.id for f in resolved],
+            "new_findings": [f.id for f in new_findings],
+        }
+        report_path = save_report(report, f"verify_files")
+        print(f"  Rapport JSON : {report_path}\n")
+
+        blockers = sum(
+            1 for f in state.findings.values()
+            if f.status == "open" and f.severity == "BLOCKER"
+        )
+        return 1 if blockers else 0
 
     # ── Scan ───────────────────────────────────────────────────────────────
 
@@ -145,6 +216,8 @@ def main() -> int:
 
     # Determine changed files for incremental mode
     changed_files = None
+    verified_on_changed: tuple[list, list] = ([], [])
+
     if args.diff:
         changed_files = get_changed_files(state)
         print(f"  Scan incrémental — {len(changed_files)} fichier(s) modifié(s)")
@@ -152,8 +225,29 @@ def main() -> int:
             print("  Aucun fichier modifié depuis le dernier scan — terminé.\n")
             return 0
 
+        # Re-verify existing open findings on the changed files before scanning.
+        # This catches findings that were fixed externally without going through --fix.
+        if not args.no_verify_existing:
+            print("  Re-vérification des findings existants sur les fichiers modifiés...")
+            conf, resol = verify_findings_for_files(state, patterns, changed_files)
+            verified_on_changed = (conf, resol)
+            if conf:
+                print(f"    ✗  {len(conf)} finding(s) toujours présent(s) sur ces fichiers")
+            if resol:
+                print(f"    ✓  {len(resol)} finding(s) auto-résolu(s) sur ces fichiers")
+
+    # For a full scan (no --diff), verify all open findings first
+    elif not args.module:
+        print("Vérification de tous les findings ouverts existants...")
+        conf, resol = verify_findings(state, patterns)
+        verified_on_changed = (conf, resol)
+        if conf:
+            print(f"  ✗  {len(conf)} finding(s) toujours présent(s)")
+        if resol:
+            print(f"  ✓  {len(resol)} finding(s) auto-résolu(s)")
+
     # Run scan
-    print(f"Scan en cours ({args.mode}{', module '+args.module if args.module else ''})...")
+    print(f"Scan du code {'modifié' if args.diff else 'complet'} ({args.mode}{', module '+args.module if args.module else ''})...")
     new_findings = run_scan(
         state=state,
         patterns=patterns,
@@ -187,12 +281,19 @@ def main() -> int:
     save_state(state)
     save_patterns(patterns)
 
-    # Console report
-    print_scan_report(state, new_findings, reopened, module_status, args.mode, args.diff)
+    # Console report — merge reopened regressions + auto-resolved from verify
+    conf_on_changed, resol_on_changed = verified_on_changed
+    print_scan_report(
+        state, new_findings, reopened,
+        module_status, args.mode, args.diff,
+        auto_resolved=resol_on_changed,
+    )
 
     # JSON report
     label = f"{args.mode}{'_'+args.module if args.module else ''}{'_diff' if args.diff else ''}"
     report_data = build_json_report(state, new_findings, module_status, label)
+    report_data["auto_resolved"] = [f.id for f in resol_on_changed]
+    report_data["verified_confirmed"] = [f.id for f in conf_on_changed]
     report_path = save_report(report_data, label)
     print(f"  Rapport JSON : {report_path}\n")
 

@@ -31,6 +31,7 @@ def print_scan_report(
     module_status: dict[str, str],
     mode: str,
     incremental: bool,
+    auto_resolved: list[Finding] | None = None,
 ) -> None:
     print(f"\n{B}{_bar('═')}{R}")
     print(f"  {B}OSEye Audit — mode={mode}{'  [incrémental]' if incremental else ''} — {datetime.now().strftime('%Y-%m-%d %H:%M')}{R}")
@@ -43,6 +44,14 @@ def print_scan_report(
         col, icon = icons.get(module_status[mod], ("", "?"))
         print(f"  {col}{icon} {mod:4}  {module_status[mod]:15}{R}")
     print()
+
+    # Auto-resolved findings (fixed externally, detected by re-verify)
+    if auto_resolved:
+        print(f"{G}{B}AUTO-RÉSOLUS ({len(auto_resolved)}) — anciens findings fermés:{R}")
+        for f in auto_resolved:
+            print(f"  {G}✓ {f.id}  {f.title}{R}")
+            print(f"    {GR}{f.file}{R}")
+        print()
 
     # New / reopened
     all_new = sorted(new_findings + reopened, key=lambda f: SEVERITY_ORDER.get(f.severity, 9))

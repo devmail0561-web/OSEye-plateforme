@@ -1,12 +1,14 @@
 """
 Finding verifier.
 
-Two distinct operations:
-  - verify_regressions : re-scan findings marked 'fixed' to catch regressions
-  - verify_findings    : re-scan 'open' findings to confirm they still exist
-                         or auto-close them if the code was fixed externally
+Three distinct operations:
+  - verify_regressions      : re-scan 'fixed' findings to catch regressions
+  - verify_findings         : re-scan 'open' findings (all or one by ID)
+  - verify_findings_for_files : re-scan only findings whose file is in the
+                               given set — used when auditing a PR/diff scope
 
-Both return (confirmed, resolved) tuples of Finding lists.
+All operations mutate state in place and return (confirmed, resolved) or
+a list of reopened findings.
 """
 
 from __future__ import annotations
@@ -167,4 +169,65 @@ def verify_findings(
             resolved.append(finding)
 
     state.last_verify = now
+    return confirmed, resolved
+
+
+def verify_findings_for_files(
+    state: AuditState,
+    patterns: list[Pattern],
+    file_paths: list[Path],
+) -> tuple[list[Finding], list[Finding]]:
+    """
+    Re-scan only the open findings whose file is in file_paths.
+
+    Called automatically during --diff scans so that changing a file
+    also triggers re-verification of existing findings on that file.
+
+    Args:
+        state:       audit state (mutated in place)
+        patterns:    all known patterns
+        file_paths:  files to scope the verification to (absolute or ROOT-relative)
+
+    Returns:
+        (confirmed, resolved) — same semantics as verify_findings()
+    """
+    pmap = _pattern_map(patterns)
+    now = datetime.now().isoformat()
+    confirmed: list[Finding] = []
+    resolved: list[Finding] = []
+
+    # Normalise paths to repo-relative strings for comparison
+    rel_paths: set[str] = set()
+    for p in file_paths:
+        try:
+            rel_paths.add(str(p.relative_to(ROOT)))
+        except ValueError:
+            rel_paths.add(str(p))
+
+    in_scope = [
+        f for f in state.findings.values()
+        if f.status == "open" and f.file in rel_paths
+    ]
+
+    for finding in in_scope:
+        pat = pmap.get(finding.pattern_id)
+        if pat is None or not pat.enabled:
+            continue
+
+        if _still_present(finding, pat):
+            finding.last_seen = now
+            confirmed.append(finding)
+        else:
+            finding.status = "fixed"
+            finding.last_seen = now
+            finding.fix_note = (
+                finding.fix_note + f" | Auto-résolu le {now}"
+                if finding.fix_note
+                else f"Auto-résolu par vérification le {now}"
+            )
+            resolved.append(finding)
+
+    if in_scope:
+        state.last_verify = now
+
     return confirmed, resolved
