@@ -10,6 +10,7 @@ import asyncio
 import socket
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from functools import lru_cache
 
 import uvicorn
 
@@ -24,6 +25,11 @@ from oseye.storage.repositories.events import SQLEventRepository
 from oseye.workers.storage_writer import StorageWriter
 
 _logger = get_logger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
 
 
 def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
@@ -83,38 +89,9 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
 
 
 def main() -> None:
-    settings = Settings()
+    settings = get_settings()
     lifespan = _build_lifespan(settings)
-
-    # Patch create_app to inject lifespan — re-create with it.
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-    from slowapi.util import get_remote_address
-
-    from oseye.api.routers import alerts, auth, events, health
-
-    app = FastAPI(
-        title="OSEye API",
-        version="0.1.0",
-        description="OSEye EDR — REST API",
-        lifespan=lifespan,
-    )
-    limiter = Limiter(key_func=get_remote_address)
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.api_cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(events.router)
-    app.include_router(alerts.router)
+    app = create_app(settings, lifespan=lifespan)
 
     uvicorn.run(
         app,
@@ -125,8 +102,7 @@ def main() -> None:
 
 
 # Expose `app` for `uvicorn oseye.main:app` invocation (Docker CMD).
-_settings = Settings()
-app = create_app(_settings)
+app = create_app(get_settings())
 
 
 if __name__ == "__main__":

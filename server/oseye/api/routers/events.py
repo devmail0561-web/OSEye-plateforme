@@ -30,6 +30,30 @@ class EventQueryParams:
     offset: Annotated[int, Query(ge=0)] = 0
 
 
+@dataclass
+class _Filter:
+    hostname: str | None = None
+    category: str | None = None
+    type: str | None = None
+    severity: str | None = None
+    uid: int | None = None
+    pid: int | None = None
+    process_name: str | None = None
+    resource: str | None = None
+    rule_id: str | None = None
+    mitre_technique: str | None = None
+    from_ts: int | None = None
+    to_ts: int | None = None
+    agent_id: UUID | None = None
+    incident_chain_id: UUID | None = None
+
+
+@dataclass
+class _Pagination:
+    limit: int
+    offset: int
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -65,28 +89,6 @@ async def list_events(
 ) -> dict[str, Any]:
     """Return a paginated, filtered list of events."""
     repo = _get_event_repo(request)
-
-    @dataclass
-    class _Filter:
-        hostname: str | None = None
-        category: str | None = None
-        type: str | None = None
-        severity: str | None = None
-        uid: int | None = None
-        pid: int | None = None
-        process_name: str | None = None
-        resource: str | None = None
-        rule_id: str | None = None
-        mitre_technique: str | None = None
-        from_ts: int | None = None
-        to_ts: int | None = None
-        agent_id: UUID | None = None
-        incident_chain_id: UUID | None = None
-
-    @dataclass
-    class _Pagination:
-        limit: int
-        offset: int
 
     filters = _Filter(
         hostname=hostname,

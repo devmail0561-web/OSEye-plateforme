@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -15,8 +16,6 @@ from oseye.storage.models import AlertNoteRow, AlertRow
 
 
 def _row_to_alert(row: AlertRow, notes: list[AlertNote] | None = None) -> Alert:
-    from datetime import datetime
-
     return Alert(
         alert_id=UUID(row.alert_id),
         created_at=datetime.fromisoformat(row.created_at),
@@ -75,8 +74,6 @@ def _note_to_row(note: AlertNote, alert_id: str) -> AlertNoteRow:
 
 
 def _row_to_note(row: AlertNoteRow) -> AlertNote:
-    from datetime import datetime
-
     return AlertNote(
         note_id=UUID(row.note_id),
         created_at=datetime.fromisoformat(row.created_at),
