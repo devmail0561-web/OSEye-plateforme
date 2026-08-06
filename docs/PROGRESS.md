@@ -1,8 +1,8 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.2  
+**Version :** 1.3  
 **Dernière mise à jour :** 2026-08-06  
-**Branche active :** `main`  
+**Branche active :** `main` (`930ee0f`)  
 **Phase courante :** Phase 1 — Foundation `[~]` (M2/M3/M4/M6/M7/M9/M10 restants)
 
 ---
@@ -281,10 +281,29 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 
 **Décision architecture SQLite :** dual build — `mattn/go-sqlite3` CGO (WAL, prod) + `modernc.org/sqlite` pure-Go (CI cross-platform, CGO_ENABLED=0). Rust/FFI non justifié — marges BLAKE3/Ed25519 trop larges.
 
+## Branches
+
+| Branche | Statut |
+|---------|--------|
+| `M0/foundation-contracts` | ✅ mergée → main |
+| `M1/agent-crypto-buffer` | ✅ mergée → main |
+| `M5/server-event-bus` | ✅ mergée → main |
+| `M8/server-storage` | ✅ mergée → main |
+| `M11/infra-ci` | ✅ mergée → main |
+| `M2/agent-collectors-linux` | ⏳ non créée |
+| `M3/agent-grpc-transport` | ⏳ non créée |
+| `M4/agent-bootstrap` | ⏳ non créée |
+| `M6/server-ingest` | ⏳ non créée |
+| `M7/server-normalizer` | ⏳ non créée |
+| `M9/server-api` | ⏳ non créée |
+| `M10/server-workers` | ⏳ non créée |
+
 ## Historique des commits
 
 | Hash | Message | Date |
 |------|---------|------|
+| `930ee0f` | fix: ruff I001 — import order audit tools | 2026-08-06 |
+| `1629f0c` | docs: mise à jour complète PROGRESS/DEVELOPMENT_PLAN/ARCHITECTURE | 2026-08-06 |
 | `8ac1abb` | perf: benchmarks hot path + buffer CGO (mattn/sqlite3 + WAL) | 2026-08-06 |
 | `8bf5214` | fix: qualité code — ruff/mypy clean, tests config Go, types stricts | 2026-08-06 |
 | `4ce4329` | docs: audit Phase 1 — mise à jour PROGRESS.md | 2026-08-06 |
@@ -294,4 +313,4 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 | `fc48260` | Merge M5/server-event-bus → main | 2026-08-06 |
 | `68dcc21` | Merge M1/agent-crypto-buffer → main | 2026-08-06 |
 | `ccfd307` | Merge M0/foundation-contracts → main | 2026-08-06 |
-| `b88ff36` | chore: initial project foundation — docs, CI templates, LICENSE, SECURITY | 2026-08-05 |
+| `b88ff36` | chore: initial project foundation | 2026-08-05 |
