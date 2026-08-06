@@ -169,7 +169,7 @@ class AgentServiceServicer:
         if _pb2 is None:  # pragma: no cover
             return None
 
-        return _pb2.IngestResponse(
+        return _pb2.IngestResponse(  # type: ignore[attr-defined]
             accepted=total_accepted,
             rejected=total_rejected,
             errors=all_errors,
@@ -236,7 +236,7 @@ class AgentServiceServicer:
                     if set(data.keys()) == {"config"}
                     else json.dumps(data.get("config", {})).encode("utf-8")
                 )
-                profile = _pb2.SurveillanceProfilePB(
+                profile = _pb2.SurveillanceProfilePB(  # type: ignore[attr-defined]
                     name=data.get("name", ""),
                     description=data.get("description", ""),
                     version=data.get("version", 1),
@@ -301,7 +301,7 @@ class AgentServiceServicer:
                 # [MEDIUM-5] parse only once; pass payload_json bytes directly
                 data = json.loads(raw)
                 payload_raw: bytes = json.dumps(data.get("payload", {})).encode("utf-8")
-                cmd = _pb2.AgentCommand(
+                cmd = _pb2.AgentCommand(  # type: ignore[attr-defined]
                     command_type=data.get("command_type", ""),
                     payload_json=payload_raw,
                 )

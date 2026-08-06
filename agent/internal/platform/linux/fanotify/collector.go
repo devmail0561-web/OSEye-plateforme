@@ -12,22 +12,23 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+
 	"github.com/oseye/agent/internal/collector"
 )
 
 var _ collector.Collector = (*FanotifyCollector)(nil)
 
 type FanotifyCollector struct {
-	name         string
-	paths        []string
-	fd           int
-	logger       *slog.Logger
-	stopCh       chan struct{}
-	eventCount   atomic.Uint64
-	errorCount   atomic.Uint64
-	running      atomic.Bool
-	lastError    atomic.Value // string
-	throttle     atomic.Value // float64
+	name       string
+	paths      []string
+	fd         int
+	logger     *slog.Logger
+	stopCh     chan struct{}
+	eventCount atomic.Uint64
+	errorCount atomic.Uint64
+	running    atomic.Bool
+	lastError  atomic.Value // string
+	throttle   atomic.Value // float64
 }
 
 func NewFanotifyCollector(paths []string, logger *slog.Logger) (*FanotifyCollector, error) {
@@ -58,11 +59,11 @@ func (c *FanotifyCollector) Health() collector.CollectorHealth {
 		lastErr = v.(string)
 	}
 	return collector.CollectorHealth{
-		Running:      c.running.Load(),
-		ErrorCount:   int64(c.errorCount.Load()),
-		EventsTotal:  int64(c.eventCount.Load()),
-		ThrottlePct:  c.throttle.Load().(float64) * 100,
-		LastError:    lastErr,
+		Running:     c.running.Load(),
+		ErrorCount:  int64(c.errorCount.Load()),
+		EventsTotal: int64(c.eventCount.Load()),
+		ThrottlePct: c.throttle.Load().(float64) * 100,
+		LastError:   lastErr,
 	}
 }
 

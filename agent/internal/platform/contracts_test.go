@@ -30,11 +30,11 @@ var _ platform.PlatformDriver = (*mockDriver)(nil)
 // mockCollector is a minimal Collector used to verify the interface compiles.
 type mockCollector struct{}
 
-func (c *mockCollector) Name() string                                        { return "mock" }
+func (c *mockCollector) Name() string                                               { return "mock" }
 func (c *mockCollector) Start(_ context.Context, _ chan<- collector.RawEvent) error { return nil }
-func (c *mockCollector) Stop() error                                         { return nil }
-func (c *mockCollector) SetThrottle(_ float64)                               {}
-func (c *mockCollector) Health() collector.CollectorHealth                   { return collector.CollectorHealth{} }
+func (c *mockCollector) Stop() error                                                { return nil }
+func (c *mockCollector) SetThrottle(_ float64)                                      {}
+func (c *mockCollector) Health() collector.CollectorHealth                          { return collector.CollectorHealth{} }
 
 // Compile-time assertion: mockCollector satisfies Collector.
 var _ collector.Collector = (*mockCollector)(nil)

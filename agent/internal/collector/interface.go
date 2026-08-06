@@ -33,9 +33,9 @@ type RawEvent struct {
 
 // CollectorHealth reports the operational state of a collector.
 type CollectorHealth struct {
-	Running      bool
-	ErrorCount   int64
-	EventsTotal  int64
-	ThrottlePct  float64
-	LastError    string
+	Running     bool
+	ErrorCount  int64
+	EventsTotal int64
+	ThrottlePct float64
+	LastError   string
 }

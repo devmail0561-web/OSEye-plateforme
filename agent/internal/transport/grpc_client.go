@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/zeebo/blake3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	gen "github.com/oseye/agent/gen"
 	"github.com/oseye/agent/internal/chain"
 	"github.com/oseye/agent/internal/config"
 	"github.com/oseye/agent/internal/signer"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -133,7 +134,7 @@ func (c *GRPCClient) Close() error {
 func batchSignature(ch *chain.Chain, s *signer.Signer, events []*gen.UniversalEventPB) ([]byte, error) {
 	h := blake3.New()
 	for _, ev := range events {
-		h.Write(ev.GetHashChain())
+		_, _ = h.Write(ev.GetHashChain())
 	}
 	var digest [32]byte
 	h.Sum(digest[:0])

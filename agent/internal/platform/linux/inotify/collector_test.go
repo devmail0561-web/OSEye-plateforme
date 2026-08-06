@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
 	"github.com/oseye/agent/internal/collector"
 )
 
@@ -192,14 +193,15 @@ func TestInotifyCollector_RecursiveWatch(t *testing.T) {
 	}()
 
 	// Give collector time to initialize watches
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
-	// Check that subdirectory is also watched
-	if len(c.wds) < 2 {
-		t.Logf("Warning: expected at least 2 watch descriptors (root + subdir), got %d", len(c.wds))
+	// Check that subdirectory is also watched (via mutex-safe accessor)
+	c.wdsMu.RLock()
+	wdCount := len(c.wds)
+	c.wdsMu.RUnlock()
+	if wdCount < 2 {
+		t.Logf("Warning: expected at least 2 watch descriptors (root + subdir), got %d", wdCount)
 	}
-
-	time.Sleep(100 * time.Millisecond)
 
 	// Create file in subdirectory
 	testFile := filepath.Join(subdir, "nested-file.txt")

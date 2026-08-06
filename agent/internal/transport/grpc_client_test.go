@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/zeebo/blake3"
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/chain"
-	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/signer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+
+	gen "github.com/oseye/agent/gen"
+	"github.com/oseye/agent/internal/chain"
+	"github.com/oseye/agent/internal/config"
+	"github.com/oseye/agent/internal/signer"
 )
 
 // ── batch signature tests ──────────────────────────────────────────────────

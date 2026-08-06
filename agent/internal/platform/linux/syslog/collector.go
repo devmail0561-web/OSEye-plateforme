@@ -93,7 +93,9 @@ func (c *SyslogCollector) Start(ctx context.Context, out chan<- collector.RawEve
 	go func() {
 		defer close(done)
 		for {
-			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			if err := conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+				c.logger.Warn("syslog set deadline failed", slog.String("error", err.Error()))
+			}
 			n, _, err := conn.ReadFrom(buf)
 			if err != nil {
 				select {
@@ -171,7 +173,7 @@ func (c *SyslogCollector) parseMessage(data []byte) (collector.RawEvent, error) 
 		if end > 0 {
 			priStr := msg[1:end]
 			pri := 0
-			fmt.Sscanf(priStr, "%d", &pri)
+			_, _ = fmt.Sscanf(priStr, "%d", &pri)
 			facNum := pri >> 3
 			sevNum := pri & 0x7
 			if facNum < len(facilityNames) {

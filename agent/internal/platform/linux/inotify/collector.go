@@ -10,11 +10,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+
 	"github.com/oseye/agent/internal/collector"
 )
 
@@ -29,17 +31,18 @@ type InotifyWatch struct {
 
 // InotifyCollector monitors directory changes using inotify API.
 type InotifyCollector struct {
-	name        string
-	watches     []InotifyWatch
-	fd          int
-	wds         map[int]string
-	logger      *slog.Logger
-	stopCh      chan struct{}
-	eventCount  atomic.Uint64
-	errorCount  atomic.Uint64
-	running     atomic.Bool
-	lastError   atomic.Value // string
-	throttle    atomic.Value // float64
+	name       string
+	watches    []InotifyWatch
+	fd         int
+	wdsMu      sync.RWMutex
+	wds        map[int]string
+	logger     *slog.Logger
+	stopCh     chan struct{}
+	eventCount atomic.Uint64
+	errorCount atomic.Uint64
+	running    atomic.Bool
+	lastError  atomic.Value // string
+	throttle   atomic.Value // float64
 }
 
 // NewInotifyCollector creates a new inotify collector.
@@ -122,8 +125,14 @@ func (c *InotifyCollector) Stop() error {
 		close(c.stopCh)
 	}
 	if c.fd >= 0 {
+		c.wdsMu.RLock()
+		wds := make([]int, 0, len(c.wds))
 		for wd := range c.wds {
-			unix.InotifyRmWatch(c.fd, uint32(wd))
+			wds = append(wds, wd)
+		}
+		c.wdsMu.RUnlock()
+		for _, wd := range wds {
+			_, _ = unix.InotifyRmWatch(c.fd, uint32(wd))
 		}
 		return unix.Close(c.fd)
 	}
@@ -141,7 +150,9 @@ func (c *InotifyCollector) addWatch(watch InotifyWatch) error {
 		return fmt.Errorf("inotify_add_watch(%s): %w", watch.Path, err)
 	}
 
+	c.wdsMu.Lock()
 	c.wds[wd] = watch.Path
+	c.wdsMu.Unlock()
 	c.logger.Info("inotify watching", slog.String("path", watch.Path), slog.Int("wd", wd))
 
 	if watch.Recursive {
@@ -168,7 +179,9 @@ func (c *InotifyCollector) addRecursive(root string, mask uint32) error {
 			c.logger.Warn("failed to watch subdir", slog.String("path", path), slog.String("error", err.Error()))
 			return nil
 		}
+		c.wdsMu.Lock()
 		c.wds[wd] = path
+		c.wdsMu.Unlock()
 		return nil
 	})
 }
@@ -211,7 +224,9 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 				name = string(bytes.TrimRight(nameBytes, "\x00"))
 			}
 
+			c.wdsMu.RLock()
 			basePath := c.wds[int(event.Wd)]
+			c.wdsMu.RUnlock()
 			fullPath := filepath.Join(basePath, name)
 
 			rawEvent := c.buildRawEvent(event, basePath, fullPath)

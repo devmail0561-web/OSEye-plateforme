@@ -27,8 +27,8 @@ func (c *Chain) Append(payload []byte) []byte {
 	defer c.mu.Unlock()
 
 	h := blake3.New()
-	h.Write(c.current[:])
-	h.Write(payload)
+	_, _ = h.Write(c.current[:])
+	_, _ = h.Write(payload)
 	h.Sum(c.current[:0])
 
 	out := make([]byte, 32)

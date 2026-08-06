@@ -32,15 +32,15 @@ var tcpState = map[string]string{
 // NetlinkCollector monitors network connections by polling /proc/net/tcp and /proc/net/udp.
 // It emits a RawEvent for each new or closed connection detected between polls.
 type NetlinkCollector struct {
-	name        string
-	interval    time.Duration
-	logger      *slog.Logger
-	stopCh      chan struct{}
-	eventCount  atomic.Uint64
-	errorCount  atomic.Uint64
-	running     atomic.Bool
-	lastError   atomic.Value // string
-	throttle    atomic.Value // float64
+	name       string
+	interval   time.Duration
+	logger     *slog.Logger
+	stopCh     chan struct{}
+	eventCount atomic.Uint64
+	errorCount atomic.Uint64
+	running    atomic.Bool
+	lastError  atomic.Value // string
+	throttle   atomic.Value // float64
 	// tracks known connections to emit only deltas
 	known map[string]bool
 }

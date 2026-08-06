@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
 	"github.com/oseye/agent/internal/collector"
 )
 
@@ -265,4 +266,3 @@ func (c *UdevCollector) startInotify(ctx context.Context, out chan<- collector.R
 		}
 	}
 }
-

@@ -16,8 +16,8 @@ type mockCollector struct {
 
 type RawEvent = collector.RawEvent
 
-func (m *mockCollector) Name() string { return m.name }
-func (m *mockCollector) Stop() error  { return nil }
+func (m *mockCollector) Name() string          { return m.name }
+func (m *mockCollector) Stop() error           { return nil }
 func (m *mockCollector) SetThrottle(_ float64) {}
 func (m *mockCollector) Health() collector.CollectorHealth {
 	return collector.CollectorHealth{Running: true}

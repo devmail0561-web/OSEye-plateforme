@@ -22,8 +22,8 @@ func (c *AuditdCollector) Start(ctx context.Context, _ chan<- collector.RawEvent
 	return nil
 }
 
-func (c *AuditdCollector) Stop() error                               { return nil }
-func (c *AuditdCollector) SetThrottle(_ float64)                     {}
+func (c *AuditdCollector) Stop() error           { return nil }
+func (c *AuditdCollector) SetThrottle(_ float64) {}
 func (c *AuditdCollector) Health() collector.CollectorHealth {
 	return collector.CollectorHealth{Running: false}
 }
