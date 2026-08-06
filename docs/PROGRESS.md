@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.6
+**Version :** 1.7
 **Dernière mise à jour :** 2026-08-06
-**Branche active :** `main` (`4f30268`)
-**Phase courante :** Phase 1 — Foundation `[x]` COMPLÈTE (7/8 dettes résolues)
+**Branche active :** `main` (`04c1611`)
+**Phase courante :** Phase 2 — Full Collection `[~]` EN COURS — M12 complété (1/7 modules)
 
 ---
 
@@ -22,7 +22,9 @@
 
 ---
 
-## Vue d'ensemble des modules (Phase 1)
+## Vue d'ensemble des modules
+
+### Phase 1 — Foundation `[x]` COMPLÈTE
 
 | # | Module | Statut | Tests | Notes |
 |---|--------|--------|-------|-------|
@@ -40,6 +42,12 @@
 | M11 | Infra & CI | `[x]` Mergé | — | Dockerfiles, CI coverage threshold |
 
 **12/12 modules mergés sur main.** Phase 1 Foundation complète.
+
+### Phase 2 — Full Collection `[~]` EN COURS
+
+| # | Module | Statut | Tests | Notes |
+|---|--------|--------|-------|-------|
+| M12 | Collectors fanotify + inotify (Go) | `[x]` Mergé | 11 go | P2.01 + P2.02 complétés |
 
 ---
 
@@ -137,10 +145,34 @@
 
 ---
 
+## Optimisations Python (perf/python-optimizations)
+
+**30 bottlenecks résolus dans 13 fichiers** — mergé dans main le 2026-08-06 (commit `9323f13`).
+
+| Fichier | Optimisations appliquées |
+|---------|------------------------|
+| `bus/redis_bus.py` | `scan_iter` natif (remplace `KEYS *`), batch `XACK`, dict O(1), purge `seen_topics` bornée |
+| `bus/memory_bus.py` | timeout 1s sur `asyncio.wait_for`, dict O(1) pour lookup subscribers |
+| `storage/repositories/events.py` | bulk insert `executemany`, helper `_event_to_dict`, `_apply_filters` exécuté une seule fois |
+| `storage/repositories/alerts.py` | imports déplacés en tête de fichier |
+| `storage/repositories/decisions.py` | imports déplacés en tête de fichier |
+| `storage/repositories/cases.py` | imports déplacés en tête de fichier |
+| `ingest/grpc_service.py` | index rejet O(1), compatibilité `asyncio` Python 3.12, `all_errors` borné |
+| `workers/storage_writer.py` | `model_validate_json()` fast path (évite double décodage JSON) |
+| `normalizer/engine.py` | appel direct callable (supprime indirection inutile) |
+| `api/ws/manager.py` | `set` O(1) pour lookup/suppression connexions |
+| `api/routers/events.py` | dataclasses et constantes définies au niveau module |
+| `main.py` | `lru_cache` sur `Settings` (singleton settings) |
+
+---
+
 ## Historique des commits (récents)
 
 | Hash | Message | Date |
 |------|---------|------|
+| `04c1611` | Merge perf/python-optimizations → main | 2026-08-06 |
+| `9323f13` | perf: optimisations Python M0-M12 — 30 bottlenecks résolus | 2026-08-06 |
+| `018958a` | Merge M12/collectors-files → main | 2026-08-06 |
 | `4f30268` | fix: résolution dettes OTel-001 et WARN-001 | 2026-08-06 |
 | `3306675` | docs: PROGRESS v1.5 — Phase 1 complète, dettes résolues | 2026-08-06 |
 | `94e25ff` | fix: résolution dettes techniques DETTE-007, DESIGN-001/002/003, DETTE-005 | 2026-08-06 |

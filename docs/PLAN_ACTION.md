@@ -161,8 +161,8 @@ Ces fichiers doivent être finalisés et reviewés **avant d'écrire le moindre 
 
 *Dépend de : Phase 1 complète*
 
-- [ ] **P2.01** — `platform/linux/fanotify/` : collecteur fanotify (accès fichiers système)
-- [ ] **P2.02** — `platform/linux/inotify/` : collecteur inotify (watch paths configurables)
+- [x] **P2.01** — `platform/linux/fanotify/` : collecteur fanotify (accès fichiers système)
+- [x] **P2.02** — `platform/linux/inotify/` : collecteur inotify (watch paths configurables)
 - [ ] **P2.03** — `platform/linux/netlink/` : collecteur netlink (connexions réseau kernel)
 - [ ] **P2.04** — `platform/linux/journald/` : collecteur journald (systemd logs)
 - [ ] **P2.05** — `platform/linux/udev/` : collecteur udev (events devices)
