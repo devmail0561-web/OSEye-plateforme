@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.5
+**Version :** 1.6
 **Dernière mise à jour :** 2026-08-06
-**Branche active :** `main` (`94e25ff`)
-**Phase courante :** Phase 1 — Foundation `[x]` COMPLÈTE (dettes techniques résolues)
+**Branche active :** `main` (`4f30268`)
+**Phase courante :** Phase 1 — Foundation `[x]` COMPLÈTE (7/8 dettes résolues)
 
 ---
 
@@ -105,10 +105,10 @@
 | DESIGN-001 | `EventBus` Protocol sans méthode `close()` — risque de leak | ✅ Fermé (déjà présent dans interface + implémentations) |
 | DESIGN-002 | `PageResult[T]` redéfini dans chaque repository — factoriser | ✅ Fermé (core/pagination.py créé) |
 | DESIGN-003 | `redis_bus.py subscribe_pattern` utilise `KEYS *` O(N) bloquant | ✅ Fermé (remplacé par scan_iter) |
-| OTel-001 | `observability.py` : OTel SDK non initialisé (stub) | 🟡 Ouvert (Phase 2) |
-| WARN-001 | `test_storage.py` : warnings `Event loop is closed` (aiosqlite teardown) | 🟡 Ouvert (Phase 2) |
+| OTel-001 | `observability.py` : OTel SDK non initialisé (stub) | ✅ Fermé (commit 4f30268 — OTLP + Console exporters) |
+| WARN-001 | `test_storage.py` : warnings `Event loop is closed` (aiosqlite teardown) | ✅ Fermé (commit 4f30268 — fixture avec close()) |
 
-**5/8 dettes résolues** — seules restent DETTE-001 (Phase 9), OTel-001 et WARN-001 (non critiques).
+**7/8 dettes résolues** — seule reste DETTE-001 (UI Phase 9).
 
 ---
 
@@ -141,6 +141,8 @@
 
 | Hash | Message | Date |
 |------|---------|------|
+| `4f30268` | fix: résolution dettes OTel-001 et WARN-001 | 2026-08-06 |
+| `3306675` | docs: PROGRESS v1.5 — Phase 1 complète, dettes résolues | 2026-08-06 |
 | `94e25ff` | fix: résolution dettes techniques DETTE-007, DESIGN-001/002/003, DETTE-005 | 2026-08-06 |
 | `422e66b` | docs: référencer DESCRIPTION.md et CONDUCT.md dans README | 2026-08-06 |
 | `4c06d38` | docs: ajouter DESCRIPTION.md et CONDUCT.md | 2026-08-06 |
@@ -148,5 +150,3 @@
 | `f17dcaf` | docs: mettre à jour note.txt — commandes mTLS, dev-certs, tests gRPC | 2026-08-06 |
 | `0fe6126` | feat: communication gRPC réelle + 3 corrections de bugs critiques | 2026-08-06 |
 | `2850ed7` | tests: tests d'interaction modules + 3 corrections de bugs | 2026-08-06 |
-| `1a64ec4` | M4+M10: agent bootstrap, server workers, server entrypoint | 2026-08-06 |
-| `c3c83fc` | fix: audit corrections — SEC-RISK-001, DESIGN-004, DESIGN-006 | 2026-08-06 |
