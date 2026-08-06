@@ -70,6 +70,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "httpx>=0.28.0",
     "ruff>=0.8.0",
+    "grpc-stubs>=1.53.0",
     "mypy>=1.13.0",
 ]
 

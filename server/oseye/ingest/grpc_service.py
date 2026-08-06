@@ -29,7 +29,7 @@ def _extract_cn_from_context(context: grpc.ServicerContext) -> str | None:
     if not peer_identities:
         return None
     try:
-        cert = load_der_x509_certificate(peer_identities[0])
+        cert = load_der_x509_certificate(list(peer_identities)[0])
         attrs = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
         if not attrs:
             return None
@@ -120,7 +120,7 @@ class AgentServiceServicer:
                 rejected=result.rejected,
             )
 
-        return _pb2.IngestResponse(
+        return _pb2.IngestResponse(  # type: ignore[attr-defined]
             accepted=total_accepted,
             rejected=total_rejected,
             errors=all_errors,
@@ -172,7 +172,7 @@ class AgentServiceServicer:
             for raw in msgs:
                 try:
                     data = json.loads(raw)
-                    profile = _pb2.SurveillanceProfilePB(
+                    profile = _pb2.SurveillanceProfilePB(  # type: ignore[attr-defined]
                         name=data.get("name", ""),
                         description=data.get("description", ""),
                         version=data.get("version", 1),
@@ -227,7 +227,7 @@ class AgentServiceServicer:
             for raw in msgs:
                 try:
                     data = json.loads(raw)
-                    cmd = _pb2.AgentCommand(
+                    cmd = _pb2.AgentCommand(  # type: ignore[attr-defined]
                         command_type=data.get("command_type", ""),
                         payload_json=json.dumps(data.get("payload", {})).encode("utf-8"),
                     )
@@ -247,4 +247,4 @@ def register_servicer(
     """
     from server.gen import event_pb2_grpc as _grpc
 
-    _grpc.add_AgentServiceServicer_to_server(servicer, server)
+    _grpc.add_AgentServiceServicer_to_server(servicer, server)  # type: ignore[no-untyped-call]

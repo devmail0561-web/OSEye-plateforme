@@ -13,14 +13,12 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 
 from oseye.core.schema import UniversalEvent
 from oseye.storage.backends.sqlite import SQLiteBackend
 from oseye.storage.repositories.events import SQLEventRepository
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -137,18 +135,18 @@ async def _standalone() -> None:
     event = make_event()
     row = _event_to_row(event)
 
-    N = 100_000
+    n_iters = 100_000
     t0 = time.perf_counter()
-    for _ in range(N):
+    for _ in range(n_iters):
         _event_to_row(event)
-    dt = (time.perf_counter() - t0) / N * 1e6
-    print(f"event → row  : {dt:.2f} µs/call  ({N/((time.perf_counter()-t0)):,.0f} ops/s)")
+    dt = (time.perf_counter() - t0) / n_iters * 1e6
+    print(f"event → row  : {dt:.2f} µs/call  ({n_iters/(time.perf_counter()-t0):,.0f} ops/s)")
 
     t0 = time.perf_counter()
-    for _ in range(N):
+    for _ in range(n_iters):
         _row_to_event(row)
-    dt = (time.perf_counter() - t0) / N * 1e6
-    print(f"row → event  : {dt:.2f} µs/call  ({N/((time.perf_counter()-t0)):,.0f} ops/s)")
+    dt = (time.perf_counter() - t0) / n_iters * 1e6
+    print(f"row → event  : {dt:.2f} µs/call  ({n_iters/(time.perf_counter()-t0):,.0f} ops/s)")
     print()
 
 

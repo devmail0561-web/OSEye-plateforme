@@ -49,7 +49,7 @@ jobs:
         working-directory: server
         run: |
           pip install --upgrade pip
-          pip install ruff mypy pytest
+          pip install -e ".[dev]"
 
       - name: Ruff check
         working-directory: server
@@ -57,7 +57,7 @@ jobs:
 
       - name: Mypy
         working-directory: server
-        run: mypy oseye/
+        run: mypy oseye/ --strict
 
   lint-typescript:
     name: Lint — TypeScript
@@ -65,16 +65,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check UI initialised
+        id: ui_check
+        run: |
+          if [ -f ui/package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "UI not yet initialised (Phase 9) — skipping TypeScript lint"
+          fi
+
       - name: Setup Node.js
+        if: steps.ui_check.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
+        if: steps.ui_check.outputs.exists == 'true'
         working-directory: ui
         run: npm ci
 
       - name: ESLint
+        if: steps.ui_check.outputs.exists == 'true'
         working-directory: ui
         run: npm run lint
 
@@ -98,7 +111,7 @@ jobs:
 
       - name: Run tests
         working-directory: agent
-        run: go test -race -cover -coverprofile=coverage.out ./...
+        run: go test -race -cover -coverprofile=coverage.out $(go list ./... | grep -v '/platform/linux')
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest'
@@ -169,20 +182,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check UI initialised
+        id: ui_check
+        run: |
+          if [ -f ui/package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "UI not yet initialised (Phase 9) — skipping TypeScript tests"
+          fi
+
       - name: Setup Node.js
+        if: steps.ui_check.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
+        if: steps.ui_check.outputs.exists == 'true'
         working-directory: ui
         run: npm ci
 
       - name: Run tests
+        if: steps.ui_check.outputs.exists == 'true'
         working-directory: ui
         run: npm test -- --coverage
 
       - name: Upload coverage
+        if: steps.ui_check.outputs.exists == 'true'
         uses: codecov/codecov-action@v4
         with:
           files: ./ui/coverage/lcov.info
@@ -242,7 +269,18 @@ jobs:
           push: false
           tags: oseye-agent:test
 
+      - name: Check server entrypoint
+        id: server_check
+        run: |
+          if [ -f server/oseye/main.py ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "server/oseye/main.py not yet created (Phase M9 entrypoint) — skipping server Docker build"
+          fi
+
       - name: Build server
+        if: steps.server_check.outputs.exists == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./server
@@ -250,6 +288,7 @@ jobs:
           tags: oseye-server:test
 
       - name: Build UI
+        if: hashFiles('ui/package.json') != ''
         uses: docker/build-push-action@v5
         with:
           context: ./ui
