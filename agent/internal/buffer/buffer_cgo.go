@@ -1,4 +1,4 @@
-//go:build !cgo
+//go:build cgo
 
 package buffer
 
@@ -7,35 +7,37 @@ import (
 	"fmt"
 	"time"
 
-	_ "modernc.org/sqlite" // pure-Go SQLite driver (no CGO required)
+	_ "github.com/mattn/go-sqlite3" // CGO SQLite — faster WAL writes
 )
 
-const schema = `
+const schemaCGO = `
 CREATE TABLE IF NOT EXISTS buffer (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     payload    BLOB    NOT NULL,
     created_at INTEGER NOT NULL
 );
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+PRAGMA cache_size=-4096;
 `
 
-// Buffer is a persistent offline event queue backed by SQLite.
-// Events are stored as raw serialized blobs and consumed in FIFO order.
+// Buffer is a persistent offline event queue backed by SQLite (CGO driver).
 type Buffer struct {
 	db *sql.DB
 }
 
 // Open opens (or creates) the SQLite database at path and initialises the schema.
+// WAL mode and NORMAL synchronous are set for maximum write throughput.
 // Use ":memory:" for an in-process ephemeral buffer (tests).
 func Open(path string) (*Buffer, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite3", path+"?_journal=WAL&_sync=NORMAL&cache=shared")
 	if err != nil {
 		return nil, fmt.Errorf("buffer: open db: %w", err)
 	}
 
-	// Enforce a single writer to avoid SQLITE_BUSY on concurrent access.
 	db.SetMaxOpenConns(1)
 
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schemaCGO); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("buffer: init schema: %w", err)
 	}
@@ -49,7 +51,6 @@ func (b *Buffer) Close() error {
 }
 
 // Push inserts a batch of serialised events in a single transaction.
-// An empty slice is a no-op.
 func (b *Buffer) Push(events [][]byte) error {
 	if len(events) == 0 {
 		return nil
@@ -81,7 +82,6 @@ func (b *Buffer) Push(events [][]byte) error {
 }
 
 // Pop reads and deletes up to n events from the buffer in insertion order (FIFO).
-// Returns fewer than n items when the buffer has fewer than n events.
 func (b *Buffer) Pop(n int) ([][]byte, error) {
 	if n <= 0 {
 		return nil, nil
@@ -118,8 +118,6 @@ func (b *Buffer) Pop(n int) ([][]byte, error) {
 	}
 
 	if len(ids) > 0 {
-		// Build a parameterised DELETE for the fetched IDs.
-		// We avoid a sub-query to keep the plan simple and fast.
 		del, err := tx.Prepare(`DELETE FROM buffer WHERE id = ?`)
 		if err != nil {
 			return nil, fmt.Errorf("buffer: prepare delete: %w", err)
