@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.0  
+**Version :** 1.1  
 **Dernière mise à jour :** 2026-08-06  
-**Branche active :** `M0/foundation-contracts`  
-**Phase courante :** Phase 1 — Foundation
+**Branche active :** `main`  
+**Phase courante :** Phase 1 — Foundation `[~]` (M2/M3/M4/M6/M7/M9/M10 restants)
 
 ---
 
@@ -26,24 +26,24 @@
 
 | # | Module | Branche | Statut | Bloqueurs ouverts |
 |---|--------|---------|--------|------------------|
-| M0 | Scaffolding + Contrats | `M0/foundation-contracts` | `[~]` En cours | SEC-0002 (CRITICAL) |
-| M1 | Crypto & Buffer (Go) | `M1/agent-crypto-buffer` | `[ ]` | Attend M0 mergé |
-| M2 | Collectors Linux (Go) | `M2/agent-collectors-linux` | `[ ]` | Attend M1 |
-| M3 | Transport gRPC Agent (Go) | `M3/agent-grpc-transport` | `[ ]` | Attend M1 |
-| M4 | Agent Bootstrap (Go) | `M4/agent-bootstrap` | `[ ]` | Attend M2 + M3 |
-| M5 | Event Bus (Python) | `M5/server-event-bus` | `[ ]` | Attend M0 mergé |
-| M6 | Ingestion gRPC (Python) | `M6/server-ingest` | `[ ]` | Attend M5 |
-| M7 | Normalizer (Python) | `M7/server-normalizer` | `[ ]` | Attend M5 |
-| M8 | Storage (Python) | `M8/server-storage` | `[ ]` | Attend M0 mergé |
-| M9 | API REST + Auth (Python) | `M9/server-api` | `[ ]` | Attend M8 |
-| M10 | Workers dev (Python) | `M10/server-workers` | `[ ]` | Attend M6 + M7 + M8 |
-| M11 | Infra & CI | `M11/infra-ci` | `[ ]` | Attend M0 mergé |
+| M0 | Scaffolding + Contrats | `M0/foundation-contracts` | `[x]` Mergé | — |
+| M1 | Crypto & Buffer (Go) | `M1/agent-crypto-buffer` | `[x]` Mergé | — |
+| M2 | Collectors Linux (Go) | `M2/agent-collectors-linux` | `[ ]` | ✅ Débloqué |
+| M3 | Transport gRPC Agent (Go) | `M3/agent-grpc-transport` | `[ ]` | ✅ Débloqué |
+| M4 | Agent Bootstrap (Go) | `M4/agent-bootstrap` | `[ ]` | Attend M2+M3 |
+| M5 | Event Bus (Python) | `M5/server-event-bus` | `[x]` Mergé | — |
+| M6 | Ingestion gRPC (Python) | `M6/server-ingest` | `[ ]` | ✅ Débloqué |
+| M7 | Normalizer (Python) | `M7/server-normalizer` | `[ ]` | ✅ Débloqué |
+| M8 | Storage (Python) | `M8/server-storage` | `[x]` Mergé | SEC-0002 ✅ fermé |
+| M9 | API REST + Auth (Python) | `M9/server-api` | `[ ]` | ✅ Débloqué |
+| M10 | Workers dev (Python) | `M10/server-workers` | `[ ]` | Attend M6+M7+M8 |
+| M11 | Infra & CI | `M11/infra-ci` | `[x]` Mergé | — |
 
-**Parallélisme disponible après merge M0 :** M1 + M5 + M8 + M11 simultanément.
+**Parallélisme disponible maintenant :** M2 + M3 + M6 + M7 + M9 simultanément.
 
 ---
 
-## M0 — Scaffolding + Contrats `[~]`
+## M0 — Scaffolding + Contrats `[x]`
 
 ### Fichiers contrats ⚠
 
@@ -218,13 +218,18 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 | DETTE-006 | `docs/note.txt` — brouillon design à nettoyer | Faible | — |
 | DETTE-007 | Proto codegen non exécuté — `agent/gen/` et `server/gen/` absents | Haute | M0/M1/M6 |
 | DETTE-008 | `audit_patterns.json` et `persistence.py` contiennent les mêmes patterns — synchronisation manuelle risquée | Faible | M11 |
-| DETTE-009 | `go.mod` manque cilium/ebpf, blake3, mattn/go-sqlite3 | Moyenne | M1 |
+| ~~DETTE-009~~ | ~~`go.mod` manque cilium/ebpf, blake3, mattn/go-sqlite3~~ | blake3+sqlite ajoutés en M1 | M1 `[x]` |
+| DETTE-010 | `.gitkeep` redondants dans `signer/` et `chain/` — fichiers .go présents | Faible | — |
 | LINT-001 | ~~ruff UP035/I001 dans bus/interface.py, schema.py~~ | Corrigé | M0 |
 | LINT-002 | ~~E501 config.py:51~~ | Corrigé | M0 |
 | MYPY-001 | ~~mypy strict : `DecisionRepository.list` conflit builtin~~ | Corrigé (→ `list_decisions`) | M0 |
 | CI-001 | ~~`cmd/oseye-agent/` vide → `go build` échoue~~ | Corrigé (stub main.go) | M0 |
-| DESIGN-001 | `EventBus` Protocol sans méthode `close()` — risque de leak en M5 | Moyenne | M5 |
+| DESIGN-001 | `EventBus` Protocol sans méthode `close()` — risque de leak | Moyenne | M5 |
+| DESIGN-002 | `PageResult[T]` redéfini dans chaque repository — à factoriser | Faible | M10 |
+| DESIGN-003 | `redis_bus.py` `subscribe_pattern` utilise `KEYS *` — O(N) bloquant prod | Moyenne | M5-bis |
 | OTel-001 | `observability.py` : OTel SDK non initialisé (stub) | Faible | M6/M9 |
+| BUG-005 | ~~`go.mod` M1 avait écrasé grpc+protobuf~~ | ✅ Corrigé (grpc@v1.68.0 réajouté) | fix commit |
+| WARN-001 | `test_storage.py` : 3 warnings `Event loop is closed` (aiosqlite teardown) | Faible | M8-bis |
 
 ---
 
