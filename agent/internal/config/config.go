@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -91,7 +92,9 @@ func parseInotifyWatches(watchesJSON string) []InotifyWatch {
 	}
 	var watches []InotifyWatch
 	if err := json.Unmarshal([]byte(watchesJSON), &watches); err != nil {
-		// Return default if parse fails
+		slog.Warn("failed to parse OSEYE_INOTIFY_WATCHES, using default",
+			slog.String("error", err.Error()),
+			slog.String("input", watchesJSON))
 		return []InotifyWatch{
 			{Path: "/tmp", Recursive: false, Mask: unix.IN_ALL_EVENTS},
 		}

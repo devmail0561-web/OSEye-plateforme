@@ -38,7 +38,7 @@ type InotifyCollector struct {
 	eventCount  atomic.Uint64
 	errorCount  atomic.Uint64
 	running     atomic.Bool
-	lastError   string
+	lastError   atomic.Value // string
 	throttle    atomic.Value // float64
 }
 
@@ -69,12 +69,16 @@ func (c *InotifyCollector) SetThrottle(factor float64) {
 }
 
 func (c *InotifyCollector) Health() collector.CollectorHealth {
+	lastErr := ""
+	if v := c.lastError.Load(); v != nil {
+		lastErr = v.(string)
+	}
 	return collector.CollectorHealth{
 		Running:     c.running.Load(),
 		ErrorCount:  int64(c.errorCount.Load()),
 		EventsTotal: int64(c.eventCount.Load()),
 		ThrottlePct: c.throttle.Load().(float64) * 100,
-		LastError:   c.lastError,
+		LastError:   lastErr,
 	}
 }
 
@@ -82,7 +86,7 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 	var err error
 	c.fd, err = unix.InotifyInit1(unix.IN_NONBLOCK | unix.IN_CLOEXEC)
 	if err != nil {
-		c.lastError = err.Error()
+		c.lastError.Store(err.Error())
 		c.errorCount.Add(1)
 		return fmt.Errorf("inotify_init: %w", err)
 	}
@@ -188,7 +192,7 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 				continue
 			}
 			c.logger.Error("inotify read error", slog.String("error", err.Error()))
-			c.lastError = err.Error()
+			c.lastError.Store(err.Error())
 			c.errorCount.Add(1)
 			return
 		}

@@ -26,7 +26,7 @@ type FanotifyCollector struct {
 	eventCount   atomic.Uint64
 	errorCount   atomic.Uint64
 	running      atomic.Bool
-	lastError    string
+	lastError    atomic.Value // string
 	throttle     atomic.Value // float64
 }
 
@@ -53,12 +53,16 @@ func (c *FanotifyCollector) SetThrottle(factor float64) {
 }
 
 func (c *FanotifyCollector) Health() collector.CollectorHealth {
+	lastErr := ""
+	if v := c.lastError.Load(); v != nil {
+		lastErr = v.(string)
+	}
 	return collector.CollectorHealth{
 		Running:      c.running.Load(),
 		ErrorCount:   int64(c.errorCount.Load()),
 		EventsTotal:  int64(c.eventCount.Load()),
 		ThrottlePct:  c.throttle.Load().(float64) * 100,
-		LastError:    c.lastError,
+		LastError:    lastErr,
 	}
 }
 
@@ -69,7 +73,7 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 		unix.O_RDONLY|unix.O_LARGEFILE,
 	)
 	if err != nil {
-		c.lastError = err.Error()
+		c.lastError.Store(err.Error())
 		c.errorCount.Add(1)
 		return fmt.Errorf("fanotify_init: %w (requires CAP_SYS_ADMIN)", err)
 	}
@@ -132,12 +136,14 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 				continue
 			}
 			c.logger.Error("fanotify read error", slog.String("error", err.Error()))
-			c.lastError = err.Error()
+			c.lastError.Store(err.Error())
 			c.errorCount.Add(1)
 			return
 		}
 
-		const fanotifyMetadataSize = 24 // sizeof(struct fanotify_event_metadata)
+		// sizeof(struct fanotify_event_metadata) = 24 bytes on Linux
+		// Hardcoded because unix.SizeofFanotifyEventMetadata not available in golang.org/x/sys/unix
+		const fanotifyMetadataSize = 24
 		if n < fanotifyMetadataSize {
 			continue
 		}
