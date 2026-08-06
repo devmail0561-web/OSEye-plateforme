@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
+
+import pytest
 
 from oseye.core.schema import (
     Alert,
@@ -116,18 +119,20 @@ def make_case(**overrides: Any) -> ForensicCase:
     return ForensicCase(**defaults)
 
 
-async def _make_backend() -> SQLiteBackend:
+@pytest.fixture
+async def backend() -> AsyncGenerator[SQLiteBackend, None]:
+    """Provide a SQLite in-memory backend with proper cleanup."""
     backend = SQLiteBackend("sqlite+aiosqlite:///:memory:")
     await backend.init()
-    return backend
+    yield backend
+    await backend.close()
 
 
 # ---------------------------------------------------------------------------
 # Event tests
 # ---------------------------------------------------------------------------
 
-async def test_event_insert_and_get() -> None:
-    backend = await _make_backend()
+async def test_event_insert_and_get(backend: SQLiteBackend) -> None:
     repo = SQLEventRepository(backend.session_factory)
     event = make_event()
     await repo.insert_batch([event])
@@ -138,8 +143,7 @@ async def test_event_insert_and_get() -> None:
     assert fetched.category == event.category
 
 
-async def test_event_query_by_category() -> None:
-    backend = await _make_backend()
+async def test_event_query_by_category(backend: SQLiteBackend) -> None:
     repo = SQLEventRepository(backend.session_factory)
     agent_id = uuid4()
     e1 = make_event(category="process", agent_id=agent_id)
@@ -156,8 +160,7 @@ async def test_event_query_by_category() -> None:
     assert e2.event_id not in ids
 
 
-async def test_event_pagination() -> None:
-    backend = await _make_backend()
+async def test_event_pagination(backend: SQLiteBackend) -> None:
     repo = SQLEventRepository(backend.session_factory)
     events = [make_event() for _ in range(5)]
     await repo.insert_batch(events)
@@ -172,8 +175,7 @@ async def test_event_pagination() -> None:
     assert len(page_b.items) == 2
 
 
-async def test_event_count() -> None:
-    backend = await _make_backend()
+async def test_event_count(backend: SQLiteBackend) -> None:
     repo = SQLEventRepository(backend.session_factory)
     events = [make_event(severity="high") for _ in range(3)]
     events += [make_event(severity="low")]
@@ -186,8 +188,7 @@ async def test_event_count() -> None:
 # Alert tests
 # ---------------------------------------------------------------------------
 
-async def test_alert_create_and_get() -> None:
-    backend = await _make_backend()
+async def test_alert_create_and_get(backend: SQLiteBackend) -> None:
     repo = SQLAlertRepository(backend.session_factory)
     alert = make_alert()
     await repo.create(alert)
@@ -198,8 +199,7 @@ async def test_alert_create_and_get() -> None:
     assert fetched.status == "open"
 
 
-async def test_alert_update() -> None:
-    backend = await _make_backend()
+async def test_alert_update(backend: SQLiteBackend) -> None:
     repo = SQLAlertRepository(backend.session_factory)
     alert = make_alert()
     await repo.create(alert)
@@ -210,8 +210,7 @@ async def test_alert_update() -> None:
     assert fetched.status == "resolved"
 
 
-async def test_alert_list_and_count() -> None:
-    backend = await _make_backend()
+async def test_alert_list_and_count(backend: SQLiteBackend) -> None:
     repo = SQLAlertRepository(backend.session_factory)
     for _ in range(3):
         await repo.create(make_alert(status="open"))
@@ -227,8 +226,7 @@ async def test_alert_list_and_count() -> None:
 # Decision tests
 # ---------------------------------------------------------------------------
 
-async def test_decision_create_and_get() -> None:
-    backend = await _make_backend()
+async def test_decision_create_and_get(backend: SQLiteBackend) -> None:
     repo = SQLDecisionRepository(backend.session_factory)
     decision = make_decision()
     await repo.create(decision)
@@ -239,8 +237,7 @@ async def test_decision_create_and_get() -> None:
     assert fetched.journal_hash == decision.journal_hash
 
 
-async def test_decision_list_decisions() -> None:
-    backend = await _make_backend()
+async def test_decision_list_decisions(backend: SQLiteBackend) -> None:
     repo = SQLDecisionRepository(backend.session_factory)
     for _ in range(4):
         await repo.create(make_decision())
@@ -249,8 +246,7 @@ async def test_decision_list_decisions() -> None:
     assert len(page.items) == 2
 
 
-async def test_decision_get_pending() -> None:
-    backend = await _make_backend()
+async def test_decision_get_pending(backend: SQLiteBackend) -> None:
     repo = SQLDecisionRepository(backend.session_factory)
     d_pending = make_decision(requires_human=True, human_decision=None)
     d_approved = make_decision(requires_human=True, human_decision="approved")
@@ -263,14 +259,13 @@ async def test_decision_get_pending() -> None:
     assert pending[0].decision_id == d_pending.decision_id
 
 
-async def test_decision_immutable_sqlite() -> None:
+async def test_decision_immutable_sqlite(backend: SQLiteBackend) -> None:
     """SQLDecisionRepository never issues UPDATE or DELETE on decisions.
 
     This test verifies the application-layer guarantee: create() only uses
     session.add() (INSERT), and there are no update/delete methods exposed.
     PostgreSQL triggers (SEC-0002) provide the database-layer guarantee.
     """
-    backend = await _make_backend()
     repo = SQLDecisionRepository(backend.session_factory)
     decision = make_decision()
     await repo.create(decision)
@@ -290,8 +285,7 @@ async def test_decision_immutable_sqlite() -> None:
 # Case tests
 # ---------------------------------------------------------------------------
 
-async def test_case_create_and_get() -> None:
-    backend = await _make_backend()
+async def test_case_create_and_get(backend: SQLiteBackend) -> None:
     repo = SQLCaseRepository(backend.session_factory)
     case = make_case()
     await repo.create(case)
@@ -302,8 +296,7 @@ async def test_case_create_and_get() -> None:
     assert fetched.status == "open"
 
 
-async def test_case_create_and_append_custody() -> None:
-    backend = await _make_backend()
+async def test_case_create_and_append_custody(backend: SQLiteBackend) -> None:
     repo = SQLCaseRepository(backend.session_factory)
     case = make_case()
     await repo.create(case)
@@ -324,8 +317,7 @@ async def test_case_create_and_append_custody() -> None:
     assert fetched.custody_log[0].action == "evidence_added"
 
 
-async def test_case_custody_append_multiple() -> None:
-    backend = await _make_backend()
+async def test_case_custody_append_multiple(backend: SQLiteBackend) -> None:
     repo = SQLCaseRepository(backend.session_factory)
     case = make_case()
     await repo.create(case)
@@ -347,8 +339,7 @@ async def test_case_custody_append_multiple() -> None:
     assert len(fetched.custody_log) == 3
 
 
-async def test_case_with_evidence() -> None:
-    backend = await _make_backend()
+async def test_case_with_evidence(backend: SQLiteBackend) -> None:
     repo = SQLCaseRepository(backend.session_factory)
     now = datetime.now(tz=UTC)
     ev = EvidenceItem(
@@ -367,8 +358,7 @@ async def test_case_with_evidence() -> None:
     assert fetched.evidence[0].evidence_id == ev.evidence_id
 
 
-async def test_case_list() -> None:
-    backend = await _make_backend()
+async def test_case_list(backend: SQLiteBackend) -> None:
     repo = SQLCaseRepository(backend.session_factory)
     for _ in range(3):
         await repo.create(make_case(status="open"))

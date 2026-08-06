@@ -41,3 +41,7 @@ class SQLiteBackend:
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
         return self._session_factory
+
+    async def close(self) -> None:
+        """Close the engine and release connections."""
+        await self._engine.dispose()
