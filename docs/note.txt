@@ -11,6 +11,9 @@ Depuis la racine du projet :
     make audit      — scanner de sécurité interne (tools/audit/)
     make dev-up     — démarrer Redis + Postgres via Docker Compose
     make dev-down   — arrêter les services Docker
+    make run-server  — lancer le serveur FastAPI en local (SQLite, port 8000)
+    make run-workers — lancer les workers background (normalizer + storage_writer)
+    make run-agent   — lancer l'agent en local (procfs collector, buffer SQLite)
 
 Prérequis installés :
     Go 1.23.8       → ~/go/bin/go
