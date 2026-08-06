@@ -25,8 +25,8 @@ try:
     from server.gen import event_pb2 as _pb2
     from server.gen import event_pb2_grpc as _pb2_grpc
 except ImportError:  # pragma: no cover — only missing in isolated unit tests
-    _pb2 = None  # type: ignore[assignment]
-    _pb2_grpc = None  # type: ignore[assignment]
+    _pb2 = None  # type: ignore[assignment,unused-ignore]
+    _pb2_grpc = None  # type: ignore[assignment,unused-ignore]
 
 _logger = get_logger(__name__)
 
@@ -136,7 +136,7 @@ class AgentServiceServicer:
         if _pb2 is None:  # pragma: no cover
             return None
 
-        return _pb2.IngestResponse(  # type: ignore[attr-defined]
+        return _pb2.IngestResponse(
             accepted=total_accepted,
             rejected=total_rejected,
             errors=all_errors,
@@ -186,7 +186,7 @@ class AgentServiceServicer:
             for raw in msgs:
                 try:
                     data = json.loads(raw)
-                    profile = _pb2.SurveillanceProfilePB(  # type: ignore[attr-defined]
+                    profile = _pb2.SurveillanceProfilePB(
                         name=data.get("name", ""),
                         description=data.get("description", ""),
                         version=data.get("version", 1),
@@ -240,7 +240,7 @@ class AgentServiceServicer:
             for raw in msgs:
                 try:
                     data = json.loads(raw)
-                    cmd = _pb2.AgentCommand(  # type: ignore[attr-defined]
+                    cmd = _pb2.AgentCommand(
                         command_type=data.get("command_type", ""),
                         payload_json=json.dumps(data.get("payload", {})).encode("utf-8"),
                     )
@@ -253,6 +253,6 @@ def register_servicer(servicer: AgentServiceServicer, server: Any) -> None:
     """Register the servicer with a gRPC server instance."""
     if _pb2_grpc is None:  # pragma: no cover
         raise RuntimeError("server.gen not available — run scripts/generate_proto.sh")
-    _pb2_grpc.add_AgentServiceServicer_to_server(  # type: ignore[no-untyped-call]
+    _pb2_grpc.add_AgentServiceServicer_to_server(
         servicer, server
     )

@@ -6,11 +6,8 @@ import uuid
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
-from oseye.ingest.validator import BatchValidator, ValidationResult
 from oseye.ingest.normalizer_bridge import pb_to_event
-
+from oseye.ingest.validator import BatchValidator, ValidationResult
 
 # ---------------------------------------------------------------------------
 # Helpers — build mock protobuf objects without importing server.gen
@@ -140,6 +137,7 @@ class TestBatchValidator:
     def test_validator_rejects_all_on_bad_signature(self) -> None:
         """When a public key is provided but signature is wrong, all events rejected."""
         import os
+
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import (
             Encoding,
