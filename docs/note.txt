@@ -9,16 +9,20 @@ Depuis la racine du projet :
     make test-py    — pytest server/tests/ -v
     make lint       — ruff (Python) + go vet (Go)
     make audit      — scanner de sécurité interne (tools/audit/)
-    make dev-up     — démarrer Redis + Postgres via Docker Compose
-    make dev-down   — arrêter les services Docker
-    make run-server  — lancer le serveur FastAPI en local (SQLite, port 8000)
-    make run-workers — lancer les workers background (normalizer + storage_writer)
-    make run-agent   — lancer l'agent en local (procfs collector, buffer SQLite)
+    make dev-up          — démarrer Redis + Postgres via Docker Compose
+    make dev-down        — arrêter les services Docker
+    make dev-certs       — générer le PKI dev (CA + server + agent-dev + JWT) dans infra/certs/
+    make run-server      — lancer le serveur FastAPI + gRPC en local (SQLite, insecure)
+    make run-server-mtls — lancer le serveur avec mTLS (requiert make dev-certs)
+    make run-workers     — lancer les workers background (normalizer + storage_writer)
+    make run-agent       — lancer l'agent en local (procfs, buffer SQLite, sans certs)
+    make run-agent-mtls  — lancer l'agent avec mTLS (requiert make dev-certs)
 
 Tests d'interaction (depuis server/) :
-    pytest tests/integration/   — tests d'interaction entre modules (bus, normalizer, storage, API)
-    pytest tests/scenarios/     — scénarios bout-en-bout (agent→gRPC→bus→DB→API)
-    pytest tests/               — toute la suite (unit + integration + scenarios)
+    pytest tests/integration/              — interaction modules (bus, normalizer, storage, API)
+    pytest tests/integration/test_grpc_*   — communication gRPC réelle mTLS (PKI in-memory)
+    pytest tests/scenarios/                — scénarios bout-en-bout (agent→gRPC→bus→DB→API)
+    pytest tests/                          — toute la suite (97 tests)
 
 Prérequis installés :
     Go 1.23.8       → ~/go/bin/go
