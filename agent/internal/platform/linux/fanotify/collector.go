@@ -7,43 +7,59 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
-	"oseye/internal/collector"
+	"github.com/oseye/agent/internal/collector"
 )
 
 var _ collector.Collector = (*FanotifyCollector)(nil)
 
-// FanotifyCollector monitors file access/modification events using fanotify API.
 type FanotifyCollector struct {
-	name       string
-	paths      []string
-	fd         int
-	logger     *slog.Logger
-	stopCh     chan struct{}
-	eventCount uint64
+	name         string
+	paths        []string
+	fd           int
+	logger       *slog.Logger
+	stopCh       chan struct{}
+	eventCount   atomic.Uint64
+	errorCount   atomic.Uint64
+	running      atomic.Bool
+	lastError    string
+	throttle     atomic.Value // float64
 }
 
-// NewFanotifyCollector creates a new fanotify collector.
-// Requires CAP_SYS_ADMIN capability.
 func NewFanotifyCollector(paths []string, logger *slog.Logger) (*FanotifyCollector, error) {
 	if len(paths) == 0 {
 		paths = []string{"/etc/passwd", "/etc/shadow", "/root/.ssh"}
 	}
 
-	return &FanotifyCollector{
+	c := &FanotifyCollector{
 		name:   "fanotify",
 		paths:  paths,
 		fd:     -1,
 		logger: logger,
 		stopCh: make(chan struct{}),
-	}, nil
+	}
+	c.throttle.Store(1.0)
+	return c, nil
 }
 
-func (c *FanotifyCollector) Name() string {
-	return c.name
+func (c *FanotifyCollector) Name() string { return c.name }
+
+func (c *FanotifyCollector) SetThrottle(factor float64) {
+	c.throttle.Store(factor)
+}
+
+func (c *FanotifyCollector) Health() collector.CollectorHealth {
+	return collector.CollectorHealth{
+		Running:      c.running.Load(),
+		ErrorCount:   int64(c.errorCount.Load()),
+		EventsTotal:  int64(c.eventCount.Load()),
+		ThrottlePct:  c.throttle.Load().(float64) * 100,
+		LastError:    c.lastError,
+	}
 }
 
 func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
@@ -53,17 +69,15 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 		unix.O_RDONLY|unix.O_LARGEFILE,
 	)
 	if err != nil {
-		return fmt.Errorf("fanotify_init failed: %w (requires CAP_SYS_ADMIN)", err)
+		c.lastError = err.Error()
+		c.errorCount.Add(1)
+		return fmt.Errorf("fanotify_init: %w (requires CAP_SYS_ADMIN)", err)
 	}
 
 	for _, path := range c.paths {
-		err = unix.FanotifyMark(
-			c.fd,
-			unix.FAN_MARK_ADD,
+		err = unix.FanotifyMark(c.fd, unix.FAN_MARK_ADD,
 			unix.FAN_OPEN|unix.FAN_MODIFY|unix.FAN_CLOSE_WRITE|unix.FAN_ACCESS,
-			unix.AT_FDCWD,
-			path,
-		)
+			unix.AT_FDCWD, path)
 		if err != nil {
 			c.logger.Warn("fanotify_mark failed", slog.String("path", path), slog.String("error", err.Error()))
 			continue
@@ -71,9 +85,11 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 		c.logger.Info("fanotify watching", slog.String("path", path))
 	}
 
+	c.running.Store(true)
 	go c.readLoop(ctx, out)
 
 	<-ctx.Done()
+	c.running.Store(false)
 	close(c.stopCh)
 	if c.fd >= 0 {
 		unix.Close(c.fd)
@@ -82,6 +98,7 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 }
 
 func (c *FanotifyCollector) Stop() error {
+	c.running.Store(false)
 	close(c.stopCh)
 	if c.fd >= 0 {
 		return unix.Close(c.fd)
@@ -91,7 +108,6 @@ func (c *FanotifyCollector) Stop() error {
 
 func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.RawEvent) {
 	buf := make([]byte, 8192)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -108,6 +124,8 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 				continue
 			}
 			c.logger.Error("fanotify read error", slog.String("error", err.Error()))
+			c.lastError = err.Error()
+			c.errorCount.Add(1)
 			return
 		}
 
@@ -119,7 +137,6 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 		for offset < n {
 			meta := (*unix.FanotifyEventMetadata)(unsafe.Pointer(&buf[offset]))
 			if meta.Vers != unix.FANOTIFY_METADATA_VERSION {
-				c.logger.Warn("fanotify: invalid metadata version")
 				break
 			}
 
@@ -131,7 +148,7 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 			event := c.buildRawEvent(meta, path)
 			select {
 			case out <- event:
-				c.eventCount++
+				c.eventCount.Add(1)
 			case <-ctx.Done():
 				return
 			}
@@ -145,12 +162,8 @@ func (c *FanotifyCollector) getPathFromFd(fd int32) (string, error) {
 	if fd < 0 {
 		return "", fmt.Errorf("invalid fd")
 	}
-	linkPath := fmt.Sprintf("/proc/self/fd/%d", fd)
-	path, err := unix.Readlink(linkPath)
-	if err != nil {
-		return "", err
-	}
-	return path, nil
+	path, err := unix.Readlink(fmt.Sprintf("/proc/self/fd/%d", fd))
+	return path, err
 }
 
 func (c *FanotifyCollector) buildRawEvent(meta *unix.FanotifyEventMetadata, path string) collector.RawEvent {
@@ -166,7 +179,6 @@ func (c *FanotifyCollector) buildRawEvent(meta *unix.FanotifyEventMetadata, path
 	}
 
 	payload := map[string]interface{}{
-		"os":           "linux",
 		"source":       "fanotify",
 		"event_type":   eventType,
 		"path":         path,
@@ -176,10 +188,10 @@ func (c *FanotifyCollector) buildRawEvent(meta *unix.FanotifyEventMetadata, path
 	}
 
 	rawJSON, _ := json.Marshal(payload)
-
 	return collector.RawEvent{
-		Timestamp: time.Now(),
 		Source:    c.name,
-		RawData:   rawJSON,
+		OS:        "linux",
+		Timestamp: time.Now().UnixNano(),
+		Raw:       rawJSON,
 	}
 }

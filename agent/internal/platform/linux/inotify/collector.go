@@ -14,7 +14,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/unix"
-	"oseye/internal/collector"
+	"github.com/oseye/agent/internal/collector"
 )
 
 var _ collector.Collector = (*InotifyCollector)(nil)
