@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -20,8 +21,6 @@ def _row_to_case(
     evidence: list[EvidenceItem] | None = None,
     notes: list[CaseNote] | None = None,
 ) -> ForensicCase:
-    from datetime import datetime
-
     return ForensicCase(
         case_id=UUID(row.case_id),
         created_at=datetime.fromisoformat(row.created_at),
@@ -59,8 +58,6 @@ def _case_to_row(case: ForensicCase) -> ForensicCaseRow:
 
 
 def _row_to_custody(row: CustodyLogRow) -> CustodyEntry:
-    from datetime import datetime
-
     return CustodyEntry(
         timestamp=datetime.fromisoformat(row.timestamp),
         operator=row.operator,
@@ -71,8 +68,6 @@ def _row_to_custody(row: CustodyLogRow) -> CustodyEntry:
 
 
 def _row_to_evidence(row: EvidenceItemRow) -> EvidenceItem:
-    from datetime import datetime
-
     return EvidenceItem(
         evidence_id=UUID(row.evidence_id),
         type=row.type,  # type: ignore[arg-type]
@@ -85,8 +80,6 @@ def _row_to_evidence(row: EvidenceItemRow) -> EvidenceItem:
 
 
 def _row_to_note(row: CaseNoteRow) -> CaseNote:
-    from datetime import datetime
-
     return CaseNote(
         note_id=UUID(row.note_id),
         case_id=UUID(row.case_id),

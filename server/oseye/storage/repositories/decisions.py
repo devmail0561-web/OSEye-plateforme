@@ -7,9 +7,10 @@ No UPDATE or DELETE operations are issued by this repository.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.core.pagination import PageResult
@@ -19,8 +20,6 @@ from oseye.storage.models import DecisionRow
 
 
 def _row_to_decision(row: DecisionRow) -> Decision:
-    from datetime import datetime
-
     return Decision(
         decision_id=UUID(row.decision_id),
         created_at=datetime.fromisoformat(row.created_at),
@@ -104,8 +103,6 @@ class SQLDecisionRepository:
     async def list_decisions(
         self, filters: dict[str, object], pagination: Pagination
     ) -> PageResult[Decision]:
-        from sqlalchemy import func
-
         async with self._session_factory() as session:
             stmt = select(DecisionRow)
             if filters.get("entity_id"):

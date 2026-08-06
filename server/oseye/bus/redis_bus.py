@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import fnmatch
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -69,7 +68,8 @@ class RedisEventBus:
                     for msg_id, fields in messages:
                         payload: bytes = fields.get(b"data", b"")
                         yield payload
-                        await client.xack(topic, self._group, msg_id)
+                    msg_ids = [msg_id for msg_id, _ in messages]
+                    await client.xack(topic, self._group, *msg_ids)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -79,26 +79,42 @@ class RedisEventBus:
         self, client: Any, pattern: str
     ) -> AsyncGenerator[tuple[str, bytes], None]:
         seen_topics: set[str] = set()
+        streams: dict[str, str] = {}
+        matching: list[str] = []
         while not self._closed:
             try:
-                matching = []
-                async for raw_key in client.scan_iter(match="*", count=100):
+                # [HIGH-1] pass pattern natively to Redis SCAN
+                matching.clear()
+                async for raw_key in client.scan_iter(match=pattern, count=100):
                     key_str = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
-                    if fnmatch.fnmatch(key_str, pattern):
-                        matching.append(key_str)
+                    matching.append(key_str)
+                # [MEDIUM-2] only rebuild streams dict when seen_topics changes
+                new_topics = False
                 for topic in matching:
                     if topic not in seen_topics:
                         await self._ensure_group(client, topic)
                         seen_topics.add(topic)
+                        new_topics = True
+                if new_topics:
+                    streams = {t: ">" for t in seen_topics}
                 if seen_topics:
-                    streams: dict[str, str] = {t: ">" for t in seen_topics}
-                    results = await client.xreadgroup(
-                        self._group,
-                        self._consumer_id,
-                        streams,
-                        count=10,
-                        block=100,
-                    )
+                    try:
+                        results = await client.xreadgroup(
+                            self._group,
+                            self._consumer_id,
+                            streams,
+                            count=10,
+                            block=100,
+                        )
+                    except aioredis.ResponseError as e:
+                        # [LOW-1] purge disappeared streams from seen_topics
+                        err_str = str(e)
+                        to_remove = {t for t in seen_topics if t in err_str}
+                        if to_remove:
+                            seen_topics -= to_remove
+                            streams = {t: ">" for t in seen_topics}
+                        await asyncio.sleep(0.1)
+                        continue
                     if results:
                         for raw_stream, messages in results:
                             stream_name = (
@@ -109,7 +125,9 @@ class RedisEventBus:
                             for msg_id, fields in messages:
                                 payload = fields.get(b"data", b"")
                                 yield stream_name, payload
-                                await client.xack(stream_name, self._group, msg_id)
+                            # [MEDIUM-1] batch ACK
+                            msg_ids = [msg_id for msg_id, _ in messages]
+                            await client.xack(stream_name, self._group, *msg_ids)
                 else:
                     await asyncio.sleep(0.1)
             except asyncio.CancelledError:

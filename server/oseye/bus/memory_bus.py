@@ -16,16 +16,16 @@ class InMemoryEventBus:
     """
 
     def __init__(self) -> None:
-        self._topic_queues: dict[str, list[asyncio.Queue[bytes]]] = {}
-        self._pattern_queues: list[tuple[str, asyncio.Queue[tuple[str, bytes]]]] = []
+        self._topic_queues: dict[str, dict[int, asyncio.Queue[bytes]]] = {}
+        self._pattern_queues: dict[int, tuple[str, asyncio.Queue[tuple[str, bytes]]]] = {}
         self._closed = False
 
     async def publish(self, topic: str, message: bytes) -> None:
         if self._closed:
             return
-        for queue in list(self._topic_queues.get(topic, [])):
+        for queue in self._topic_queues.get(topic, {}).values():
             await queue.put(message)
-        for pat, pqueue in list(self._pattern_queues):
+        for pat, pqueue in self._pattern_queues.values():
             if fnmatch.fnmatch(topic, pat):
                 await pqueue.put((topic, message))
 
@@ -35,13 +35,13 @@ class InMemoryEventBus:
         The subscription is registered at await-time, before any iteration.
         """
         queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self._topic_queues.setdefault(topic, []).append(queue)
+        self._topic_queues.setdefault(topic, {})[id(queue)] = queue
         return self._read_bytes(topic, queue)
 
     async def subscribe_pattern(self, pattern: str) -> AsyncGenerator[tuple[str, bytes], None]:
         """Return an async generator yielding (topic, message) for matching topics."""
         queue: asyncio.Queue[tuple[str, bytes]] = asyncio.Queue()
-        self._pattern_queues.append((pattern, queue))
+        self._pattern_queues[id(queue)] = (pattern, queue)
         return self._read_tuples(pattern, queue)
 
     async def _read_bytes(
@@ -50,13 +50,12 @@ class InMemoryEventBus:
         try:
             while not self._closed:
                 try:
-                    yield await asyncio.wait_for(queue.get(), timeout=0.05)
+                    yield await asyncio.wait_for(queue.get(), timeout=1.0)
                 except TimeoutError:
                     continue
         finally:
-            subscribers = self._topic_queues.get(topic, [])
-            if queue in subscribers:
-                subscribers.remove(queue)
+            subscribers = self._topic_queues.get(topic, {})
+            subscribers.pop(id(queue), None)
 
     async def _read_tuples(
         self, pattern: str, queue: asyncio.Queue[tuple[str, bytes]]
@@ -64,13 +63,11 @@ class InMemoryEventBus:
         try:
             while not self._closed:
                 try:
-                    yield await asyncio.wait_for(queue.get(), timeout=0.05)
+                    yield await asyncio.wait_for(queue.get(), timeout=1.0)
                 except TimeoutError:
                     continue
         finally:
-            entry = (pattern, queue)
-            if entry in self._pattern_queues:
-                self._pattern_queues.remove(entry)
+            self._pattern_queues.pop(id(queue), None)
 
     async def close(self) -> None:
         self._closed = True

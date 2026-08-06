@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -12,12 +14,13 @@ from oseye.api.routers import alerts, auth, events, health
 from oseye.config import Settings
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     """Build and return the configured FastAPI application."""
     app = FastAPI(
         title="OSEye API",
         version="0.1.0",
         description="OSEye EDR — REST API",
+        lifespan=lifespan,
     )
 
     # -------------------------------------------------------------------

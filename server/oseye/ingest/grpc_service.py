@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import queue as _queue
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -85,9 +86,15 @@ class AgentServiceServicer:
     via ``_require_cn``, never from ``request.agent_id``.
     """
 
-    def __init__(self, bus: EventBus, validator: BatchValidator) -> None:
+    def __init__(
+        self,
+        bus: EventBus,
+        validator: BatchValidator,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
         self._bus = bus
         self._validator = validator
+        self._loop = loop
 
     # ------------------------------------------------------------------
     # IngestEvents — client-streaming RPC
@@ -107,22 +114,24 @@ class AgentServiceServicer:
         total_rejected = 0
         all_errors: list[str] = []
 
-        loop: asyncio.AbstractEventLoop | None
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = None
-
         for request in request_iterator:
             result = self._validator.validate(request)
             total_accepted += result.accepted
             total_rejected += result.rejected
-            all_errors.extend(result.errors)
+            # [MEDIUM-4] cap accumulated errors to avoid unbounded growth
+            if len(all_errors) < 1000:
+                all_errors.extend(result.errors[:10])
 
+            # [HIGH-1] build rejected-index set once — O(M) — instead of O(N×M)
+            rejected_indices: set[int] = {
+                int(err.split(" ")[1].rstrip(":"))
+                for err in result.errors
+                if err.startswith("event ")
+            }
+
+            normalized_topic = "events:normalized"
             for event_index, pb_event in enumerate(request.events):
-                is_rejected = any(
-                    err.startswith(f"event {event_index}:") for err in result.errors
-                )
+                is_rejected = event_index in rejected_indices
                 if is_rejected:
                     continue
 
@@ -131,16 +140,24 @@ class AgentServiceServicer:
                 # pb_to_event already normalises the event — publish directly
                 # to events:normalized so the storage writer can persist it
                 # without a second normalisation pass.
-                normalized_topic = "events:normalized"
-                if loop is not None and loop.is_running():
-                    asyncio.ensure_future(
-                        self._bus.publish(normalized_topic, payload), loop=loop
-                    )
-                else:
-                    try:
-                        asyncio.run(self._bus.publish(normalized_topic, payload))
-                    except RuntimeError:
-                        _logger.error("bus_publish_failed", topic=normalized_topic)
+                # [HIGH-2] publish safely regardless of calling context:
+                # - from a running event loop (tests/async): use ensure_future
+                # - from a sync gRPC thread with a known loop: run_coroutine_threadsafe
+                # - fallback: asyncio.run (creates a temporary loop)
+                coro = self._bus.publish(normalized_topic, payload)
+                try:
+                    running_loop = asyncio.get_running_loop()
+                    asyncio.ensure_future(coro, loop=running_loop)
+                except RuntimeError:
+                    # No running loop — we are in a sync thread
+                    loop = self._loop
+                    if loop is not None and loop.is_running():
+                        asyncio.run_coroutine_threadsafe(coro, loop)
+                    else:
+                        try:
+                            asyncio.run(coro)
+                        except RuntimeError:
+                            _logger.error("bus_publish_failed", topic=normalized_topic)
 
             _logger.info(
                 "batch_ingested",
@@ -178,39 +195,56 @@ class AgentServiceServicer:
         topic = f"policy:push:{cn}"
         _logger.info("policy_stream_opened", agent_id=cn, topic=topic)
 
-        async def _collect() -> list[bytes]:
-            sub = await self._bus.subscribe(topic)
-            msgs: list[bytes] = []
-            async with asyncio.timeout(30.0):
+        # [HIGH-3] Use a stdlib queue.Queue to bridge the asyncio bus subscriber
+        # (running on self._loop) to this synchronous gRPC generator thread.
+        # Avoids creating a new event loop per iteration via asyncio.run().
+        msg_queue: _queue.Queue[bytes | None] = _queue.Queue()
+
+        async def _subscriber() -> None:
+            try:
+                sub = await self._bus.subscribe(topic)
                 async for msg in sub:
-                    msgs.append(msg)
-                    break
-            return msgs
+                    msg_queue.put(msg)
+                    if context.is_active() is False:
+                        break
+            except Exception as exc:  # noqa: BLE001
+                _logger.error("policy_stream_error", error=str(exc))
+            finally:
+                msg_queue.put(None)  # sentinel — signals end of stream
+
+        if self._loop is not None and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(_subscriber(), self._loop)
+        else:
+            _logger.error("policy_stream_no_loop", agent_id=cn)
+            return
+
+        if _pb2 is None:  # pragma: no cover
+            return
 
         while context.is_active() is not False:
             try:
-                msgs = asyncio.run(_collect())
-            except TimeoutError:
+                raw = msg_queue.get(timeout=1.0)
+            except _queue.Empty:
                 continue
+            if raw is None:
+                break
+            try:
+                # [MEDIUM-5] pass config_json raw bytes — avoid double json round-trip
+                data = json.loads(raw)
+                config_raw: bytes = (
+                    raw
+                    if set(data.keys()) == {"config"}
+                    else json.dumps(data.get("config", {})).encode("utf-8")
+                )
+                profile = _pb2.SurveillanceProfilePB(
+                    name=data.get("name", ""),
+                    description=data.get("description", ""),
+                    version=data.get("version", 1),
+                    config_json=config_raw,
+                )
+                yield profile
             except Exception as exc:  # noqa: BLE001
-                _logger.error("policy_stream_error", error=str(exc))
-                break
-
-            if _pb2 is None:  # pragma: no cover
-                break
-
-            for raw in msgs:
-                try:
-                    data = json.loads(raw)
-                    profile = _pb2.SurveillanceProfilePB(
-                        name=data.get("name", ""),
-                        description=data.get("description", ""),
-                        version=data.get("version", 1),
-                        config_json=json.dumps(data.get("config", {})).encode("utf-8"),
-                    )
-                    yield profile
-                except Exception as exc:  # noqa: BLE001
-                    _logger.error("policy_deserialize_error", error=str(exc))
+                _logger.error("policy_deserialize_error", error=str(exc))
 
     # ------------------------------------------------------------------
     # StreamCommands — server-streaming RPC
@@ -232,37 +266,48 @@ class AgentServiceServicer:
         topic = f"commands:{cn}"
         _logger.info("commands_stream_opened", agent_id=cn, topic=topic)
 
-        async def _collect() -> list[bytes]:
-            sub = await self._bus.subscribe(topic)
-            msgs: list[bytes] = []
-            async with asyncio.timeout(30.0):
+        # [HIGH-3] Same queue bridge pattern as ReceivePolicy — no asyncio.run() per iteration.
+        cmd_queue: _queue.Queue[bytes | None] = _queue.Queue()
+
+        async def _subscriber() -> None:
+            try:
+                sub = await self._bus.subscribe(topic)
                 async for msg in sub:
-                    msgs.append(msg)
-                    break
-            return msgs
+                    cmd_queue.put(msg)
+                    if context.is_active() is False:
+                        break
+            except Exception as exc:  # noqa: BLE001
+                _logger.error("commands_stream_error", error=str(exc))
+            finally:
+                cmd_queue.put(None)  # sentinel
+
+        if self._loop is not None and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(_subscriber(), self._loop)
+        else:
+            _logger.error("commands_stream_no_loop", agent_id=cn)
+            return
+
+        if _pb2 is None:  # pragma: no cover
+            return
 
         while context.is_active() is not False:
             try:
-                msgs = asyncio.run(_collect())
-            except TimeoutError:
+                raw = cmd_queue.get(timeout=1.0)
+            except _queue.Empty:
                 continue
+            if raw is None:
+                break
+            try:
+                # [MEDIUM-5] parse only once; pass payload_json bytes directly
+                data = json.loads(raw)
+                payload_raw: bytes = json.dumps(data.get("payload", {})).encode("utf-8")
+                cmd = _pb2.AgentCommand(
+                    command_type=data.get("command_type", ""),
+                    payload_json=payload_raw,
+                )
+                yield cmd
             except Exception as exc:  # noqa: BLE001
-                _logger.error("commands_stream_error", error=str(exc))
-                break
-
-            if _pb2 is None:  # pragma: no cover
-                break
-
-            for raw in msgs:
-                try:
-                    data = json.loads(raw)
-                    cmd = _pb2.AgentCommand(
-                        command_type=data.get("command_type", ""),
-                        payload_json=json.dumps(data.get("payload", {})).encode("utf-8"),
-                    )
-                    yield cmd
-                except Exception as exc:  # noqa: BLE001
-                    _logger.error("command_deserialize_error", error=str(exc))
+                _logger.error("command_deserialize_error", error=str(exc))
 
 
 def register_servicer(servicer: AgentServiceServicer, server: Any) -> None:

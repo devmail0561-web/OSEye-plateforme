@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from oseye.bus.interface import EventBus
 from oseye.core.schema import UniversalEvent
@@ -23,8 +25,8 @@ class NormalizerEngine:
     def __init__(self, bus: EventBus, hostname: str) -> None:
         self._bus = bus
         self._hostname = hostname
-        # Registry: (os_name, source) → adapter instance
-        self._adapters: dict[tuple[str, str], object] = {}
+        # Registry: (os_name, source) → normalize callable
+        self._adapters: dict[tuple[str, str], Callable[..., Any]] = {}
 
         # Register Linux adapters by default
         self.register_adapter("linux", "procfs", ProcfsAdapter())
@@ -33,7 +35,7 @@ class NormalizerEngine:
 
     def register_adapter(self, os_name: str, source: str, adapter: object) -> None:
         """Enregistre *adapter* pour la paire (*os_name*, *source*)."""
-        self._adapters[(os_name.lower(), source.lower())] = adapter
+        self._adapters[(os_name.lower(), source.lower())] = getattr(adapter, "normalize")
 
     async def process(
         self,
@@ -58,8 +60,7 @@ class NormalizerEngine:
             )
             return None
 
-        normalize = getattr(adapter, "normalize")
-        event: UniversalEvent = normalize(raw_payload, self._hostname, agent_id)
+        event: UniversalEvent = adapter(raw_payload, self._hostname, agent_id)
 
         await self._bus.publish("events:normalized", event.model_dump_json().encode())
         return event

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.core.pagination import PageResult
@@ -57,6 +57,50 @@ def _row_to_event(row: EventRow) -> UniversalEvent:
     )
 
 
+def _event_to_dict(event: UniversalEvent) -> dict:
+    """Convert a UniversalEvent to a plain dict for bulk insert (no ORM overhead)."""
+    return {
+        "event_id": str(event.event_id),
+        "timestamp_ns": event.timestamp_ns,
+        "hostname": event.hostname,
+        "agent_id": str(event.agent_id),
+        "category": event.category,
+        "type": event.type,
+        "severity": event.severity,
+        "collector": event.collector,
+        "os": event.os,
+        "uid": event.uid,
+        "gid": event.gid,
+        "pid": event.pid,
+        "ppid": event.ppid,
+        "process_name": event.process_name,
+        "executable": event.executable,
+        "cmdline": event.cmdline,
+        "cwd": event.cwd,
+        "session_id": event.session_id,
+        "resource": event.resource,
+        "result": event.result,
+        "file_hash_before": event.file_hash_before,
+        "file_hash_after": event.file_hash_after,
+        "src_ip": event.src_ip,
+        "src_port": event.src_port,
+        "dst_ip": event.dst_ip,
+        "dst_port": event.dst_port,
+        "protocol": event.protocol,
+        "bytes_sent": event.bytes_sent,
+        "bytes_recv": event.bytes_recv,
+        "hash_chain": event.hash_chain,
+        "signature": event.signature,
+        "ml_score": event.ml_score,
+        "risk_score": event.risk_score,
+        "rule_match_ids": json.dumps(event.rule_match_ids),
+        "mitre_techniques": json.dumps(event.mitre_techniques),
+        "ti_tags": json.dumps(event.ti_tags),
+        "incident_chain_id": str(event.incident_chain_id) if event.incident_chain_id else None,
+        "extra": json.dumps(event.extra),
+    }
+
+
 def _event_to_row(event: UniversalEvent) -> EventRow:
     return EventRow(
         event_id=str(event.event_id),
@@ -102,8 +146,6 @@ def _event_to_row(event: UniversalEvent) -> EventRow:
 
 def _apply_filters(stmt: Select[tuple[EventRow]], filters: EventFilter) -> Select[tuple[EventRow]]:
     """Apply EventFilter predicates to a SQLAlchemy select statement."""
-    from sqlalchemy import and_
-
     conditions = []
     if filters.hostname is not None:
         conditions.append(EventRow.hostname == filters.hostname)
@@ -144,9 +186,8 @@ class SQLEventRepository:
     async def insert_batch(self, events: list[UniversalEvent]) -> None:
         async with self._session_factory() as session:
             async with session.begin():
-                for event in events:
-                    row = _event_to_row(event)
-                    session.add(row)
+                rows = [_event_to_dict(event) for event in events]
+                await session.execute(insert(EventRow), rows)
 
     async def get(self, event_id: UUID) -> UniversalEvent | None:
         async with self._session_factory() as session:
@@ -159,13 +200,12 @@ class SQLEventRepository:
         self, filters: EventFilter, pagination: Pagination
     ) -> PageResult[UniversalEvent]:
         async with self._session_factory() as session:
-            base_stmt = select(EventRow)
-            base_stmt = _apply_filters(base_stmt, filters)
+            base_stmt = _apply_filters(select(EventRow), filters)
             count_stmt = select(func.count()).select_from(base_stmt.subquery())
             total: int = (await session.execute(count_stmt)).scalar_one()
 
             data_stmt = (
-                _apply_filters(select(EventRow), filters)
+                base_stmt
                 .offset(pagination.offset)
                 .limit(pagination.limit)
                 .order_by(EventRow.timestamp_ns.desc())
