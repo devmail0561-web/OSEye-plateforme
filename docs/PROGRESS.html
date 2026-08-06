@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSEye — Suivi de progression</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --code-bg: #1f2937;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0;
+  }
+  .page-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .page-header .logo {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .page-header .sep { color: var(--border); }
+  .page-header .doc-title { color: var(--muted); font-size: 14px; }
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 2em;
+    margin-bottom: 0.6em;
+  }
+  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; margin-top: 0.5em; }
+  h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  h3 { font-size: 1.2em; }
+  h4 { font-size: 1em; color: var(--accent); }
+  p { margin-bottom: 1em; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: var(--text); font-weight: 600; }
+  em { color: var(--muted); }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    color: #f0883e;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 1.2em 0;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 0.85em;
+  }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    margin: 1em 0;
+    padding: 12px 20px;
+    border-radius: 0 6px 6px 0;
+    color: var(--muted);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2em 0;
+    font-size: 0.9em;
+  }
+  th {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.75em;
+    letter-spacing: 0.05em;
+  }
+  td {
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+  ul, ol {
+    padding-left: 1.6em;
+    margin-bottom: 1em;
+  }
+  li { margin-bottom: 0.25em; }
+  li > ul, li > ol { margin-top: 0.25em; margin-bottom: 0.25em; }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2em 0;
+  }
+  /* Task list checkboxes */
+  input[type="checkbox"] {
+    margin-right: 6px;
+    accent-color: var(--green);
+  }
+  /* Badges inline */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+  }
+  /* Scroll indicator */
+  .scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 200;
+    transition: width 0.1s;
+  }
+  /* Print */
+  @media print {
+    body { background: white; color: black; }
+    .page-header, .scroll-progress { display: none; }
+    pre, code { background: #f5f5f5; color: black; border-color: #ddd; }
+    table, th, td { border-color: #ddd; }
+    a { color: #0066cc; }
+  }
+  @media (max-width: 768px) {
+    .layout { padding: 20px 16px 60px; }
+    .page-header { padding: 12px 16px; }
+    table { font-size: 0.8em; }
+  }
+</style>
+</head>
+<body>
+<div class="scroll-progress" id="sp"></div>
+<header class="page-header">
+  <span class="logo">OSEye</span>
+  <span class="sep">›</span>
+  <span class="doc-title">OSEye — Suivi de progression</span>
+</header>
+<div class="layout">
+<h1 id="oseye--suivi-de-progression">OSEye — Suivi de progression</h1>
+<p><strong>Version :</strong> 1.7 <strong>Dernière mise à jour
+:</strong> 2026-08-06 <strong>Branche active :</strong>
+<code>main</code> (<code>04c1611</code>) <strong>Phase courante
+:</strong> Phase 2 — Full Collection <code>[~]</code> EN COURS — M12
+complété (1/7 modules)</p>
+<hr />
+<h2 id="légende">Légende</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Symbole</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>[x]</code></td>
+<td>Terminé</td>
+</tr>
+<tr class="even">
+<td><code>[~]</code></td>
+<td>En cours</td>
+</tr>
+<tr class="odd">
+<td><code>[ ]</code></td>
+<td>À faire</td>
+</tr>
+<tr class="even">
+<td>⚠</td>
+<td>Bloque la suite</td>
+</tr>
+<tr class="odd">
+<td>🔴</td>
+<td>Bug critique / faille CRITICAL</td>
+</tr>
+<tr class="even">
+<td>🟠</td>
+<td>Bug majeur / faille MAJOR</td>
+</tr>
+<tr class="odd">
+<td>🟡</td>
+<td>Problème mineur / dette technique</td>
+</tr>
+<tr class="even">
+<td>✅</td>
+<td>Faux positif accepté / risque assumé / corrigé</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="vue-densemble-des-modules">Vue d'ensemble des modules</h2>
+<h3 id="phase-1--foundation-x-complète">Phase 1 — Foundation
+<code>[x]</code> COMPLÈTE</h3>
+<table>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>Module</th>
+<th>Statut</th>
+<th>Tests</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>M0</td>
+<td>Scaffolding + Contrats</td>
+<td><code>[x]</code> Mergé</td>
+<td>15 py</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td>M1</td>
+<td>Crypto &amp; Buffer (Go)</td>
+<td><code>[x]</code> Mergé</td>
+<td>24 go</td>
+<td>BLAKE3, Ed25519, SQLite dual</td>
+</tr>
+<tr class="odd">
+<td>M2</td>
+<td>Collectors Linux (Go)</td>
+<td><code>[x]</code> Mergé</td>
+<td>7 go</td>
+<td>procfs, auditd stub, CollectorManager</td>
+</tr>
+<tr class="even">
+<td>M3</td>
+<td>Transport gRPC Agent (Go)</td>
+<td><code>[x]</code> Mergé</td>
+<td>10 go</td>
+<td>mTLS, batch sign, backoff exponentiel</td>
+</tr>
+<tr class="odd">
+<td>M4</td>
+<td>Agent Bootstrap (Go)</td>
+<td><code>[x]</code> Mergé</td>
+<td>—</td>
+<td>Pipeline complet + SIGTERM drain</td>
+</tr>
+<tr class="even">
+<td>M5</td>
+<td>Event Bus (Python)</td>
+<td><code>[x]</code> Mergé</td>
+<td>9 py</td>
+<td>InMemory + Redis Streams</td>
+</tr>
+<tr class="odd">
+<td>M6</td>
+<td>Ingestion gRPC (Python)</td>
+<td><code>[x]</code> Mergé</td>
+<td>15 py</td>
+<td>SEC-PREV-001 enforced</td>
+</tr>
+<tr class="even">
+<td>M7</td>
+<td>Normalizer (Python)</td>
+<td><code>[x]</code> Mergé</td>
+<td>14 py</td>
+<td>procfs, auditd, eBPF adapters</td>
+</tr>
+<tr class="odd">
+<td>M8</td>
+<td>Storage (Python)</td>
+<td><code>[x]</code> Mergé</td>
+<td>16 py</td>
+<td>SEC-0002 triggers immuabilité</td>
+</tr>
+<tr class="even">
+<td>M9</td>
+<td>API REST + Auth (Python)</td>
+<td><code>[x]</code> Mergé</td>
+<td>6 py</td>
+<td>JWT RS256, RBAC, slowapi</td>
+</tr>
+<tr class="odd">
+<td>M10</td>
+<td>Workers Python</td>
+<td><code>[x]</code> Mergé</td>
+<td>5 py</td>
+<td>storage_writer + runner</td>
+</tr>
+<tr class="even">
+<td>M11</td>
+<td>Infra &amp; CI</td>
+<td><code>[x]</code> Mergé</td>
+<td>—</td>
+<td>Dockerfiles, CI coverage threshold</td>
+</tr>
+</tbody>
+</table>
+<p><strong>12/12 modules mergés sur main.</strong> Phase 1 Foundation
+complète.</p>
+<h3 id="phase-2--full-collection--en-cours">Phase 2 — Full Collection
+<code>[~]</code> EN COURS</h3>
+<table>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>Module</th>
+<th>Statut</th>
+<th>Tests</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>M12</td>
+<td>Collectors fanotify + inotify (Go)</td>
+<td><code>[x]</code> Mergé</td>
+<td>11 go</td>
+<td>P2.01 + P2.02 complétés</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="qualité-du-code--tableau-de-bord">Qualité du code — tableau de
+bord</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>Valeur</th>
+<th>Seuil</th>
+<th>Statut</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Tests Python (unit + integration + scenarios)</td>
+<td><strong>97/97</strong></td>
+<td>100%</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>Tests Go</td>
+<td><strong>41 tests / 7 packages</strong></td>
+<td>100%</td>
+<td>✅</td>
+</tr>
+<tr class="odd">
+<td>ruff (server/oseye)</td>
+<td><strong>0 erreur</strong></td>
+<td>0</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>mypy --strict (64 fichiers)</td>
+<td><strong>0 erreur</strong></td>
+<td>0</td>
+<td>✅</td>
+</tr>
+<tr class="odd">
+<td>go vet</td>
+<td><strong>0 erreur</strong></td>
+<td>0</td>
+<td>✅</td>
+</tr>
+<tr class="even">
+<td>Couverture Go (code écrit)</td>
+<td>chain 100%, config 100%, signer 87%, transport 75%, collector 97%,
+procfs 79%, buffer 73%</td>
+<td>80%</td>
+<td>🟡 buffer/transport</td>
+</tr>
+</tbody>
+</table>
+<h3 id="répartition-tests-python">Répartition tests Python</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Répertoire</th>
+<th>Tests</th>
+<th>Ce qui est testé</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>tests/unit/</code></td>
+<td>80</td>
+<td>Composants isolés (bus, schema, storage, API, ingest, normalizer,
+workers)</td>
+</tr>
+<tr class="even">
+<td><code>tests/integration/</code></td>
+<td>13</td>
+<td>Interaction entre modules (normalizer→bus, storage_writer→DB, gRPC
+mTLS réel)</td>
+</tr>
+<tr class="odd">
+<td><code>tests/scenarios/</code></td>
+<td>4</td>
+<td>Scénarios bout-en-bout (agent→gRPC→bus→DB→API)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="failles-de-sécurité">Failles de sécurité</h2>
+<table>
+<thead>
+<tr class="header">
+<th>ID</th>
+<th>Description</th>
+<th>Statut</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>SEC-0001</td>
+<td>CORS wildcard (faux positif — valeur par défaut
+<code>localhost:5173</code>)</td>
+<td>✅ FP accepté</td>
+</tr>
+<tr class="even">
+<td>SEC-0002</td>
+<td>Triggers immuabilité DB décisions/custody (M8)</td>
+<td>✅ Fermé</td>
+</tr>
+<tr class="odd">
+<td>SEC-0003</td>
+<td><code>shell=True</code> dans audit scanner (patterns versionnés,
+périmètre dev)</td>
+<td>✅ Risque assumé</td>
+</tr>
+<tr class="even">
+<td>SEC-0004</td>
+<td>Credentials dev en clair dans docker-compose</td>
+<td>🟡 Accepté dev</td>
+</tr>
+<tr class="odd">
+<td>SEC-PREV-001</td>
+<td>agent_id depuis CN mTLS — jamais depuis payload (M6)</td>
+<td>✅ Enforced + testé mTLS</td>
+</tr>
+<tr class="even">
+<td>SEC-PREV-002</td>
+<td>Rate limiting <code>/auth/token</code> 5/min via slowapi (M9)</td>
+<td>✅ Enforced</td>
+</tr>
+<tr class="odd">
+<td>SEC-RISK-001</td>
+<td>Fallback request.agent_id si CN absent — supprimé</td>
+<td>✅ Corrigé</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="bugs-corrigés-historique-complet">Bugs corrigés (historique
+complet)</h2>
+<table>
+<thead>
+<tr class="header">
+<th>ID</th>
+<th>Description</th>
+<th>Corrigé dans</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>BUG-001</td>
+<td><code>getenvDuration</code> retournait des nanosecondes</td>
+<td>M0 audit</td>
+</tr>
+<tr class="even">
+<td>BUG-002</td>
+<td>CI coverage threshold non enforced</td>
+<td>M11</td>
+</tr>
+<tr class="odd">
+<td>BUG-003</td>
+<td>Pattern DBG-P003 incohérent</td>
+<td>🟡 Ouvert</td>
+</tr>
+<tr class="even">
+<td>BUG-004</td>
+<td><code>Page[T]</code> non instanciable — workaround PageResult</td>
+<td>M10 (DESIGN-002)</td>
+</tr>
+<tr class="odd">
+<td>BUG-005</td>
+<td>go.mod M1 écrasé grpc+protobuf</td>
+<td>fix commit</td>
+</tr>
+<tr class="even">
+<td>BUG-006</td>
+<td><code>grpc_service</code> publiait sur <code>events:raw</code> au
+lieu de <code>events:normalized</code></td>
+<td>tests interaction</td>
+</tr>
+<tr class="odd">
+<td>BUG-007</td>
+<td><code>normalizer_bridge</code> : cmdline non masqué dans chemin
+gRPC</td>
+<td>tests interaction</td>
+</tr>
+<tr class="even">
+<td>BUG-008</td>
+<td><code>secret_masker</code> : pattern <code>-p</code> ne couvrait pas
+<code>-pPassword</code> (mysql)</td>
+<td>tests interaction</td>
+</tr>
+<tr class="odd">
+<td>BUG-009</td>
+<td><code>_extract_cn_from_context</code> parsait CN comme certificat
+DER — gRPC Python retourne CN en UTF-8 bytes</td>
+<td>test gRPC mTLS</td>
+</tr>
+<tr class="even">
+<td>BUG-010</td>
+<td><code>main.py</code> ne démarrait pas le serveur gRPC dans le
+lifespan</td>
+<td>test gRPC mTLS</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="dettes-techniques">Dettes techniques</h2>
+<table>
+<thead>
+<tr class="header">
+<th>ID</th>
+<th>Élément</th>
+<th>Statut</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>DETTE-001</td>
+<td><code>ui/package.json</code> absent — React/TypeScript/Vite (Phase
+9)</td>
+<td>🟡 Ouvert (Phase 9)</td>
+</tr>
+<tr class="even">
+<td>DETTE-005</td>
+<td><code>scripts/test_proto_compile.sh</code> non créé</td>
+<td>✅ Fermé (commit 94e25ff)</td>
+</tr>
+<tr class="odd">
+<td>DETTE-007</td>
+<td>Proto codegen non exécuté (gen/ pré-existants, pas depuis
+protoc)</td>
+<td>✅ Fermé (generate_proto.sh détecte .venv)</td>
+</tr>
+<tr class="even">
+<td>DESIGN-001</td>
+<td><code>EventBus</code> Protocol sans méthode <code>close()</code> —
+risque de leak</td>
+<td>✅ Fermé (déjà présent dans interface + implémentations)</td>
+</tr>
+<tr class="odd">
+<td>DESIGN-002</td>
+<td><code>PageResult[T]</code> redéfini dans chaque repository —
+factoriser</td>
+<td>✅ Fermé (core/pagination.py créé)</td>
+</tr>
+<tr class="even">
+<td>DESIGN-003</td>
+<td><code>redis_bus.py subscribe_pattern</code> utilise
+<code>KEYS *</code> O(N) bloquant</td>
+<td>✅ Fermé (remplacé par scan_iter)</td>
+</tr>
+<tr class="odd">
+<td>OTel-001</td>
+<td><code>observability.py</code> : OTel SDK non initialisé (stub)</td>
+<td>✅ Fermé (commit 4f30268 — OTLP + Console exporters)</td>
+</tr>
+<tr class="even">
+<td>WARN-001</td>
+<td><code>test_storage.py</code> : warnings
+<code>Event loop is closed</code> (aiosqlite teardown)</td>
+<td>✅ Fermé (commit 4f30268 — fixture avec close())</td>
+</tr>
+</tbody>
+</table>
+<p><strong>7/8 dettes résolues</strong> — seule reste DETTE-001 (UI
+Phase 9).</p>
+<hr />
+<h2 id="critères-dacceptance-phase-1">Critères d'acceptance Phase 1</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Critère</th>
+<th>Statut</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>go test -race ./...</code> verts</td>
+<td>✅ 7 packages, 41 tests</td>
+</tr>
+<tr class="even">
+<td><code>pytest tests/ --cov-fail-under=80</code></td>
+<td>🟡 97 tests / couverture 73–86% selon module</td>
+</tr>
+<tr class="odd">
+<td><code>docker compose up --build --wait</code></td>
+<td>🟡 <code>server/main.py</code> présent, build Docker non
+vérifié</td>
+</tr>
+<tr class="even">
+<td>Events gRPC insérés en DB</td>
+<td>✅ Prouvé par 7 tests mTLS réels</td>
+</tr>
+<tr class="odd">
+<td><code>GET /api/v1/events</code> retourne les events</td>
+<td>✅ Couvert par tests scénarios</td>
+</tr>
+<tr class="even">
+<td>CI GitHub Actions passe sur <code>main</code></td>
+<td>🟡 Jobs UI/Docker skippés (Phase 9)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="benchmarks--chemins-chauds-intel-i7-8665u-19-ghz">Benchmarks —
+chemins chauds (Intel i7-8665U, 1.9 GHz)</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Opération</th>
+<th>Résultat</th>
+<th>Cible</th>
+<th>Marge</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>BLAKE3 chain 1 KB (Go)</td>
+<td>428 MB/s — 2.4 µs/op</td>
+<td>500 MB/s</td>
+<td>0.9×</td>
+</tr>
+<tr class="even">
+<td>Ed25519 sign 32B (Go)</td>
+<td>43.7 µs → 22 900 signs/s</td>
+<td>2 signs/s</td>
+<td><strong>11 450×</strong></td>
+</tr>
+<tr class="odd">
+<td>Buffer Push/1000 — modernc (CGO=0)</td>
+<td>34 ms</td>
+<td>—</td>
+<td>CI cross-platform</td>
+</tr>
+<tr class="even">
+<td>Buffer Push/1000 — mattn+WAL (CGO=1)</td>
+<td>14 ms</td>
+<td>—</td>
+<td>prod</td>
+</tr>
+<tr class="odd">
+<td>insert_batch 1000 events (Python/SQLite)</td>
+<td>189 ms → 5 290 events/s</td>
+<td>—</td>
+<td>pipeline M10</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="optimisations-python-perfpython-optimizations">Optimisations
+Python (perf/python-optimizations)</h2>
+<p><strong>30 bottlenecks résolus dans 13 fichiers</strong> — mergé dans
+main le 2026-08-06 (commit <code>9323f13</code>).</p>
+<table>
+<thead>
+<tr class="header">
+<th>Fichier</th>
+<th>Optimisations appliquées</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>bus/redis_bus.py</code></td>
+<td><code>scan_iter</code> natif (remplace <code>KEYS *</code>), batch
+<code>XACK</code>, dict O(1), purge <code>seen_topics</code> bornée</td>
+</tr>
+<tr class="even">
+<td><code>bus/memory_bus.py</code></td>
+<td>timeout 1s sur <code>asyncio.wait_for</code>, dict O(1) pour lookup
+subscribers</td>
+</tr>
+<tr class="odd">
+<td><code>storage/repositories/events.py</code></td>
+<td>bulk insert <code>executemany</code>, helper
+<code>_event_to_dict</code>, <code>_apply_filters</code> exécuté une
+seule fois</td>
+</tr>
+<tr class="even">
+<td><code>storage/repositories/alerts.py</code></td>
+<td>imports déplacés en tête de fichier</td>
+</tr>
+<tr class="odd">
+<td><code>storage/repositories/decisions.py</code></td>
+<td>imports déplacés en tête de fichier</td>
+</tr>
+<tr class="even">
+<td><code>storage/repositories/cases.py</code></td>
+<td>imports déplacés en tête de fichier</td>
+</tr>
+<tr class="odd">
+<td><code>ingest/grpc_service.py</code></td>
+<td>index rejet O(1), compatibilité <code>asyncio</code> Python 3.12,
+<code>all_errors</code> borné</td>
+</tr>
+<tr class="even">
+<td><code>workers/storage_writer.py</code></td>
+<td><code>model_validate_json()</code> fast path (évite double décodage
+JSON)</td>
+</tr>
+<tr class="odd">
+<td><code>normalizer/engine.py</code></td>
+<td>appel direct callable (supprime indirection inutile)</td>
+</tr>
+<tr class="even">
+<td><code>api/ws/manager.py</code></td>
+<td><code>set</code> O(1) pour lookup/suppression connexions</td>
+</tr>
+<tr class="odd">
+<td><code>api/routers/events.py</code></td>
+<td>dataclasses et constantes définies au niveau module</td>
+</tr>
+<tr class="even">
+<td><code>main.py</code></td>
+<td><code>lru_cache</code> sur <code>Settings</code> (singleton
+settings)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="historique-des-commits-récents">Historique des commits
+(récents)</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Hash</th>
+<th>Message</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>04c1611</code></td>
+<td>Merge perf/python-optimizations → main</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="even">
+<td><code>9323f13</code></td>
+<td>perf: optimisations Python M0-M12 — 30 bottlenecks résolus</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="odd">
+<td><code>018958a</code></td>
+<td>Merge M12/collectors-files → main</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="even">
+<td><code>4f30268</code></td>
+<td>fix: résolution dettes OTel-001 et WARN-001</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="odd">
+<td><code>3306675</code></td>
+<td>docs: PROGRESS v1.5 — Phase 1 complète, dettes résolues</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="even">
+<td><code>94e25ff</code></td>
+<td>fix: résolution dettes techniques DETTE-007, DESIGN-001/002/003,
+DETTE-005</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="odd">
+<td><code>422e66b</code></td>
+<td>docs: référencer DESCRIPTION.md et CONDUCT.md dans README</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="even">
+<td><code>4c06d38</code></td>
+<td>docs: ajouter DESCRIPTION.md et CONDUCT.md</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="odd">
+<td><code>9559885</code></td>
+<td>docs: PROGRESS v1.4 + DEVELOPMENT_PLAN v1.2 — Phase 1 complète</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="even">
+<td><code>f17dcaf</code></td>
+<td>docs: mettre à jour note.txt — commandes mTLS, dev-certs, tests
+gRPC</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="odd">
+<td><code>0fe6126</code></td>
+<td>feat: communication gRPC réelle + 3 corrections de bugs
+critiques</td>
+<td>2026-08-06</td>
+</tr>
+<tr class="even">
+<td><code>2850ed7</code></td>
+<td>tests: tests d'interaction modules + 3 corrections de bugs</td>
+<td>2026-08-06</td>
+</tr>
+</tbody>
+</table>
+</div>
+<script>
+  const sp = document.getElementById('sp');
+  window.addEventListener('scroll', () => {
+    const pct = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100;
+    sp.style.width = pct + '%';
+  });
+</script>
+</body>
+</html>

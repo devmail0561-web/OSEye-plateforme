@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSEye</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --code-bg: #1f2937;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0;
+  }
+  .page-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .page-header .logo {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .page-header .sep { color: var(--border); }
+  .page-header .doc-title { color: var(--muted); font-size: 14px; }
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 2em;
+    margin-bottom: 0.6em;
+  }
+  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; margin-top: 0.5em; }
+  h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  h3 { font-size: 1.2em; }
+  h4 { font-size: 1em; color: var(--accent); }
+  p { margin-bottom: 1em; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: var(--text); font-weight: 600; }
+  em { color: var(--muted); }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    color: #f0883e;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 1.2em 0;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 0.85em;
+  }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    margin: 1em 0;
+    padding: 12px 20px;
+    border-radius: 0 6px 6px 0;
+    color: var(--muted);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2em 0;
+    font-size: 0.9em;
+  }
+  th {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.75em;
+    letter-spacing: 0.05em;
+  }
+  td {
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+  ul, ol {
+    padding-left: 1.6em;
+    margin-bottom: 1em;
+  }
+  li { margin-bottom: 0.25em; }
+  li > ul, li > ol { margin-top: 0.25em; margin-bottom: 0.25em; }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2em 0;
+  }
+  /* Task list checkboxes */
+  input[type="checkbox"] {
+    margin-right: 6px;
+    accent-color: var(--green);
+  }
+  /* Badges inline */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+  }
+  /* Scroll indicator */
+  .scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 200;
+    transition: width 0.1s;
+  }
+  /* Print */
+  @media print {
+    body { background: white; color: black; }
+    .page-header, .scroll-progress { display: none; }
+    pre, code { background: #f5f5f5; color: black; border-color: #ddd; }
+    table, th, td { border-color: #ddd; }
+    a { color: #0066cc; }
+  }
+  @media (max-width: 768px) {
+    .layout { padding: 20px 16px 60px; }
+    .page-header { padding: 12px 16px; }
+    table { font-size: 0.8em; }
+  }
+</style>
+</head>
+<body>
+<div class="scroll-progress" id="sp"></div>
+<header class="page-header">
+  <span class="logo">OSEye</span>
+  <span class="sep">›</span>
+  <span class="doc-title">OSEye</span>
+</header>
+<div class="layout">
+<h1 id="oseye">OSEye</h1>
+<p><strong>OSEye</strong> est une plateforme EDR/SIEM Linux open-core —
+légère, modulaire et intelligente.</p>
+<p>Elle collecte les événements système en temps réel (eBPF, auditd,
+procfs, réseau), les normalise, les analyse via un moteur de règles et
+un moteur ML, corrèle les incidents, prend des décisions autonomes et
+les présente dans un dashboard web.</p>
+<h2 id="fonctionnalités-clés">Fonctionnalités clés</h2>
+<ul>
+<li><strong>9 collecteurs Linux</strong> — eBPF, auditd, fanotify,
+inotify, procfs, netlink, journald, udev, syslog</li>
+<li><strong>Détection rule-based</strong> — 30+ règles YAML MITRE
+ATT&amp;CK, hot-reload, timeframes</li>
+<li><strong>ML comportemental</strong> — IsolationForest online (River),
+baseline par entité</li>
+<li><strong>Threat Intelligence</strong> — AbuseIPDB, VirusTotal, MISP,
+STIX/TAXII</li>
+<li><strong>Corrélation</strong> — reconstruction de chaînes d'incidents
+multi-events</li>
+<li><strong>Decision Engine</strong> — 8 types de décisions, matrice
+risque, journal immutable</li>
+<li><strong>Forensics</strong> — gestion de cas, custody log, exports
+PDF/MISP/TheHive</li>
+<li><strong>Plugin SDK</strong> — extensions Python sandboxées, signées
+Ed25519</li>
+<li><strong>Multi-OS</strong> — agent Go compilé pour Linux, Windows,
+macOS</li>
+</ul>
+<h2 id="architecture">Architecture</h2>
+<pre><code>[Agent Go]  ──gRPC/mTLS──►  [Server Python]
+  eBPF                         Normalizer
+  auditd                       Rule Engine
+  procfs                  ──►  ML Engine
+  ...                          TI Engine
+                               Correlation
+                               Decision Engine
+                               FastAPI REST + WebSocket
+                                    │
+                               [SQLite / PostgreSQL / ClickHouse]</code></pre>
+<p>Voir <a
+href="docs/ARCHITECTURE.md"><code>docs/ARCHITECTURE.md</code></a> pour
+la documentation complète.</p>
+<h2 id="démarrage-rapide">Démarrage rapide</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Prérequis : Docker, Docker Compose</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/your-org/oseye.git</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> oseye</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Générer les certificats dev et le code Protobuf</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/generate_certs.sh</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/generate_proto.sh</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Lancer l&#39;environnement complet</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> compose <span class="at">-f</span> infra/docker/docker-compose.dev.yml up <span class="at">-d</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Vérifier que le server répond</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> http://localhost:8000/api/v1/health</span></code></pre></div>
+<h2 id="stack-technique">Stack technique</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Composant</th>
+<th>Technologie</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Agent</td>
+<td>Go 1.23, eBPF (cilium/ebpf), gRPC</td>
+</tr>
+<tr class="even">
+<td>Server</td>
+<td>Python 3.12, FastAPI, SQLAlchemy 2.0</td>
+</tr>
+<tr class="odd">
+<td>ML</td>
+<td>River (online learning), scikit-learn</td>
+</tr>
+<tr class="even">
+<td>Bus</td>
+<td>Redis Streams (dev) / Kafka (prod)</td>
+</tr>
+<tr class="odd">
+<td>Stockage</td>
+<td>SQLite (dev) / PostgreSQL + ClickHouse (prod)</td>
+</tr>
+<tr class="even">
+<td>UI</td>
+<td>React 18, TypeScript, Vite, Tailwind</td>
+</tr>
+<tr class="odd">
+<td>Déploiement</td>
+<td>Docker, Helm (K8s), Ansible</td>
+</tr>
+</tbody>
+</table>
+<h2 id="cibles-de-performance">Cibles de performance</h2>
+<ul>
+<li>CPU agent : <strong>&lt; 2%</strong> en mode standard</li>
+<li>Latence détection : <strong>&lt; 500ms</strong> event → alerte</li>
+<li>Débit : <strong>&gt; 100 000 events/s</strong></li>
+<li>Faux positifs : <strong>&lt; 5%</strong></li>
+</ul>
+<h2 id="documentation">Documentation</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Document</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a
+href="docs/DESCRIPTION.md"><code>docs/DESCRIPTION.md</code></a></td>
+<td>Vue d'ensemble complète du projet — mission, objectifs, roadmap</td>
+</tr>
+<tr class="even">
+<td><a
+href="docs/ARCHITECTURE.md"><code>docs/ARCHITECTURE.md</code></a></td>
+<td>Architecture complète — stack, interfaces, API, schémas DB</td>
+</tr>
+<tr class="odd">
+<td><a
+href="docs/PLAN_ACTION.md"><code>docs/PLAN_ACTION.md</code></a></td>
+<td>188 tâches, phases de développement, statuts</td>
+</tr>
+<tr class="even">
+<td><a
+href="docs/DEVELOPMENT_PLAN.md"><code>docs/DEVELOPMENT_PLAN.md</code></a></td>
+<td>Plan modulaire Phase 1 — branches, modules, critères</td>
+</tr>
+<tr class="odd">
+<td><a href="CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a></td>
+<td>Comment contribuer — workflow, conventions, reviews</td>
+</tr>
+<tr class="even">
+<td><a href="docs/CONDUCT.md"><code>docs/CONDUCT.md</code></a></td>
+<td>Code de conduite — principes, standards, sanctions</td>
+</tr>
+<tr class="odd">
+<td><a href="SECURITY.md"><code>SECURITY.md</code></a></td>
+<td>Politique de sécurité — signalement de vulnérabilités</td>
+</tr>
+</tbody>
+</table>
+<h2 id="contribuer">Contribuer</h2>
+<p>Lire <a href="CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a>. Les
+contributions sont bienvenues — voir <a
+href="docs/PLAN_ACTION.md"><code>docs/PLAN_ACTION.md</code></a> pour les
+tâches disponibles.</p>
+<h2 id="licence">Licence</h2>
+<p>Apache 2.0 — voir <a href="LICENSE"><code>LICENSE</code></a>.</p>
+</div>
+<script>
+  const sp = document.getElementById('sp');
+  window.addEventListener('scroll', () => {
+    const pct = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100;
+    sp.style.width = pct + '%';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CODE DE CONDUITE</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --code-bg: #1f2937;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0;
+  }
+  .page-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .page-header .logo {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .page-header .sep { color: var(--border); }
+  .page-header .doc-title { color: var(--muted); font-size: 14px; }
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 2em;
+    margin-bottom: 0.6em;
+  }
+  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; margin-top: 0.5em; }
+  h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  h3 { font-size: 1.2em; }
+  h4 { font-size: 1em; color: var(--accent); }
+  p { margin-bottom: 1em; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: var(--text); font-weight: 600; }
+  em { color: var(--muted); }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    color: #f0883e;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 1.2em 0;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 0.85em;
+  }
+  blockquote {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    margin: 1em 0;
+    padding: 12px 20px;
+    border-radius: 0 6px 6px 0;
+    color: var(--muted);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2em 0;
+    font-size: 0.9em;
+  }
+  th {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 0.75em;
+    letter-spacing: 0.05em;
+  }
+  td {
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+  ul, ol {
+    padding-left: 1.6em;
+    margin-bottom: 1em;
+  }
+  li { margin-bottom: 0.25em; }
+  li > ul, li > ol { margin-top: 0.25em; margin-bottom: 0.25em; }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 2em 0;
+  }
+  /* Task list checkboxes */
+  input[type="checkbox"] {
+    margin-right: 6px;
+    accent-color: var(--green);
+  }
+  /* Badges inline */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: 600;
+  }
+  /* Scroll indicator */
+  .scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 200;
+    transition: width 0.1s;
+  }
+  /* Print */
+  @media print {
+    body { background: white; color: black; }
+    .page-header, .scroll-progress { display: none; }
+    pre, code { background: #f5f5f5; color: black; border-color: #ddd; }
+    table, th, td { border-color: #ddd; }
+    a { color: #0066cc; }
+  }
+  @media (max-width: 768px) {
+    .layout { padding: 20px 16px 60px; }
+    .page-header { padding: 12px 16px; }
+    table { font-size: 0.8em; }
+  }
+</style>
+</head>
+<body>
+<div class="scroll-progress" id="sp"></div>
+<header class="page-header">
+  <span class="logo">OSEye</span>
+  <span class="sep">›</span>
+  <span class="doc-title">CODE DE CONDUITE</span>
+</header>
+<div class="layout">
+<h1 id="code-de-conduite">CODE DE CONDUITE</h1>
+<p><strong>Version :</strong> 1.0<br />
+<strong>Date :</strong> 2026-08-06<br />
+<strong>Portée :</strong> Projet OSEye — contributeurs, mainteneurs,
+utilisateurs</p>
+<hr />
+<h2 id="notre-engagement">NOTRE ENGAGEMENT</h2>
+<p>Dans l'intérêt de favoriser un environnement ouvert et accueillant,
+nous, contributeurs et mainteneurs, nous engageons à faire de la
+participation au projet OSEye une expérience <strong>exempte de
+harcèlement</strong> pour tous, quels que soient :</p>
+<ul>
+<li>L'âge</li>
+<li>La taille corporelle</li>
+<li>Le handicap visible ou invisible</li>
+<li>L'origine ethnique</li>
+<li>Les caractéristiques sexuelles</li>
+<li>L'identité et l'expression de genre</li>
+<li>Le niveau d'expérience</li>
+<li>L'éducation</li>
+<li>Le statut socio-économique</li>
+<li>La nationalité</li>
+<li>L'apparence personnelle</li>
+<li>La race</li>
+<li>La religion</li>
+<li>L'identité et l'orientation sexuelle</li>
+</ul>
+<hr />
+<h2 id="nos-standards">NOS STANDARDS</h2>
+<h3 id="comportements-attendus-faire">Comportements attendus
+(FAIRE)</h3>
+<p>Les exemples de comportements qui contribuent à créer un
+environnement positif incluent :</p>
+<ul>
+<li><strong>RESPECT</strong> — Utiliser un langage accueillant et
+inclusif</li>
+<li><strong>EMPATHIE</strong> — Respecter les points de vue et
+expériences différents</li>
+<li><strong>CONSTRUCTIVITÉ</strong> — Accepter les critiques
+constructives avec grâce</li>
+<li><strong>PRIORITÉ À LA COMMUNAUTÉ</strong> — Se concentrer sur ce qui
+est le mieux pour la communauté</li>
+<li><strong>BIENVEILLANCE</strong> — Faire preuve de bienveillance et de
+courtoisie envers les autres membres</li>
+<li><strong>TRANSPARENCE</strong> — Documenter publiquement les
+décisions techniques majeures</li>
+<li><strong>INCLUSIVITÉ</strong> — Accueillir activement les nouveaux
+contributeurs, partager les connaissances</li>
+<li><strong>PROFESSIONNALISME</strong> — Séparer les désaccords
+techniques des attaques personnelles</li>
+</ul>
+<h3 id="comportements-inacceptables-ne-pas-faire">Comportements
+inacceptables (NE PAS FAIRE)</h3>
+<p>Les exemples de comportements inacceptables incluent :</p>
+<ul>
+<li><p><strong>HARCÈLEMENT</strong> :</p>
+<ul>
+<li>Commentaires offensants liés au genre, orientation sexuelle, race,
+religion, handicap</li>
+<li>Intimidation délibérée, stalking, suivi physique ou en ligne</li>
+<li>Attention sexuelle ou avances non désirées</li>
+<li>Publication de contenus sexuellement explicites ou violents</li>
+</ul></li>
+<li><p><strong>TOXICITÉ</strong> :</p>
+<ul>
+<li>Trolling, commentaires insultants ou désobligeants</li>
+<li>Attaques personnelles ou politiques</li>
+<li>Harcèlement public ou privé</li>
+<li>Publication d'informations privées d'autrui sans permission
+(doxxing)</li>
+</ul></li>
+<li><p><strong>CONDUITE NON PROFESSIONNELLE</strong> :</p>
+<ul>
+<li>Utilisation d'un langage ou d'images sexualisés dans les espaces
+publics du projet</li>
+<li>Comportement qui pourrait raisonnablement être considéré comme
+inapproprié dans un cadre professionnel</li>
+<li>Sabotage délibéré du travail d'autrui</li>
+<li>Violation répétée des règles de contribution après
+avertissement</li>
+</ul></li>
+<li><p><strong>GATEKEEPING</strong> :</p>
+<ul>
+<li>Décourager activement les nouveaux contributeurs</li>
+<li>Rejeter des contributions pour des raisons non techniques (« ce
+n'est pas assez complexe », « tu n'es pas assez expérimenté »)</li>
+<li>Exiger des standards impossibles ou arbitraires</li>
+</ul></li>
+</ul>
+<hr />
+<h2 id="responsabilités-des-mainteneurs">RESPONSABILITÉS DES
+MAINTENEURS</h2>
+<p>Les mainteneurs du projet sont responsables de <strong>clarifier les
+standards de comportement acceptable</strong> et sont tenus de prendre
+des <strong>actions correctives appropriées et équitables</strong> en
+réponse à tout comportement inacceptable.</p>
+<p>Les mainteneurs ont le droit et la responsabilité de :</p>
+<ol type="1">
+<li><p><strong>MODÉRER</strong> — Supprimer, éditer ou rejeter :</p>
+<ul>
+<li>Commentaires, commits, code, modifications wiki</li>
+<li>Issues, pull requests, et autres contributions</li>
+<li>Qui ne sont pas alignés avec ce Code de Conduite</li>
+</ul></li>
+<li><p><strong>BANNIR</strong> — Bannir temporairement ou définitivement
+tout contributeur pour des comportements jugés :</p>
+<ul>
+<li>Inappropriés</li>
+<li>Menaçants</li>
+<li>Offensants</li>
+<li>Nuisibles</li>
+</ul></li>
+<li><p><strong>COMMUNIQUER</strong> — Expliquer publiquement (si
+approprié) les raisons des décisions de modération, pour maintenir la
+transparence.</p></li>
+</ol>
+<hr />
+<h2 id="portée">PORTÉE</h2>
+<p>Ce Code de Conduite s'applique :</p>
+<h3 id="espaces-du-projet">Espaces du projet</h3>
+<ul>
+<li><strong>Dépôts GitHub</strong> : issues, pull requests, discussions,
+commentaires de code</li>
+<li><strong>Communication</strong> : Slack, Discord, forums, mailing
+lists</li>
+<li><strong>Événements</strong> : conférences, meetups, sprints de
+développement (virtuels ou physiques)</li>
+<li><strong>Documentation</strong> : wikis, docs, tutoriels</li>
+</ul>
+<h3 id="représentation-publique">Représentation publique</h3>
+<p>Ce Code s'applique également lorsqu'un individu <strong>représente
+officiellement le projet</strong> dans un espace public :</p>
+<ul>
+<li>Utilisation d'une adresse email officielle du projet</li>
+<li>Publication via un compte de réseau social officiel</li>
+<li>Action en tant que représentant désigné lors d'un événement</li>
+</ul>
+<p><strong>Exemple</strong> : si vous parlez d'OSEye lors d'une
+conférence en tant que contributeur principal, vous représentez le
+projet.</p>
+<hr />
+<h2 id="application">APPLICATION</h2>
+<h3 id="signalement">Signalement</h3>
+<p>Les cas de comportement abusif, harcelant ou autrement inacceptable
+peuvent être signalés en contactant :</p>
+<p><strong>Email de sécurité :</strong> <a
+href="mailto:security@oseye.dev">security@oseye.dev</a><br />
+<strong>Mainteneur principal :</strong> @virus-one (GitHub) ou <a
+href="mailto:virus-one@oseye.dev">virus-one@oseye.dev</a></p>
+<p>Toutes les plaintes seront :</p>
+<ol type="1">
+<li><strong>EXAMINÉES</strong> — Investiguées rapidement et
+équitablement</li>
+<li><strong>CONFIDENTIELLES</strong> — L'identité du plaignant sera
+protégée par défaut</li>
+<li><strong>SUIVIES</strong> — Accusé de réception sous 48h, résolution
+sous 7 jours (selon gravité)</li>
+</ol>
+<h3 id="processus-dinvestigation">Processus d'investigation</h3>
+<ol type="1">
+<li><strong>Réception</strong> : mainteneur reçoit le signalement</li>
+<li><strong>Évaluation</strong> : vérification des faits (screenshots,
+logs, témoins)</li>
+<li><strong>Consultation</strong> : si nécessaire, consultation avec
+d'autres mainteneurs (anonymisation du plaignant)</li>
+<li><strong>Décision</strong> : sanction proportionnelle (voir
+ci-dessous)</li>
+<li><strong>Communication</strong> : notification au plaignant et au
+contrevenant</li>
+</ol>
+<h3 id="sanctions">Sanctions</h3>
+<p>Les mainteneurs suivront ces <strong>Lignes Directrices d'Impact
+Communautaire</strong> pour déterminer les conséquences :</p>
+<h4 id="1-correction-avertissement">1. CORRECTION (avertissement)</h4>
+<p><strong>Impact communautaire</strong> : Usage de langage inapproprié
+ou autre comportement jugé non professionnel ou malvenu.</p>
+<p><strong>Conséquence</strong> :</p>
+<ul>
+<li>Avertissement écrit privé, expliquant la nature de la violation</li>
+<li>Demande d'excuses publiques (optionnel selon le cas)</li>
+<li>Pas de conséquences durables si le comportement n'est pas
+répété</li>
+</ul>
+<h4 id="2-avertissement-suspension-temporaire">2. AVERTISSEMENT
+(suspension temporaire)</h4>
+<p><strong>Impact communautaire</strong> : Violation via un incident
+unique ou série d'actions.</p>
+<p><strong>Conséquence</strong> :</p>
+<ul>
+<li>Avertissement formel écrit</li>
+<li><strong>Suspension temporaire</strong> :
+<ul>
+<li>Aucune interaction avec la communauté pendant 7–30 jours</li>
+<li>Interdiction de participer aux espaces publics (GitHub, Slack)</li>
+<li>Violation de cette suspension → bannissement permanent</li>
+</ul></li>
+</ul>
+<h4 id="3-bannissement-temporaire">3. BANNISSEMENT TEMPORAIRE</h4>
+<p><strong>Impact communautaire</strong> : Violation grave ou répétée
+des standards de la communauté.</p>
+<p><strong>Conséquence</strong> :</p>
+<ul>
+<li><strong>Bannissement de 3 mois minimum</strong> de toute interaction
+avec le projet</li>
+<li>Aucune contribution (code, review, commentaires)</li>
+<li>Aucune communication publique ou privée avec les membres</li>
+<li>Violation → bannissement permanent</li>
+</ul>
+<h4 id="4-bannissement-permanent">4. BANNISSEMENT PERMANENT</h4>
+<p><strong>Impact communautaire</strong> : Démonstration d'un pattern de
+violation, harcèlement soutenu, agression envers des individus ou
+classes d'individus.</p>
+<p><strong>Conséquence</strong> :</p>
+<ul>
+<li><strong>Bannissement permanent</strong> de toute forme de
+participation publique au projet</li>
+<li>Comptes GitHub bloqués</li>
+<li>Accès révoqué à tous les canaux de communication</li>
+<li><strong>Non négociable</strong> : aucune procédure d'appel</li>
+</ul>
+<hr />
+<h2 id="résolution-des-conflits-techniques">RÉSOLUTION DES CONFLITS
+TECHNIQUES</h2>
+<p>Les désaccords techniques sont <strong>normaux et attendus</strong>.
+Ce Code ne s'applique PAS aux débats techniques légitimes.</p>
+<h3 id="différence-entre-désaccord-technique-et-toxicité">Différence
+entre désaccord technique et toxicité</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Désaccord technique (✅ OK)</th>
+<th>Toxicité (❌ Inacceptable)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>"Je pense que cette approche est moins performante car X, Y, Z.
+Voici une alternative : ..."</td>
+<td>"Cette approche est stupide. Tu ne connais rien à
+l'optimisation."</td>
+</tr>
+<tr class="even">
+<td>"J'ai des doutes sur cette architecture. Avez-vous considéré les cas
+A et B ?"</td>
+<td>"Tu as visiblement jamais travaillé sur un vrai projet. C'est
+n'importe quoi."</td>
+</tr>
+<tr class="odd">
+<td>"Je ne suis pas d'accord avec cette décision. Documentons les deux
+options et votons."</td>
+<td>"Si tu fais ça, je quitte le projet. C'est moi ou ton approche
+débile."</td>
+</tr>
+</tbody>
+</table>
+<h3 id="escalade-technique-pas-une-violation-du-code">Escalade technique
+(pas une violation du Code)</h3>
+<ol type="1">
+<li><strong>Discussion dans la PR/Issue</strong> : arguments techniques,
+benchmarks, références</li>
+<li><strong>Si blocage</strong> : escalade vers le lead
+(@virus-one)</li>
+<li><strong>Décision finale</strong> : documentée dans
+<code>docs/DECISIONS.md</code> (ADR — Architecture Decision Record)</li>
+</ol>
+<p>Les mainteneurs ne prendront PAS de sanctions pour des désaccords
+techniques exprimés de manière respectueuse.</p>
+<hr />
+<h2 id="modification-du-code-de-conduite">MODIFICATION DU CODE DE
+CONDUITE</h2>
+<p>Ce Code de Conduite peut être modifié via pull request. Les
+changements nécessitent :</p>
+<ol type="1">
+<li><strong>Discussion publique</strong> : GitHub Discussion ouverte
+minimum 14 jours</li>
+<li><strong>Approbation</strong> : 2/3 des mainteneurs</li>
+<li><strong>Versioning</strong> : incrément de version (v1.1, v2.0,
+...)</li>
+<li><strong>Notification</strong> : annonce dans tous les canaux du
+projet</li>
+</ol>
+<hr />
+<h2 id="attribution">ATTRIBUTION</h2>
+<p>Ce Code de Conduite est adapté du <a
+href="https://www.contributor-covenant.org/version/2/1/code_of_conduct.html">Contributor
+Covenant v2.1</a>, avec ajouts spécifiques au projet OSEye.</p>
+<p>Les Lignes Directrices d'Impact Communautaire s'inspirent de <a
+href="https://github.com/mozilla/diversity">l'échelle de modération de
+Mozilla</a>.</p>
+<hr />
+<h2 id="questions-fréquentes">QUESTIONS FRÉQUENTES</h2>
+<h3 id="que-faire-si-je-suis-témoin-dune-violation-">Que faire si je
+suis témoin d'une violation ?</h3>
+<p><strong>Contactez immédiatement un mainteneur</strong> via email (<a
+href="mailto:security@oseye.dev">security@oseye.dev</a>) ou message
+privé GitHub. Ne confrontez pas directement la personne si la situation
+est dangereuse.</p>
+<h3 id="que-faire-si-je-suis-accusé-à-tort-">Que faire si je suis accusé
+à tort ?</h3>
+<p>Le processus d'investigation vérifie les faits avant toute sanction.
+Si vous êtes contacté par un mainteneur, coopérez et fournissez votre
+version. Si vous pensez que la décision finale est injuste, vous pouvez
+faire appel en contactant deux autres mainteneurs (hors celui qui a
+traité le cas initial).</p>
+<h3 id="les-mainteneurs-sont-ils-eux-aussi-soumis-à-ce-code-">Les
+mainteneurs sont-ils eux aussi soumis à ce Code ?</h3>
+<p><strong>Oui, absolument.</strong> Aucune exception. Les mainteneurs
+qui violent ce Code peuvent être retirés de leur rôle par vote des
+autres mainteneurs (majorité 2/3).</p>
+<h3 id="puis-je-signaler-de-manière-anonyme-">Puis-je signaler de
+manière anonyme ?</h3>
+<p><strong>Oui.</strong> Utilisez un email temporaire ou contactez via
+un compte anonyme. Cependant, l'investigation peut être plus difficile
+sans possibilité de follow-up.</p>
+<h3
+id="que-se-passe-t-il-si-le-contrevenant-est-le-lead-du-projet-virus-one-">Que
+se passe-t-il si le contrevenant est le lead du projet (@virus-one)
+?</h3>
+<p>Contactez directement les autres mainteneurs seniors. Si tous sont
+impliqués, contactez GitHub directement via leur <a
+href="https://docs.github.com/en/site-policy/github-terms/github-community-guidelines">Community
+Guidelines</a>.</p>
+<hr />
+<h2 id="engagements-des-mainteneurs">ENGAGEMENTS DES MAINTENEURS</h2>
+<p>En acceptant le rôle de mainteneur, je m'engage à :</p>
+<ul>
+<li>✅ <strong>Traiter tous les signalements avec sérieux</strong> et
+dans les délais annoncés</li>
+<li>✅ <strong>Respecter la confidentialité</strong> des plaignants</li>
+<li>✅ <strong>Appliquer les sanctions de manière cohérente</strong> et
+sans favoritisme</li>
+<li>✅ <strong>Documenter les décisions</strong> de manière transparente
+(hors informations sensibles)</li>
+<li>✅ <strong>Me récuser</strong> si je suis personnellement impliqué
+dans un conflit</li>
+<li>✅ <strong>Écouter</strong> les retours de la communauté sur
+l'application de ce Code</li>
+</ul>
+<hr />
+<h2 id="ressources">RESSOURCES</h2>
+<ul>
+<li><strong>Contributor Covenant</strong> : <a
+href="https://www.contributor-covenant.org/">https://www.contributor-covenant.org/</a></li>
+<li><strong>GitHub Community Guidelines</strong> : <a
+href="https://docs.github.com/en/site-policy/github-terms/github-community-guidelines">https://docs.github.com/en/site-policy/github-terms/github-community-guidelines</a></li>
+<li><strong>Geek Feminism Wiki (Anti-Harassment Policy)</strong> : <a
+href="https://geekfeminism.wikia.org/wiki/Community_anti-harassment/Policy">https://geekfeminism.wikia.org/wiki/Community_anti-harassment/Policy</a></li>
+<li><strong>CHAOSS Metrics (Diversity &amp; Inclusion)</strong> : <a
+href="https://chaoss.community/metrics-for-diversity-and-inclusion/">https://chaoss.community/metrics-for-diversity-and-inclusion/</a></li>
+</ul>
+<hr />
+<p><strong>Pour un projet OSEye ouvert, respectueux et
+productif.</strong></p>
+<p><strong>Date d'effet :</strong> 2026-08-06<br />
+<strong>Mainteneurs signataires :</strong></p>
+<ul>
+<li>@virus-one (Lead)</li>
+<li>[À compléter au fur et à mesure de l'arrivée des mainteneurs]</li>
+</ul>
+</div>
+<script>
+  const sp = document.getElementById('sp');
+  window.addEventListener('scroll', () => {
+    const pct = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100;
+    sp.style.width = pct + '%';
+  });
+</script>
+</body>
+</html>
