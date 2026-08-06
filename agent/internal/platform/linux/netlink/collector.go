@@ -5,9 +5,11 @@ package netlink
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -75,7 +77,9 @@ func (c *NetlinkCollector) Health() collector.CollectorHealth {
 }
 
 func (c *NetlinkCollector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
-	c.running.Store(true)
+	if !c.running.CompareAndSwap(false, true) {
+		return fmt.Errorf("netlink collector already running")
+	}
 	defer c.running.Store(false)
 
 	ticker := time.NewTicker(c.interval)
@@ -115,7 +119,8 @@ func (c *NetlinkCollector) poll(ctx context.Context, out chan<- collector.RawEve
 		}
 
 		for _, conn := range conns {
-			key := fmt.Sprintf("%s:%s:%s", proto, conn["local_addr"], conn["remote_addr"])
+			// Use "|" separator — safe since it never appears in IP:port strings
+			key := fmt.Sprintf("%s|%s|%s", proto, conn["local_addr"], conn["remote_addr"])
 			current[key] = true
 
 			if !c.known[key] {
@@ -129,13 +134,15 @@ func (c *NetlinkCollector) poll(ctx context.Context, out chan<- collector.RawEve
 	// emit closed connections
 	for key := range c.known {
 		if !current[key] {
-			parts := strings.SplitN(key, ":", 3)
-			c.emit(ctx, out, map[string]string{
-				"event":       "closed",
-				"proto":       parts[0],
-				"local_addr":  parts[1],
-				"remote_addr": parts[2],
-			})
+			parts := strings.SplitN(key, "|", 3)
+			if len(parts) == 3 {
+				c.emit(ctx, out, map[string]string{
+					"event":       "closed",
+					"proto":       parts[0],
+					"local_addr":  parts[1],
+					"remote_addr": parts[2],
+				})
+			}
 		}
 	}
 
@@ -213,28 +220,48 @@ func (c *NetlinkCollector) parseProcNet(proto string) ([]map[string]string, erro
 	return conns, scanner.Err()
 }
 
+// decodeIPv6Hex decodes a 32-char hex string from /proc/net/tcp6 into a 16-byte IPv6 address.
+func decodeIPv6Hex(s string) ([]byte, error) {
+	if len(s) != 32 {
+		return nil, fmt.Errorf("invalid IPv6 hex length: %d", len(s))
+	}
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+	// /proc/net/tcp6 stores each 32-bit word in little-endian order
+	for i := 0; i < 16; i += 4 {
+		b[i], b[i+1], b[i+2], b[i+3] = b[i+3], b[i+2], b[i+1], b[i]
+	}
+	return b, nil
+}
+
 // hexToAddr converts a /proc/net hex address (e.g. "0101007F:0050") to "127.0.0.1:80".
-func hexToAddr(hex string) string {
-	parts := strings.SplitN(hex, ":", 2)
+func hexToAddr(hexAddr string) string {
+	parts := strings.SplitN(hexAddr, ":", 2)
 	if len(parts) != 2 {
-		return hex
+		return hexAddr
 	}
 
 	addrHex, portHex := parts[0], parts[1]
 	port, err := strconv.ParseUint(portHex, 16, 16)
 	if err != nil {
-		return hex
+		return hexAddr
 	}
 
-	// IPv6 addresses are longer than 8 chars
+	// IPv6 addresses are 32 hex chars (16 bytes)
 	if len(addrHex) > 8 {
-		return fmt.Sprintf("[%s]:%d", addrHex, port)
+		b, err := decodeIPv6Hex(addrHex)
+		if err != nil {
+			return fmt.Sprintf("[%s]:%d", addrHex, port)
+		}
+		return fmt.Sprintf("[%s]:%d", net.IP(b).String(), port)
 	}
 
 	// IPv4: little-endian 32-bit hex
 	n, err := strconv.ParseUint(addrHex, 16, 32)
 	if err != nil {
-		return hex
+		return hexAddr
 	}
 	return fmt.Sprintf("%d.%d.%d.%d:%d",
 		n&0xff, (n>>8)&0xff, (n>>16)&0xff, (n>>24)&0xff, port)

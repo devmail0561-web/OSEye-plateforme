@@ -3,7 +3,6 @@
 package udev
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -219,10 +218,17 @@ func (c *UdevCollector) startInotify(ctx context.Context, out chan<- collector.R
 		offset := 0
 		for offset < n {
 			event := (*unix.InotifyEvent)(unsafePtr(&buf[offset]))
+
+			// bounds check before slicing
+			end := offset + unix.SizeofInotifyEvent + int(event.Len)
+			if end > n {
+				break
+			}
+
 			basePath := wds[int(event.Wd)]
 			name := ""
 			if event.Len > 0 {
-				nameBytes := buf[offset+unix.SizeofInotifyEvent : offset+unix.SizeofInotifyEvent+int(event.Len)]
+				nameBytes := buf[offset+unix.SizeofInotifyEvent : end]
 				name = strings.TrimRight(string(nameBytes), "\x00")
 			}
 
@@ -231,43 +237,32 @@ func (c *UdevCollector) startInotify(ctx context.Context, out chan<- collector.R
 				action = "remove"
 			}
 
-			payload := map[string]interface{}{
-				"source":       "udev",
-				"timestamp_ns": time.Now().UnixNano(),
-				"action":       action,
-				"devpath":      filepath.Join(basePath, name),
-				"subsystem":    filepath.Base(basePath),
-			}
-			raw, _ := json.Marshal(payload)
+			throttle, _ := c.throttle.Load().(float64)
+			if throttle > 0 {
+				payload := map[string]interface{}{
+					"source":       "udev",
+					"timestamp_ns": time.Now().UnixNano(),
+					"action":       action,
+					"devpath":      filepath.Join(basePath, name),
+					"subsystem":    filepath.Base(basePath),
+				}
+				raw, _ := json.Marshal(payload)
 
-			select {
-			case out <- collector.RawEvent{
-				Source:    c.name,
-				OS:        "linux",
-				Timestamp: time.Now().UnixNano(),
-				Raw:       raw,
-			}:
-				c.eventCount.Add(1)
-			case <-ctx.Done():
-				return nil
+				select {
+				case out <- collector.RawEvent{
+					Source:    c.name,
+					OS:        "linux",
+					Timestamp: time.Now().UnixNano(),
+					Raw:       raw,
+				}:
+					c.eventCount.Add(1)
+				case <-ctx.Done():
+					return nil
+				}
 			}
 
-			offset += unix.SizeofInotifyEvent + int(event.Len)
+			offset = end
 		}
 	}
 }
 
-// readLines reads all lines from a file path (helper for /sys parsing).
-func readLines(path string) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var lines []string
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		lines = append(lines, sc.Text())
-	}
-	return lines, sc.Err()
-}
