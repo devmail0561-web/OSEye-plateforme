@@ -20,8 +20,13 @@ protoc \
   --go-grpc_opt=paths=source_relative \
   "$PROTO_DIR/event.proto"
 
-# Python: standard protobuf + gRPC
-PYTHON="${VENV_PYTHON:-python3}"
+# Python: standard protobuf + gRPC (use venv if available)
+if [ -f "$REPO_ROOT/.venv/bin/python" ]; then
+  PYTHON="$REPO_ROOT/.venv/bin/python"
+else
+  PYTHON="${VENV_PYTHON:-python3}"
+fi
+
 "$PYTHON" -m grpc_tools.protoc \
   -I"$PROTO_DIR" \
   --python_out="$PY_OUT" \

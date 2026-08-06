@@ -3,23 +3,15 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from oseye.core.pagination import PageResult
 from oseye.core.schema import CaseNote, CustodyEntry, EvidenceItem, ForensicCase
 from oseye.storage.interface import Pagination
 from oseye.storage.models import CaseNoteRow, CustodyLogRow, EvidenceItemRow, ForensicCaseRow
-
-
-@dataclass
-class PageResult[T]:
-    items: list[T]
-    total: int
-    limit: int
-    offset: int
 
 
 def _row_to_case(

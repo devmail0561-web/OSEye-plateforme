@@ -81,14 +81,11 @@ class RedisEventBus:
         seen_topics: set[str] = set()
         while not self._closed:
             try:
-                raw_keys: list[Any] = await client.keys("*")
-                matching = [
-                    k.decode() if isinstance(k, bytes) else str(k)
-                    for k in raw_keys
-                    if fnmatch.fnmatch(
-                        k.decode() if isinstance(k, bytes) else str(k), pattern
-                    )
-                ]
+                matching = []
+                async for raw_key in client.scan_iter(match="*", count=100):
+                    key_str = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+                    if fnmatch.fnmatch(key_str, pattern):
+                        matching.append(key_str)
                 for topic in matching:
                     if topic not in seen_topics:
                         await self._ensure_group(client, topic)

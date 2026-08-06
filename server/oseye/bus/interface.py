@@ -33,3 +33,7 @@ class EventBus(Protocol):
     async def subscribe_pattern(self, pattern: str) -> AsyncGenerator[tuple[str, bytes], None]:
         """Yield (topic, message) pairs for all topics matching the glob pattern."""
         ...
+
+    async def close(self) -> None:
+        """Close the bus and release resources (connections, channels, etc.)."""
+        ...

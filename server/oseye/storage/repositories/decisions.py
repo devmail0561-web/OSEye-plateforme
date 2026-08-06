@@ -7,23 +7,15 @@ No UPDATE or DELETE operations are issued by this repository.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from oseye.core.pagination import PageResult
 from oseye.core.schema import Decision
 from oseye.storage.interface import Pagination
 from oseye.storage.models import DecisionRow
-
-
-@dataclass
-class PageResult[T]:
-    items: list[T]
-    total: int
-    limit: int
-    offset: int
 
 
 def _row_to_decision(row: DecisionRow) -> Decision:
