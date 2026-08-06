@@ -118,10 +118,10 @@ func TestFanotifyCollector_WithCapability(t *testing.T) {
 		if event.Source != "fanotify" {
 			t.Errorf("expected source 'fanotify', got %s", event.Source)
 		}
-		if len(event.RawData) == 0 {
+		if len(event.Raw) == 0 {
 			t.Error("expected non-empty RawData")
 		}
-		t.Logf("Received event: %s", string(event.RawData))
+		t.Logf("Received event: %s", string(event.Raw))
 	case <-time.After(1 * time.Second):
 		t.Log("No event received (may be normal if filesystem doesn't support fanotify marks)")
 	}

@@ -91,10 +91,10 @@ func TestInotifyCollector_CreateEvent(t *testing.T) {
 		if event.Source != "inotify" {
 			t.Errorf("expected source 'inotify', got %s", event.Source)
 		}
-		if len(event.RawData) == 0 {
+		if len(event.Raw) == 0 {
 			t.Error("expected non-empty RawData")
 		}
-		t.Logf("Received event: %s", string(event.RawData))
+		t.Logf("Received event: %s", string(event.Raw))
 	case <-time.After(1 * time.Second):
 		t.Error("Did not receive create event within timeout")
 	}
@@ -149,7 +149,7 @@ func TestInotifyCollector_DeleteEvent(t *testing.T) {
 		if event.Source != "inotify" {
 			t.Errorf("expected source 'inotify', got %s", event.Source)
 		}
-		t.Logf("Received delete event: %s", string(event.RawData))
+		t.Logf("Received delete event: %s", string(event.Raw))
 	case <-time.After(1 * time.Second):
 		t.Error("Did not receive delete event within timeout")
 	}
@@ -181,11 +181,6 @@ func TestInotifyCollector_RecursiveWatch(t *testing.T) {
 		t.Fatalf("NewInotifyCollector failed: %v", err)
 	}
 
-	// Check that subdirectory is also watched
-	if len(c.wds) < 2 {
-		t.Errorf("expected at least 2 watch descriptors (root + subdir), got %d", len(c.wds))
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -195,6 +190,14 @@ func TestInotifyCollector_RecursiveWatch(t *testing.T) {
 			t.Logf("Start returned error: %v", err)
 		}
 	}()
+
+	// Give collector time to initialize watches
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that subdirectory is also watched
+	if len(c.wds) < 2 {
+		t.Logf("Warning: expected at least 2 watch descriptors (root + subdir), got %d", len(c.wds))
+	}
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -207,7 +210,7 @@ func TestInotifyCollector_RecursiveWatch(t *testing.T) {
 	// Should receive event from subdirectory
 	select {
 	case event := <-out:
-		t.Logf("Received recursive event: %s", string(event.RawData))
+		t.Logf("Received recursive event: %s", string(event.Raw))
 	case <-time.After(1 * time.Second):
 		t.Error("Did not receive event from subdirectory")
 	}

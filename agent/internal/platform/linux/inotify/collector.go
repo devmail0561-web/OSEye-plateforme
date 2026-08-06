@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -28,13 +29,17 @@ type InotifyWatch struct {
 
 // InotifyCollector monitors directory changes using inotify API.
 type InotifyCollector struct {
-	name       string
-	watches    []InotifyWatch
-	fd         int
-	wds        map[int]string // watch descriptor -> path mapping
-	logger     *slog.Logger
-	stopCh     chan struct{}
-	eventCount uint64
+	name        string
+	watches     []InotifyWatch
+	fd          int
+	wds         map[int]string
+	logger      *slog.Logger
+	stopCh      chan struct{}
+	eventCount  atomic.Uint64
+	errorCount  atomic.Uint64
+	running     atomic.Bool
+	lastError   string
+	throttle    atomic.Value // float64
 }
 
 // NewInotifyCollector creates a new inotify collector.
@@ -45,25 +50,41 @@ func NewInotifyCollector(watches []InotifyWatch, logger *slog.Logger) (*InotifyC
 		}
 	}
 
-	return &InotifyCollector{
+	c := &InotifyCollector{
 		name:    "inotify",
 		watches: watches,
 		fd:      -1,
 		wds:     make(map[int]string),
 		logger:  logger,
 		stopCh:  make(chan struct{}),
-	}, nil
+	}
+	c.throttle.Store(1.0)
+	return c, nil
 }
 
-func (c *InotifyCollector) Name() string {
-	return c.name
+func (c *InotifyCollector) Name() string { return c.name }
+
+func (c *InotifyCollector) SetThrottle(factor float64) {
+	c.throttle.Store(factor)
+}
+
+func (c *InotifyCollector) Health() collector.CollectorHealth {
+	return collector.CollectorHealth{
+		Running:     c.running.Load(),
+		ErrorCount:  int64(c.errorCount.Load()),
+		EventsTotal: int64(c.eventCount.Load()),
+		ThrottlePct: c.throttle.Load().(float64) * 100,
+		LastError:   c.lastError,
+	}
 }
 
 func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
 	var err error
 	c.fd, err = unix.InotifyInit1(unix.IN_NONBLOCK | unix.IN_CLOEXEC)
 	if err != nil {
-		return fmt.Errorf("inotify_init failed: %w", err)
+		c.lastError = err.Error()
+		c.errorCount.Add(1)
+		return fmt.Errorf("inotify_init: %w", err)
 	}
 
 	for _, watch := range c.watches {
@@ -73,10 +94,16 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 		}
 	}
 
+	c.running.Store(true)
 	go c.readLoop(ctx, out)
 
 	<-ctx.Done()
-	close(c.stopCh)
+	c.running.Store(false)
+	select {
+	case <-c.stopCh:
+	default:
+		close(c.stopCh)
+	}
 	if c.fd >= 0 {
 		unix.Close(c.fd)
 	}
@@ -84,7 +111,12 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 }
 
 func (c *InotifyCollector) Stop() error {
-	close(c.stopCh)
+	c.running.Store(false)
+	select {
+	case <-c.stopCh:
+	default:
+		close(c.stopCh)
+	}
 	if c.fd >= 0 {
 		for wd := range c.wds {
 			unix.InotifyRmWatch(c.fd, uint32(wd))
@@ -156,6 +188,8 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 				continue
 			}
 			c.logger.Error("inotify read error", slog.String("error", err.Error()))
+			c.lastError = err.Error()
+			c.errorCount.Add(1)
 			return
 		}
 
@@ -179,7 +213,7 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 			rawEvent := c.buildRawEvent(event, basePath, fullPath)
 			select {
 			case out <- rawEvent:
-				c.eventCount++
+				c.eventCount.Add(1)
 			case <-ctx.Done():
 				return
 			}
@@ -193,7 +227,6 @@ func (c *InotifyCollector) buildRawEvent(event *unix.InotifyEvent, basePath, ful
 	eventType := c.maskToType(event.Mask)
 
 	payload := map[string]interface{}{
-		"os":           "linux",
 		"source":       "inotify",
 		"event_type":   eventType,
 		"wd":           event.Wd,
@@ -207,9 +240,10 @@ func (c *InotifyCollector) buildRawEvent(event *unix.InotifyEvent, basePath, ful
 	rawJSON, _ := json.Marshal(payload)
 
 	return collector.RawEvent{
-		Timestamp: time.Now(),
 		Source:    c.name,
-		RawData:   rawJSON,
+		OS:        "linux",
+		Timestamp: time.Now().UnixNano(),
+		Raw:       rawJSON,
 	}
 }
 

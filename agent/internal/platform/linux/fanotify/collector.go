@@ -90,7 +90,11 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 
 	<-ctx.Done()
 	c.running.Store(false)
-	close(c.stopCh)
+	select {
+	case <-c.stopCh:
+	default:
+		close(c.stopCh)
+	}
 	if c.fd >= 0 {
 		unix.Close(c.fd)
 	}
@@ -99,7 +103,11 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 
 func (c *FanotifyCollector) Stop() error {
 	c.running.Store(false)
-	close(c.stopCh)
+	select {
+	case <-c.stopCh:
+	default:
+		close(c.stopCh)
+	}
 	if c.fd >= 0 {
 		return unix.Close(c.fd)
 	}
@@ -129,7 +137,8 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 			return
 		}
 
-		if n < unix.SizeofFanotifyEventMetadata {
+		const fanotifyMetadataSize = 24 // sizeof(struct fanotify_event_metadata)
+		if n < fanotifyMetadataSize {
 			continue
 		}
 
@@ -162,8 +171,12 @@ func (c *FanotifyCollector) getPathFromFd(fd int32) (string, error) {
 	if fd < 0 {
 		return "", fmt.Errorf("invalid fd")
 	}
-	path, err := unix.Readlink(fmt.Sprintf("/proc/self/fd/%d", fd))
-	return path, err
+	buf := make([]byte, unix.PathMax)
+	n, err := unix.Readlink(fmt.Sprintf("/proc/self/fd/%d", fd), buf)
+	if err != nil {
+		return "", err
+	}
+	return string(buf[:n]), nil
 }
 
 func (c *FanotifyCollector) buildRawEvent(meta *unix.FanotifyEventMetadata, path string) collector.RawEvent {
