@@ -36,17 +36,30 @@ def _extract_cn_from_context(context: grpc.ServicerContext) -> str | None:
 
     Implements SEC-PREV-001: agent_id MUST come from the cert CN, never from
     the request payload.
+
+    gRPC Python's ``peer_identities()`` returns the client certificate CN values
+    directly as UTF-8–encoded bytes, not full DER-encoded certificates.  We
+    decode the first identity and return it as a string.
     """
     peer_identities = context.peer_identities()
     if not peer_identities:
         return None
     try:
-        cert = load_der_x509_certificate(list(peer_identities)[0])
-        attrs = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-        if not attrs:
-            return None
-        value = attrs[0].value
-        return value if isinstance(value, str) else value.decode("utf-8", errors="replace")
+        raw = list(peer_identities)[0]
+        # Try direct UTF-8 decode first (gRPC Python native behaviour).
+        if isinstance(raw, (bytes, bytearray)):
+            try:
+                return raw.decode("utf-8")
+            except UnicodeDecodeError:
+                pass
+            # Fallback: attempt DER certificate parse (some grpc builds return full cert).
+            cert = load_der_x509_certificate(raw)
+            attrs = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+            if not attrs:
+                return None
+            value = attrs[0].value
+            return value if isinstance(value, str) else value.decode("utf-8", errors="replace")
+        return str(raw)
     except Exception as exc:  # noqa: BLE001
         _logger.warning("mtls_cn_parse_failed", error=str(exc))
         return None

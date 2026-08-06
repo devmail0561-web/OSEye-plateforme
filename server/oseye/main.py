@@ -17,6 +17,7 @@ from oseye.api.app import create_app
 from oseye.bus.factory import create_bus
 from oseye.config import Settings
 from oseye.core.observability import get_logger
+from oseye.ingest.server import create_grpc_server
 from oseye.normalizer.engine import NormalizerEngine
 from oseye.storage.backends.sqlite import SQLiteBackend
 from oseye.storage.repositories.events import SQLEventRepository
@@ -57,6 +58,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 if stop.is_set():
                     break
 
+        # gRPC server (mTLS if certs present, insecure otherwise)
+        grpc_server = await create_grpc_server(settings, bus)
+        await grpc_server.start()
+        _logger.info("grpc_server_started", port=settings.grpc_port)
+
         tasks = [
             asyncio.create_task(_normalizer_loop(), name="normalizer"),
             asyncio.create_task(writer.run(stop_event=stop), name="storage_writer"),
@@ -66,9 +72,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         yield  # server runs here
 
         stop.set()
+        await grpc_server.stop(grace=5)
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        _logger.info("grpc_server_stopped")
         _logger.info("workers_stopped")
 
     return lifespan

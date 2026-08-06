@@ -14,7 +14,7 @@ export GOROOT
 export GOPATH
 export VENV_PYTHON := $(PYTHON)
 
-.PHONY: help setup proto test test-go test-py lint audit dev-up dev-down run-server run-agent run-workers
+.PHONY: help setup proto test test-go test-py lint audit dev-up dev-down run-server run-agent run-workers dev-certs
 
 help:
 	@echo ""
@@ -94,3 +94,28 @@ run-agent:
 	@echo "==> Lancement de l'agent OSEye (buffer SQLite, transport désactivé sans certs)"
 	cd agent && OSEYE_BUFFER_PATH=/tmp/oseye_dev_buffer.db OSEYE_GRPC_ADDR=localhost:50051 \
 	  $(GOBIN)/go run ./cmd/oseye-agent
+
+dev-certs:
+	@echo "==> Génération du PKI dev (CA + server + agent-dev + JWT)"
+	bash scripts/generate_certs.sh
+	@echo "==> Certs prêts dans infra/certs/"
+
+run-agent-mtls:
+	@echo "==> Lancement de l'agent avec mTLS (requiert make dev-certs)"
+	cd agent && \
+	  OSEYE_GRPC_ADDR=localhost:50051 \
+	  OSEYE_TLS_CERT=$(CURDIR)/infra/certs/agent-dev.crt \
+	  OSEYE_TLS_KEY=$(CURDIR)/infra/certs/agent-dev.key \
+	  OSEYE_TLS_CA=$(CURDIR)/infra/certs/ca.crt \
+	  OSEYE_BUFFER_PATH=/tmp/oseye_dev_buffer.db \
+	  $(GOBIN)/go run ./cmd/oseye-agent
+
+run-server-mtls:
+	@echo "==> Lancement du serveur avec mTLS (requiert make dev-certs)"
+	cd server && \
+	  OSEYE_TLS_CERT_FILE=$(CURDIR)/infra/certs/server.crt \
+	  OSEYE_TLS_KEY_FILE=$(CURDIR)/infra/certs/server.key \
+	  OSEYE_TLS_CA_CERT_FILE=$(CURDIR)/infra/certs/ca.crt \
+	  OSEYE_JWT_PRIVATE_KEY_PATH=$(CURDIR)/infra/certs/jwt_private.pem \
+	  OSEYE_JWT_PUBLIC_KEY_PATH=$(CURDIR)/infra/certs/jwt_public.pem \
+	  $(PYTHON) -m oseye.main
