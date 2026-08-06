@@ -74,10 +74,12 @@ curl http://localhost:8000/api/v1/health
 
 | Document | Description |
 |----------|-------------|
+| [`docs/DESCRIPTION.md`](docs/DESCRIPTION.md) | Vue d'ensemble complète du projet — mission, objectifs, roadmap |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture complète — stack, interfaces, API, schémas DB |
 | [`docs/PLAN_ACTION.md`](docs/PLAN_ACTION.md) | 188 tâches, phases de développement, statuts |
 | [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md) | Plan modulaire Phase 1 — branches, modules, critères |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Comment contribuer — workflow, conventions, reviews |
+| [`docs/CONDUCT.md`](docs/CONDUCT.md) | Code de conduite — principes, standards, sanctions |
 | [`SECURITY.md`](SECURITY.md) | Politique de sécurité — signalement de vulnérabilités |
 
 ## Contribuer
