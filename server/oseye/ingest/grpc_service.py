@@ -106,8 +106,6 @@ class AgentServiceServicer:
             total_rejected += result.rejected
             all_errors.extend(result.errors)
 
-            topic = f"events:raw:{cn}"
-
             for event_index, pb_event in enumerate(request.events):
                 is_rejected = any(
                     err.startswith(f"event {event_index}:") for err in result.errors
@@ -117,14 +115,19 @@ class AgentServiceServicer:
 
                 event = pb_to_event(pb_event, agent_id_override=cn)
                 payload = event.model_dump_json().encode("utf-8")
-
+                # pb_to_event already normalises the event — publish directly
+                # to events:normalized so the storage writer can persist it
+                # without a second normalisation pass.
+                normalized_topic = "events:normalized"
                 if loop is not None and loop.is_running():
-                    asyncio.ensure_future(self._bus.publish(topic, payload), loop=loop)
+                    asyncio.ensure_future(
+                        self._bus.publish(normalized_topic, payload), loop=loop
+                    )
                 else:
                     try:
-                        asyncio.run(self._bus.publish(topic, payload))
+                        asyncio.run(self._bus.publish(normalized_topic, payload))
                     except RuntimeError:
-                        _logger.error("bus_publish_failed", topic=topic)
+                        _logger.error("bus_publish_failed", topic=normalized_topic)
 
             _logger.info(
                 "batch_ingested",

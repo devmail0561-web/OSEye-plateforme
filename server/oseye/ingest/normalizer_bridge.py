@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from oseye.core.schema import UniversalEvent
+from oseye.normalizer.secret_masker import mask
 
 
 def pb_to_event(pb: Any, agent_id_override: str | None = None) -> UniversalEvent:
@@ -93,7 +94,7 @@ def pb_to_event(pb: Any, agent_id_override: str | None = None) -> UniversalEvent
         ppid=pb.ppid,
         process_name=pb.process_name,
         executable=pb.executable,
-        cmdline=pb.cmdline,
+        cmdline=mask(pb.cmdline),
         cwd=pb.cwd,
         session_id=session_id,
         resource=pb.resource,

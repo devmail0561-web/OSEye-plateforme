@@ -10,7 +10,8 @@ PATTERNS: list[tuple[re.Pattern[str], str]] = [
         r"\1=***",
     ),
     (
-        re.compile(r"(?i)(-p\s+)\S+"),
+        # -p password (with space) or -pPassword (attached, as mysql/mysqldump use)
+        re.compile(r"(?i)(-p)(\s+\S+|\S+)"),
         r"\1***",
     ),
     (
