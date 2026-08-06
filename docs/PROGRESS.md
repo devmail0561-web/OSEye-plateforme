@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.4
+**Version :** 1.5
 **Dernière mise à jour :** 2026-08-06
-**Branche active :** `main` (`f17dcaf`)
-**Phase courante :** Phase 1 — Foundation `[~]` (M4/M10 livrés, tests interaction ajoutés)
+**Branche active :** `main` (`94e25ff`)
+**Phase courante :** Phase 1 — Foundation `[x]` COMPLÈTE (dettes techniques résolues)
 
 ---
 
@@ -97,16 +97,18 @@
 
 ## Dettes techniques
 
-| ID | Élément | Priorité | Module |
-|----|---------|----------|--------|
-| DETTE-001 | `ui/package.json` absent — React/TypeScript/Vite (Phase 9) | Haute | Phase 9 |
-| DETTE-005 | `scripts/test_proto_compile.sh` non créé | Moyenne | M0 |
-| DETTE-007 | Proto codegen non exécuté (gen/ pré-existants, pas depuis protoc) | Haute | M0 |
-| DESIGN-001 | `EventBus` Protocol sans méthode `close()` — risque de leak | Moyenne | M5-bis |
-| DESIGN-002 | `PageResult[T]` redéfini dans chaque repository — factoriser | Faible | Phase 2 |
-| DESIGN-003 | `redis_bus.py subscribe_pattern` utilise `KEYS *` O(N) bloquant | Moyenne | M5-bis |
-| OTel-001 | `observability.py` : OTel SDK non initialisé (stub) | Faible | Phase 2 |
-| WARN-001 | `test_storage.py` : warnings `Event loop is closed` (aiosqlite teardown) | Faible | M8-bis |
+| ID | Élément | Statut |
+|----|---------|--------|
+| DETTE-001 | `ui/package.json` absent — React/TypeScript/Vite (Phase 9) | 🟡 Ouvert (Phase 9) |
+| DETTE-005 | `scripts/test_proto_compile.sh` non créé | ✅ Fermé (commit 94e25ff) |
+| DETTE-007 | Proto codegen non exécuté (gen/ pré-existants, pas depuis protoc) | ✅ Fermé (generate_proto.sh détecte .venv) |
+| DESIGN-001 | `EventBus` Protocol sans méthode `close()` — risque de leak | ✅ Fermé (déjà présent dans interface + implémentations) |
+| DESIGN-002 | `PageResult[T]` redéfini dans chaque repository — factoriser | ✅ Fermé (core/pagination.py créé) |
+| DESIGN-003 | `redis_bus.py subscribe_pattern` utilise `KEYS *` O(N) bloquant | ✅ Fermé (remplacé par scan_iter) |
+| OTel-001 | `observability.py` : OTel SDK non initialisé (stub) | 🟡 Ouvert (Phase 2) |
+| WARN-001 | `test_storage.py` : warnings `Event loop is closed` (aiosqlite teardown) | 🟡 Ouvert (Phase 2) |
+
+**5/8 dettes résolues** — seules restent DETTE-001 (Phase 9), OTel-001 et WARN-001 (non critiques).
 
 ---
 
@@ -139,16 +141,12 @@
 
 | Hash | Message | Date |
 |------|---------|------|
+| `94e25ff` | fix: résolution dettes techniques DETTE-007, DESIGN-001/002/003, DETTE-005 | 2026-08-06 |
+| `422e66b` | docs: référencer DESCRIPTION.md et CONDUCT.md dans README | 2026-08-06 |
+| `4c06d38` | docs: ajouter DESCRIPTION.md et CONDUCT.md | 2026-08-06 |
+| `9559885` | docs: PROGRESS v1.4 + DEVELOPMENT_PLAN v1.2 — Phase 1 complète | 2026-08-06 |
 | `f17dcaf` | docs: mettre à jour note.txt — commandes mTLS, dev-certs, tests gRPC | 2026-08-06 |
 | `0fe6126` | feat: communication gRPC réelle + 3 corrections de bugs critiques | 2026-08-06 |
 | `2850ed7` | tests: tests d'interaction modules + 3 corrections de bugs | 2026-08-06 |
 | `1a64ec4` | M4+M10: agent bootstrap, server workers, server entrypoint | 2026-08-06 |
 | `c3c83fc` | fix: audit corrections — SEC-RISK-001, DESIGN-004, DESIGN-006 | 2026-08-06 |
-| `bd7e93a` | ci: fix failing workflows | 2026-08-06 |
-| `a7ad5ac` | M9: API REST — FastAPI, JWT RS256, RBAC | 2026-08-06 |
-| `83fdda9` | Merge M6/server-ingest → main | 2026-08-06 |
-| `5a05f18` | Merge M7/server-normalizer → main | 2026-08-06 |
-| `4ba76a3` | Merge M3/agent-grpc-transport → main | 2026-08-06 |
-| `3b8433f` | Merge M2/agent-collectors-linux → main | 2026-08-06 |
-| `930ee0f` | fix: ruff I001 — import order audit tools | 2026-08-06 |
-| `1629f0c` | docs: mise à jour complète PROGRESS/DEVELOPMENT_PLAN/ARCHITECTURE | 2026-08-06 |
