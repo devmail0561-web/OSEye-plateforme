@@ -1,0 +1,68 @@
+package signer
+
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"os"
+)
+
+// Signer holds an Ed25519 private key and exposes Sign/PublicKey operations.
+type Signer struct {
+	priv ed25519.PrivateKey
+}
+
+// New loads an Ed25519 private key from a PEM-encoded PKCS8 file.
+func New(privateKeyPath string) (*Signer, error) {
+	data, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("signer: read key file: %w", err)
+	}
+	return parsePEM(data)
+}
+
+// NewEphemeral generates a fresh Ed25519 key pair in memory.
+// Intended for tests and ephemeral agent identities.
+func NewEphemeral() (*Signer, error) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("signer: generate key: %w", err)
+	}
+	return &Signer{priv: priv}, nil
+}
+
+// Sign signs data using the Ed25519 private key and returns the 64-byte signature.
+func (s *Signer) Sign(data []byte) ([]byte, error) {
+	sig := ed25519.Sign(s.priv, data)
+	return sig, nil
+}
+
+// PublicKey returns the 32-byte Ed25519 public key.
+func (s *Signer) PublicKey() []byte {
+	pub := s.priv.Public().(ed25519.PublicKey)
+	out := make([]byte, ed25519.PublicKeySize)
+	copy(out, pub)
+	return out
+}
+
+// parsePEM decodes the first PEM block and parses the PKCS8 private key inside.
+func parsePEM(data []byte) (*Signer, error) {
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("signer: no PEM block found")
+	}
+
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("signer: parse PKCS8 key: %w", err)
+	}
+
+	priv, ok := key.(ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("signer: key is not Ed25519 (got %T)", key)
+	}
+
+	return &Signer{priv: priv}, nil
+}
