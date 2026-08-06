@@ -1,9 +1,14 @@
 package config
 
 import (
+	"encoding/json"
+	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // Config holds the agent runtime configuration.
@@ -30,6 +35,17 @@ type Config struct {
 	// Resource watchdog thresholds
 	MaxCPUPct float64
 	MaxMemMB  int
+
+	// Collectors configuration
+	FanotifyPaths  []string
+	InotifyWatches []InotifyWatch
+}
+
+// InotifyWatch represents an inotify watch configuration.
+type InotifyWatch struct {
+	Path      string `json:"path"`
+	Recursive bool   `json:"recursive"`
+	Mask      uint32 `json:"mask"`
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -45,8 +61,45 @@ func Load() (*Config, error) {
 		BatchTimeout: getenvDuration("OSEYE_BATCH_TIMEOUT_MS", 1000),
 		MaxCPUPct:    getenvFloat("OSEYE_MAX_CPU_PCT", 4.0),
 		MaxMemMB:     getenvInt("OSEYE_MAX_MEM_MB", 256),
+		FanotifyPaths: parseFanotifyPaths(
+			getenv("OSEYE_FANOTIFY_PATHS", "/etc/passwd,/etc/shadow,/root/.ssh"),
+		),
+		InotifyWatches: parseInotifyWatches(
+			getenv("OSEYE_INOTIFY_WATCHES", `[{"path":"/tmp","recursive":false,"mask":4095}]`),
+		),
 	}
 	return cfg, nil
+}
+
+func parseFanotifyPaths(pathsStr string) []string {
+	if pathsStr == "" {
+		return []string{}
+	}
+	paths := strings.Split(pathsStr, ",")
+	result := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func parseInotifyWatches(watchesJSON string) []InotifyWatch {
+	if watchesJSON == "" {
+		return []InotifyWatch{}
+	}
+	var watches []InotifyWatch
+	if err := json.Unmarshal([]byte(watchesJSON), &watches); err != nil {
+		slog.Warn("failed to parse OSEYE_INOTIFY_WATCHES, using default",
+			slog.String("error", err.Error()),
+			slog.String("input", watchesJSON))
+		return []InotifyWatch{
+			{Path: "/tmp", Recursive: false, Mask: unix.IN_ALL_EVENTS},
+		}
+	}
+	return watches
 }
 
 func getenv(key, fallback string) string {
