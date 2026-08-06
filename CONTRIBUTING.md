@@ -493,10 +493,26 @@ En cas de désaccord technique :
 |----------|-----|
 | Architecture complète | `docs/ARCHITECTURE.md` |
 | Plan d'action | `docs/PLAN_ACTION.md` |
-| Skills Claude Code | `.claude/skills/oseye-*.md` |
+| **Skills Claude Code** | **`.claude/skills/README.md`** |
 | Template PR | `.github/PULL_REQUEST_TEMPLATE.md` |
 | Template issue | `.github/ISSUE_TEMPLATE/` |
 | CI workflows | `.github/workflows/ci.yml` |
+
+### Utiliser les skills Claude Code
+
+OSEye fournit des skills Claude Code pour accélérer les tâches répétitives. Si vous utilisez [Claude Code](https://claude.ai/code), ils sont disponibles automatiquement depuis la racine du projet :
+
+| Commande | Usage |
+|---|---|
+| `/oseye-task` | Prochaine tâche du plan d'action |
+| `/oseye-collector` | Nouveau collecteur Go |
+| `/oseye-worker` | Nouveau worker Python |
+| `/oseye-api-endpoint` | Nouvel endpoint FastAPI |
+| `/oseye-rule` | Nouvelle règle de détection YAML |
+| `/oseye-debug` | Diagnostiquer un problème |
+| `/oseye-security` | Review de sécurité avant merge |
+
+Voir le guide complet : `.claude/skills/README.md`
 
 ---
 
