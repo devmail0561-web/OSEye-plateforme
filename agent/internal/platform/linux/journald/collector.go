@@ -127,6 +127,7 @@ func (c *JournaldCollector) Start(ctx context.Context, out chan<- collector.RawE
 
 	cmd.Process.Kill() //nolint:errcheck
 	cmd.Wait()         //nolint:errcheck
+	<-done             // wait for goroutine to finish writing to out
 	return nil
 }
 
@@ -174,6 +175,18 @@ func strVal(m map[string]interface{}, key string) string {
 	switch s := v.(type) {
 	case string:
 		return s
+	case []byte:
+		// journald may encode binary fields (e.g. MESSAGE) as raw bytes
+		return string(s)
+	case []interface{}:
+		// journald encodes binary MESSAGE as JSON array of byte values
+		b := make([]byte, 0, len(s))
+		for _, n := range s {
+			if f, ok := n.(float64); ok {
+				b = append(b, byte(f))
+			}
+		}
+		return string(b)
 	default:
 		b, _ := json.Marshal(v)
 		return string(b)

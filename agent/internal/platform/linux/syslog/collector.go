@@ -85,8 +85,6 @@ func (c *SyslogCollector) Start(ctx context.Context, out chan<- collector.RawEve
 		c.errorCount.Add(1)
 		return fmt.Errorf("syslog listen %s: %w", c.addr, err)
 	}
-	defer conn.Close()
-
 	c.logger.Info("syslog listening", slog.String("addr", c.addr))
 
 	buf := make([]byte, 64*1024)
@@ -109,7 +107,7 @@ func (c *SyslogCollector) Start(ctx context.Context, out chan<- collector.RawEve
 					}
 					c.lastError.Store(err.Error())
 					c.errorCount.Add(1)
-					continue
+					return // exit on persistent non-timeout error
 				}
 			}
 
@@ -153,7 +151,8 @@ func (c *SyslogCollector) Stop() error {
 	return nil
 }
 
-// parseMessage parses RFC3164 or RFC5424 syslog messages.
+// parseMessage parses RFC3164 syslog messages.
+// RFC5424 is not yet supported — messages with version field will be partially parsed.
 func (c *SyslogCollector) parseMessage(data []byte) (collector.RawEvent, error) {
 	msg := strings.TrimRight(string(data), "\n\r")
 	if len(msg) == 0 {
@@ -185,16 +184,14 @@ func (c *SyslogCollector) parseMessage(data []byte) (collector.RawEvent, error) 
 		}
 	}
 
-	// Try to extract hostname and program from the remainder
+	// Extract hostname and program from RFC3164 remainder:
+	// TIMESTAMP(3 tokens) HOSTNAME PROGRAM[PID]: MSG
+	// fields[0]=month, [1]=day, [2]=time, [3]=hostname, [4]=program...
 	fields := strings.Fields(content)
-	if len(fields) >= 4 {
-		// RFC3164: <PRI>TIMESTAMP HOSTNAME PROGRAM[PID]: MSG
-		// fields[0]=timestamp(month), [1]=day, [2]=time, [3]=hostname, [4]=program...
-		if len(fields) > 4 {
-			hostname = fields[3]
-			program = strings.SplitN(fields[4], "[", 2)[0]
-			program = strings.TrimSuffix(program, ":")
-		}
+	if len(fields) > 4 {
+		hostname = fields[3]
+		program = strings.SplitN(fields[4], "[", 2)[0]
+		program = strings.TrimSuffix(program, ":")
 	}
 
 	payload := map[string]interface{}{

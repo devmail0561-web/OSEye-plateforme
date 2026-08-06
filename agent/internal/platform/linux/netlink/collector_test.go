@@ -83,9 +83,9 @@ func TestNetlinkCollector_HexToAddr(t *testing.T) {
 		input string
 		want  string
 	}{
-		// /proc/net uses little-endian hex: 0101007F = bytes 01 01 00 7F = 127.0.1.1
+		// /proc/net little-endian: 0101007F = [0x01, 0x01, 0x00, 0x7F] → 127.0.1.1
 		{"0101007F:0050", "127.0.1.1:80"},
-		// 7F000001 = bytes 7F 00 00 01 = 1.0.0.127 (big-endian representation)
+		// 0100007F = [0x01, 0x00, 0x00, 0x7F] → 127.0.0.1
 		{"0100007F:1F90", "127.0.0.1:8080"},
 		{"00000000:0000", "0.0.0.0:0"},
 	}
