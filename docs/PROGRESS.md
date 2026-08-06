@@ -1,7 +1,7 @@
 # OSEye — Suivi de progression
 
 **Version :** 1.0  
-**Dernière mise à jour :** 2026-08-05  
+**Dernière mise à jour :** 2026-08-06  
 **Branche active :** `M0/foundation-contracts`  
 **Phase courante :** Phase 1 — Foundation
 
@@ -71,9 +71,9 @@
 | `infra/docker/docker-compose.dev.yml` | `[x]` | Redis, Postgres, server, agent, ui |
 | `scripts/generate_certs.sh` | `[x]` | PKI dev : CA 4096b, server 2048b + SAN, agent 2048b, JWT RSA |
 | `ui/package.json` | `[ ]` | Non initialisé — React/TypeScript/Vite absent |
-| `.golangci.yml` | `[ ]` | Mentionné dans CONTRIBUTING.md mais absent |
-| `.env.example` | `[ ]` | Négation dans `.gitignore` mais fichier absent |
-| Dockerfiles | `[ ]` | `docker-compose.dev.yml` les référence mais ils n'existent pas |
+| `.golangci.yml` | `[x]` | Mentionné dans CONTRIBUTING.md mais absent |
+| `.env.example` | `[x]` | Négation dans `.gitignore` mais fichier absent |
+| Dockerfiles | `[x]` | `docker-compose.dev.yml` les référence mais ils n'existent pas |
 
 ### Tests M0
 
@@ -182,7 +182,7 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 - **Correction (M11) :**
   - Go : ajouter `go test -race -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | awk '/total/ {if ($3+0 < 80) exit 1}'`
   - Python : `pytest --cov-fail-under=80`
-- **Statut :** 🟠 Ouvert — à corriger dans M11 (Infra & CI)
+- **Statut :** ✅ Corrigé — M11 (Infra & CI)
 
 ---
 
@@ -211,9 +211,9 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 | ID | Élément | Priorité | Module |
 |----|---------|----------|--------|
 | DETTE-001 | `ui/package.json` absent — UI React non initialisée | Haute | M11 / Phase 9 |
-| DETTE-002 | `.golangci.yml` absent — lint Go non configurable | Haute | M11 |
-| DETTE-003 | `.env.example` absent — onboarding développeur incomplet | Moyenne | M11 |
-| DETTE-004 | Dockerfiles absents (server, agent, ui) | Haute | M11 |
+| ~~DETTE-002~~ | ~~`.golangci.yml` absent — lint Go non configurable~~ | Haute | M11 `[x]` |
+| ~~DETTE-003~~ | ~~`.env.example` absent — onboarding développeur incomplet~~ | Moyenne | M11 `[x]` |
+| ~~DETTE-004~~ | ~~Dockerfiles absents (server, agent, ui)~~ | Haute | M11 `[x]` |
 | DETTE-005 | `scripts/test_proto_compile.sh` non créé | Moyenne | M0 |
 | DETTE-006 | `docs/note.txt` — brouillon design à nettoyer | Faible | — |
 | DETTE-007 | Proto codegen non exécuté — `agent/gen/` et `server/gen/` absents | Haute | M0/M1/M6 |
