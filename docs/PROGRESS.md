@@ -157,17 +157,12 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 
 ## Bugs
 
-### BUG-001 — `getenvDuration` : sémantique trompeuse 🟡 MINEUR
+### BUG-001 — `getenvDuration` : sémantique trompeuse ✅ Corrigé
 
-- **Sévérité :** MINOR — fonctionnel correct au callsite actuel, latent si réutilisé
+- **Sévérité :** MINOR
 - **Fichier :** `agent/internal/config/config.go`
-- **Détail :** La fonction `getenvDuration(key, fallbackMs int) time.Duration` retourne `time.Duration(ms)`, soit `ms` nanosecondes. Le callsite corrige en multipliant par `time.Millisecond` :
-  ```go
-  BatchTimeout: getenvDuration("OSEYE_BATCH_TIMEOUT_MS", 1000) * time.Millisecond,
-  ```
-  Le résultat final est correct (`1000 * 1_000_000 ns = 1s`). Mais le nom de la fonction suggère qu'elle retourne déjà une Duration en millisecondes — un futur appelant pourrait l'utiliser sans le multiplicateur, obtenant une valeur 1 000 000× trop petite.
-- **Correction :** Soit renommer en `getenvInt` (et laisser la conversion au callsite), soit faire retourner `time.Duration(ms) * time.Millisecond` depuis la fonction.
-- **Statut :** 🟡 Ouvert — à corriger en M4 (bootstrap config)
+- **Détail :** La conversion `* time.Millisecond` a été déplacée dans `getenvDuration` ; le callsite utilise maintenant `getenvDuration(...)` sans multiplicateur.
+- **Statut :** ✅ Corrigé — commit M0 audit
 
 ---
 
@@ -223,6 +218,13 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 | DETTE-006 | `docs/note.txt` — brouillon design à nettoyer | Faible | — |
 | DETTE-007 | Proto codegen non exécuté — `agent/gen/` et `server/gen/` absents | Haute | M0/M1/M6 |
 | DETTE-008 | `audit_patterns.json` et `persistence.py` contiennent les mêmes patterns — synchronisation manuelle risquée | Faible | M11 |
+| DETTE-009 | `go.mod` manque cilium/ebpf, blake3, mattn/go-sqlite3 | Moyenne | M1 |
+| LINT-001 | ~~ruff UP035/I001 dans bus/interface.py, schema.py~~ | Corrigé | M0 |
+| LINT-002 | ~~E501 config.py:51~~ | Corrigé | M0 |
+| MYPY-001 | ~~mypy strict : `DecisionRepository.list` conflit builtin~~ | Corrigé (→ `list_decisions`) | M0 |
+| CI-001 | ~~`cmd/oseye-agent/` vide → `go build` échoue~~ | Corrigé (stub main.go) | M0 |
+| DESIGN-001 | `EventBus` Protocol sans méthode `close()` — risque de leak en M5 | Moyenne | M5 |
+| OTel-001 | `observability.py` : OTel SDK non initialisé (stub) | Faible | M6/M9 |
 
 ---
 

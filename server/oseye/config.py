@@ -48,7 +48,9 @@ class Settings(BaseSettings):
 
     # Observability
     log_level: str = Field(default="INFO")
-    otel_endpoint: str | None = Field(default=None, description="OTLP gRPC endpoint e.g. localhost:4317")
+    otel_endpoint: str | None = Field(
+        default=None, description="OTLP gRPC endpoint, e.g. localhost:4317"
+    )
     service_name: str = Field(default="oseye-server")
 
     # Worker settings

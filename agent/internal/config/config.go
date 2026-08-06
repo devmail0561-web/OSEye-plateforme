@@ -42,7 +42,7 @@ func Load() (*Config, error) {
 		BufferPath:   getenv("OSEYE_BUFFER_PATH", "/var/lib/oseye/buffer.db"),
 		AgentID:      getenv("OSEYE_AGENT_ID", ""),
 		BatchSize:    getenvInt("OSEYE_BATCH_SIZE", 1000),
-		BatchTimeout: getenvDuration("OSEYE_BATCH_TIMEOUT_MS", 1000) * time.Millisecond,
+		BatchTimeout: getenvDuration("OSEYE_BATCH_TIMEOUT_MS", 1000),
 		MaxCPUPct:    getenvFloat("OSEYE_MAX_CPU_PCT", 4.0),
 		MaxMemMB:     getenvInt("OSEYE_MAX_MEM_MB", 256),
 	}
@@ -76,5 +76,5 @@ func getenvFloat(key string, fallback float64) float64 {
 
 func getenvDuration(key string, fallbackMs int) time.Duration {
 	ms := getenvInt(key, fallbackMs)
-	return time.Duration(ms)
+	return time.Duration(ms) * time.Millisecond
 }

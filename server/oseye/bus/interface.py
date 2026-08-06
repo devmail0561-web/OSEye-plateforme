@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import AsyncGenerator, Protocol, runtime_checkable
+from collections.abc import AsyncGenerator
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
