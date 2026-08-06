@@ -1,1204 +1,1418 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OSEye — Plan d'action de développement</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --yellow: #d29922;
-    --red: #f85149;
-    --code-bg: #1f2937;
-    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 15px;
-    line-height: 1.7;
-    padding: 0;
-  }
-  .page-header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 32px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-  .page-header .logo {
-    font-weight: 700;
-    font-size: 18px;
-    color: var(--accent);
-    letter-spacing: -0.5px;
-  }
-  .page-header .sep { color: var(--border); }
-  .page-header .doc-title { color: var(--muted); font-size: 14px; }
-  .layout {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 40px 32px 80px;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    color: var(--text);
-    font-weight: 600;
-    line-height: 1.3;
-    margin-top: 2em;
-    margin-bottom: 0.6em;
-  }
-  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; margin-top: 0.5em; }
-  h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
-  h3 { font-size: 1.2em; }
-  h4 { font-size: 1em; color: var(--accent); }
-  p { margin-bottom: 1em; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  strong { color: var(--text); font-weight: 600; }
-  em { color: var(--muted); }
-  code {
-    font-family: var(--font-mono);
-    font-size: 0.875em;
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.1em 0.4em;
-    color: #f0883e;
-  }
-  pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 18px 20px;
-    overflow-x: auto;
-    margin: 1.2em 0;
-    line-height: 1.5;
-  }
-  pre code {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--text);
-    font-size: 0.85em;
-  }
-  blockquote {
-    border-left: 3px solid var(--accent);
-    background: var(--surface);
-    margin: 1em 0;
-    padding: 12px 20px;
-    border-radius: 0 6px 6px 0;
-    color: var(--muted);
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1.2em 0;
-    font-size: 0.9em;
-  }
-  th {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 10px 14px;
-    text-align: left;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    font-size: 0.75em;
-    letter-spacing: 0.05em;
-  }
-  td {
-    border: 1px solid var(--border);
-    padding: 8px 14px;
-    vertical-align: top;
-  }
-  tr:hover td { background: var(--surface); }
-  ul, ol {
-    padding-left: 1.6em;
-    margin-bottom: 1em;
-  }
-  li { margin-bottom: 0.25em; }
-  li > ul, li > ol { margin-top: 0.25em; margin-bottom: 0.25em; }
-  hr {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 2em 0;
-  }
-  /* Task list checkboxes */
-  input[type="checkbox"] {
-    margin-right: 6px;
-    accent-color: var(--green);
-  }
-  /* Badges inline */
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.75em;
-    font-weight: 600;
-  }
-  /* Scroll indicator */
-  .scroll-progress {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 2px;
-    background: var(--accent);
-    z-index: 200;
-    transition: width 0.1s;
-  }
-  /* Print */
-  @media print {
-    body { background: white; color: black; }
-    .page-header, .scroll-progress { display: none; }
-    pre, code { background: #f5f5f5; color: black; border-color: #ddd; }
-    table, th, td { border-color: #ddd; }
-    a { color: #0066cc; }
-  }
-  @media (max-width: 768px) {
-    .layout { padding: 20px 16px 60px; }
-    .page-header { padding: 12px 16px; }
-    table { font-size: 0.8em; }
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSEye — Plan d'action</title>
+  <style>
+
+  </style>
+  <style>
+/* ============================================================
+   RESET — écrase les styles par défaut de pandoc
+   ============================================================ */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ============================================================
+   BASE
+   ============================================================ */
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-size: 15px;
+  line-height: 1.75;
+  display: flex;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+#sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 268px;
+  height: 100vh;
+  overflow-y: auto;
+  background: #161b22;
+  border-right: 1px solid #21262d;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+#sidebar::-webkit-scrollbar { width: 3px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 6px;
+}
+
+.sidebar-brand .logo-text {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #58a6ff;
+}
+
+.sidebar-brand .logo-badge {
+  font-size: 10px;
+  background: #1f3a5f;
+  color: #79c0ff;
+  border: 1px solid #1c4a7a;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* pandoc génère <nav id="TOC"> à l'intérieur du sidebar */
+#sidebar nav#TOC { /* conteneur nav pandoc */ }
+
+#sidebar nav#TOC ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#sidebar nav#TOC li { margin: 0; }
+
+/* Niveau 1 */
+#sidebar nav#TOC > ul > li > a {
+  display: block;
+  padding: 5px 20px;
+  color: #c9d1d9;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+/* Niveau 2 */
+#sidebar nav#TOC ul ul > li > a {
+  display: block;
+  padding: 4px 20px 4px 34px;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+/* Niveau 3 */
+#sidebar nav#TOC ul ul ul > li > a {
+  padding-left: 48px;
+  font-size: 11.5px;
+  color: #6e7681;
+}
+
+#sidebar nav#TOC a:hover {
+  color: #e6edf3;
+  background: #1c2128;
+  border-left-color: #3b82f6;
+  text-decoration: none;
+}
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+#main {
+  margin-left: 268px;
+  width: calc(100% - 268px);
+  min-height: 100vh;
+}
+
+/* ============================================================
+   ARTICLE
+   ============================================================ */
+#article {
+  padding: 52px 64px 100px;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.3;
+  color: #e6edf3;
+}
+
+/* Premier h1 = titre du document */
+#article h1:first-child {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #e6edf3;
+  margin: 0 0 16px 0;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #21262d;
+}
+
+h1 {
+  font-size: 26px;
+  margin: 48px 0 16px;
+}
+
+h2 {
+  font-size: 20px;
+  margin: 44px 0 14px;
+  padding: 0 0 10px 14px;
+  border-left: 4px solid #3b82f6;
+  border-bottom: 1px solid #21262d;
+  color: #e6edf3;
+}
+
+h3 {
+  font-size: 16px;
+  margin: 30px 0 10px;
+  color: #58a6ff;
+}
+
+h4 {
+  font-size: 12px;
+  margin: 22px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6e7681;
+  font-weight: 600;
+}
+
+p { margin: 12px 0; }
+ul, ol { margin: 10px 0; padding-left: 22px; }
+li { margin: 4px 0; }
+li > ul, li > ol { margin: 4px 0; }
+strong { color: #e6edf3; font-weight: 600; }
+em { color: #79c0ff; font-style: italic; }
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; color: #79c0ff; }
+hr { border: none; border-top: 1px solid #21262d; margin: 36px 0; }
+
+/* ============================================================
+   CODE — override complet des styles pandoc sourceCode
+   ============================================================ */
+
+/* Inline code */
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  background: #161b22;
+  color: #79c0ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #30363d;
+}
+
+/* Pandoc sourceCode container */
+div.sourceCode {
+  background: #161b22 !important;
+  border: 1px solid #21262d !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+  margin: 16px 0 !important;
+}
+
+/* Pre dans sourceCode */
+div.sourceCode pre.sourceCode {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 16px 20px !important;
+  overflow-x: auto !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+}
+
+/* Pre générique (blocs non-syntaxiques) */
+pre {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  white-space: pre;
+  word-wrap: normal;
+  margin: 16px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+pre > code,
+pre.sourceCode > code.sourceCode {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  color: #c9d1d9;
+  font-size: 13px;
+  white-space: pre !important;
+}
+
+/* Fix pandoc span layout dans code */
+pre > code.sourceCode > span {
+  display: block !important;
+  line-height: 1.6 !important;
+}
+
+pre > code.sourceCode > span > a:first-child::before {
+  content: '';
+}
+
+/* Numéros de ligne */
+td.lineNumbers {
+  color: #3d444d;
+  border-right: 1px solid #21262d;
+  padding-right: 12px;
+  user-select: none;
+  font-size: 12px;
+}
+
+td.sourceCode { padding-left: 16px; }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+table {
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 16px 0;
+  width: 100%;
+  display: block;       /* permet le scroll horizontal */
+  overflow-x: auto;
+}
+
+thead tr {
+  background: #1c2128;
+  border-bottom: 2px solid #3b82f6;
+}
+
+thead th {
+  color: #58a6ff;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid #21262d;
+  transition: background 0.1s;
+}
+
+tbody tr:hover { background: #161b22; }
+
+td {
+  padding: 9px 14px;
+  vertical-align: top;
+  color: #c9d1d9;
+}
+
+td:first-child { font-weight: 500; color: #e6edf3; }
+
+/* ============================================================
+   BLOCKQUOTE
+   ============================================================ */
+blockquote {
+  border-left: 3px solid #3b82f6;
+  background: #161b22;
+  margin: 16px 0;
+  padding: 12px 18px;
+  border-radius: 0 6px 6px 0;
+  color: #8b949e;
+}
+
+blockquote p { margin: 4px 0; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  #sidebar { display: none; }
+  #main { margin-left: 0; width: 100%; }
+  #article { padding: 28px 24px 60px; }
+}
+
+@media print {
+  #sidebar { display: none; }
+  body { display: block; background: white; color: #111; }
+  #main { margin-left: 0; width: 100%; }
+  a { color: #2563eb; }
+  pre, div.sourceCode { border: 1px solid #ccc; background: #f8f8f8; }
+  code { color: #333; background: #f0f0f0; }
+}
+  </style>
 </head>
 <body>
-<div class="scroll-progress" id="sp"></div>
-<header class="page-header">
-  <span class="logo">OSEye</span>
-  <span class="sep">›</span>
-  <span class="doc-title">OSEye — Plan d'action de développement</span>
-</header>
-<div class="layout">
-<h1 id="oseye--plan-daction-de-développement">OSEye — Plan d'action de
-développement</h1>
-<p><strong>Version:</strong> 1.0<br />
-<strong>Date:</strong> 2026-07-28<br />
-<strong>Basé sur:</strong> ARCHITECTURE.md v1.1<br />
-<strong>Classification:</strong> Confidentiel — usage interne</p>
-<hr />
-<h2 id="lecture-du-plan">Lecture du plan</h2>
-<p>Chaque tâche est identifiée par un code <code>Pn.m</code> (Phase n,
-tâche m).<br />
-<strong>Statuts :</strong> <code>[ ]</code> à faire · <code>[~]</code>
-en cours · <code>[x]</code> terminé<br />
-<strong>Dépendances :</strong> une tâche ne commence pas tant que ses
-dépendances ne sont pas <code>[x]</code>.<br />
-<strong>Priorité critique</strong> : les tâches marquées ⚠ bloquent tout
-le reste si non faites en premier.<br />
-<strong>Assignation</strong> : <code>[@nom]</code> — développeur assigné
-à la tâche.</p>
-<hr />
-<h2 id="workflow-collaboratif">Workflow collaboratif</h2>
-<h3 id="contribuer-au-projet">Contribuer au projet</h3>
-<ol type="1">
-<li><strong>Choisir une tâche disponible</strong> — lire
-<code>CONTRIBUTING.md</code> pour les règles de contribution</li>
-<li><strong>S'assigner la tâche</strong> — marquer
-<code>[~] [@votre_nom]</code> dans ce fichier (commit sur
-<code>main</code> ou commentaire GitHub Issue)</li>
-<li><strong>Créer une branche</strong> —
-<code>git checkout -b P&lt;n&gt;.&lt;m&gt;-&lt;description-courte&gt;</code></li>
-<li><strong>Implémenter selon les specs</strong> — référence :
-<code>ARCHITECTURE.md</code> + fichiers contrats (Annexe)</li>
-<li><strong>Écrire les tests</strong> — couverture &gt; 80%
-obligatoire</li>
-<li><strong>Ouvrir une Pull Request</strong> — template automatique avec
-checklist de vérification</li>
-<li><strong>Code review</strong> — 1 approbation senior obligatoire
-avant merge</li>
-<li><strong>CI passe</strong> — lint + tests + build sur les 3 OS</li>
-<li><strong>Merge</strong> — marquer <code>[x]</code> dans ce
-fichier</li>
-</ol>
-<h3 id="tâches-parallélisables">Tâches parallélisables</h3>
-<p>Les tâches <strong>au sein d'une même phase</strong> peuvent être
-faites en parallèle SI aucune dépendance mutuelle. Exemples :</p>
-<p><strong>Phase 2 :</strong> P2.01 à P2.06 (6 nouveaux collectors) →
-<strong>6 personnes en parallèle</strong><br />
-<strong>Phase 3 :</strong> P3.07 (ruleset 30 règles) → <strong>diviser
-en 6 catégories × 5 règles = 6 branches</strong><br />
-<strong>Phase 9 :</strong> P9.05 à P9.12 (8 pages UI) → <strong>8
-personnes en parallèle</strong></p>
-<p>⚠ <strong>Phase 1 (P1.01–P1.11)</strong> est
-<strong>séquentielle</strong> — les fichiers contrats doivent être
-finalisés par une seule personne ou en pair programming.</p>
-<h3 id="code-review--niveaux-de-sévérité">Code review — niveaux de
-sévérité</h3>
-<table>
-<thead>
-<tr class="header">
-<th>Niveau</th>
-<th>Bloque le merge ?</th>
-<th>Exemples</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td><strong>BLOCKER</strong></td>
-<td>✅ Oui</td>
-<td>Faille sécurité, fuite mémoire, perte de données, violation
-interface contrat</td>
-</tr>
-<tr class="even">
-<td><strong>CRITICAL</strong></td>
-<td>✅ Oui</td>
-<td>Bug fonctionnel majeur, test manquant, perf inacceptable (agent &gt;
-4% CPU)</td>
-</tr>
-<tr class="odd">
-<td><strong>MAJOR</strong></td>
-<td>❌ Non (fixable post-merge)</td>
-<td>Code smell, duplication, manque de logs, doc absente</td>
-</tr>
-<tr class="even">
-<td><strong>MINOR</strong></td>
-<td>❌ Non</td>
-<td>Typo, style, suggestion d'amélioration</td>
-</tr>
-</tbody>
-</table>
-<h3 id="critères-dacceptance-génériques-toutes-tâches">Critères
-d'acceptance génériques (toutes tâches)</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" />Code compile/lance sans
-erreur</label></li>
-<li><label><input type="checkbox" />Tests unitaires présents, couverture
-&gt; 80%</label></li>
-<li><label><input type="checkbox" />Pas de <code>TODO</code> ou
-<code>FIXME</code> non justifié en commentaire</label></li>
-<li><label><input type="checkbox" />Logs structurés JSON avec trace_id
-(si applicable)</label></li>
-<li><label><input type="checkbox" />Aucune dépendance externe non
-documentée dans <code>go.mod</code> /
-<code>pyproject.toml</code></label></li>
-<li><label><input type="checkbox" />Respect des interfaces définies dans
-les fichiers contrats</label></li>
-<li><label><input type="checkbox" />CI GitHub Actions passe (lint +
-tests + build multi-OS)</label></li>
-</ul>
-<hr />
-<h2 id="phase-1--foundation-s1s3">Phase 1 — Foundation
-<code>S1–S3</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Pipeline end-to-end fonctionnel : agent →
-server → stockage → query API.</p>
-</blockquote>
-<h3 id="10--fichiers-contrats--bloque-tout">1.0 — Fichiers contrats ⚠
-(bloque tout)</h3>
-<p>Ces fichiers doivent être finalisés et reviewés <strong>avant
-d'écrire le moindre code fonctionnel</strong>.</p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.01</strong> —
-<code>proto/event.proto</code> : définir <code>UniversalEventPB</code>,
-<code>IngestRequest</code>, <code>IngestResponse</code>, service
-<code>AgentService</code> (IngestEvents + ReceivePolicy +
-StreamCommands)</label></li>
-<li><label><input type="checkbox" /><strong>P1.02</strong> —
-<code>server/oseye/core/schema.py</code> : modèles Pydantic
-<code>UniversalEvent</code>, <code>Alert</code>, <code>Decision</code>,
-<code>ForensicCase</code>, <code>Rule</code>,
-<code>SurveillanceProfile</code>,
-<code>EntityProfile</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.03</strong> —
-<code>server/oseye/bus/interface.py</code> : Protocol
-<code>EventBus</code> (publish, subscribe,
-subscribe_pattern)</label></li>
-<li><label><input type="checkbox" /><strong>P1.04</strong> —
-<code>agent/internal/platform/interface.go</code> : interface
-<code>PlatformDriver</code> +
-<code>PlatformCapabilities</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.05</strong> —
-<code>agent/internal/platform/registry.go</code> : registre
-auto-enregistrement</label></li>
-<li><label><input type="checkbox" /><strong>P1.06</strong> —
-<code>agent/internal/collector/interface.go</code> : interface
-<code>Collector</code> + struct <code>RawEvent</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.07</strong> —
-<code>server/oseye/storage/interface.py</code> : Protocols
-<code>EventRepository</code>, <code>AlertRepository</code>,
-<code>DecisionRepository</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.08</strong> —
-<code>server/oseye/storage/router.py</code> : <code>StorageRouter</code>
-(routage PG vs ClickHouse)</label></li>
-<li><label><input type="checkbox" /><strong>P1.09</strong> —
-<code>server/oseye/config.py</code> : <code>Settings</code>
-pydantic-settings, toutes les variables d'env</label></li>
-<li><label><input type="checkbox" /><strong>P1.10</strong> —
-<code>server/oseye/core/observability.py</code> : setup OTel + logger
-JSON structuré</label></li>
-<li><label><input type="checkbox" /><strong>P1.11</strong> — Codegen
-Protobuf : <code>scripts/generate_proto.sh</code> (génère Go + Python
-depuis <code>proto/</code>)</label></li>
-</ul>
-<h3 id="11--infrastructure-monorepo">1.1 — Infrastructure monorepo</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.12</strong> — Scaffolding
-monorepo : <code>agent/</code>, <code>server/</code>, <code>sdk/</code>,
-<code>ui/</code>, <code>proto/</code>, <code>rules/</code>,
-<code>infra/</code>, <code>scripts/</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.13</strong> —
-<code>agent/go.mod</code> + <code>server/pyproject.toml</code> +
-<code>ui/package.json</code> initialisés</label></li>
-<li><label><input type="checkbox" /><strong>P1.14</strong> —
-<code>.github/workflows/ci.yml</code> : lint + test + build, matrix
-<code>GOOS: [linux, windows, darwin]</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.15</strong> —
-<code>infra/docker/docker-compose.dev.yml</code> (Redis + PostgreSQL +
-oseye-server + oseye-agent + oseye-ui)</label></li>
-<li><label><input type="checkbox" /><strong>P1.16</strong> —
-<code>scripts/generate_certs.sh</code> : PKI dev (CA + server.crt +
-agent.crt)</label></li>
-</ul>
-<h3 id="12--agent-go-linux--collecte-minimale">1.2 — Agent Go (Linux —
-collecte minimale)</h3>
-<p><em>Dépend de : P1.01–P1.06</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.17</strong> —
-<code>platform/linux/driver.go</code> : <code>LinuxDriver</code>
-implémentant <code>PlatformDriver</code>, <code>init()</code>
-auto-register</label></li>
-<li><label><input type="checkbox" /><strong>P1.18</strong> —
-<code>platform/linux/ebpf/loader.go</code> + programmes C :
-<code>execve.c</code>, <code>openat.c</code>,
-<code>connect.c</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.19</strong> —
-<code>platform/linux/auditd/</code> : collecteur auditd (parsing
-<code>audit.log</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P1.20</strong> —
-<code>platform/linux/procfs/</code> : collecteur procfs (scan
-<code>/proc</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P1.21</strong> —
-<code>internal/chain/hasher.go</code> : BLAKE3 hash chain
-per-event</label></li>
-<li><label><input type="checkbox" /><strong>P1.22</strong> —
-<code>internal/buffer/sqlite_buffer.go</code> : queue offline SQLite
-avec cursor <code>last_sent_id</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.23</strong> —
-<code>internal/transport/grpc_client.go</code> : streaming gRPC +
-reconnexion automatique + backpressure</label></li>
-<li><label><input type="checkbox" /><strong>P1.24</strong> —
-<code>internal/signer/ed25519.go</code> : signature de batch (toutes les
-1000 events ou 1s)</label></li>
-<li><label><input type="checkbox" /><strong>P1.25</strong> —
-<code>cmd/oseye-agent/main.go</code> : bootstrap —
-<code>platform.Resolve()</code> → <code>CollectorManager</code> →
-pipeline</label></li>
-</ul>
-<h3 id="13--server-python-ingestion--normalisation">1.3 — Server Python
-(ingestion + normalisation)</h3>
-<p><em>Dépend de : P1.01–P1.11</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.26</strong> —
-<code>bus/memory.py</code> : <code>InMemoryBus</code> (tests
-unitaires)</label></li>
-<li><label><input type="checkbox" /><strong>P1.27</strong> —
-<code>bus/redis_streams.py</code> : <code>RedisBus</code> (multi-process
-dev)</label></li>
-<li><label><input type="checkbox" /><strong>P1.28</strong> —
-<code>ingest/grpc_service.py</code> : réception gRPC, vérification CN
-mTLS = agent_id, validation signature batch</label></li>
-<li><label><input type="checkbox" /><strong>P1.29</strong> —
-<code>ingest/validator.py</code> : vérification hash chain + signature
-Ed25519</label></li>
-<li><label><input type="checkbox" /><strong>P1.30</strong> —
-<code>normalizer/engine.py</code> : <code>NormalizerEngine</code> +
-dispatch par <code>raw.OS</code> + <code>raw.source</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.31</strong> —
-<code>normalizer/adapters/linux/ebpf.py</code> + <code>auditd.py</code>
-+ <code>procfs.py</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.32</strong> —
-<code>normalizer/secret_masker.py</code> : regex masking credentials
-dans cmdline/resource</label></li>
-</ul>
-<h3 id="14--stockage">1.4 — Stockage</h3>
-<p><em>Dépend de : P1.07, P1.08, P1.09</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.33</strong> — Alembic
-init + migration V001 : toutes les tables PostgreSQL (events, alerts,
-decisions, forensic_cases, agents, rules, entity_profiles, ti_cache_ip,
-ti_cache_hash, ti_ioc_feed, api_audit_log, organizations, rule_versions,
-dlq_entries)</label></li>
-<li><label><input type="checkbox" /><strong>P1.34</strong> —
-<code>storage/backends/postgresql.py</code> : implémente les Protocols
-Repository</label></li>
-<li><label><input type="checkbox" /><strong>P1.35</strong> —
-<code>storage/backends/sqlite.py</code> : même interface, substitutions
-de types</label></li>
-<li><label><input type="checkbox" /><strong>P1.36</strong> —
-<code>storage/repositories/event_repo.py</code> :
-<code>insert_batch</code>, <code>get</code>, <code>query</code> avec
-filtres</label></li>
-</ul>
-<h3 id="15--api-rest--auth">1.5 — API REST + Auth</h3>
-<p><em>Dépend de : P1.33–P1.36</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.37</strong> —
-<code>api/auth/jwt.py</code> : issue/verify/refresh JWT
-RS256</label></li>
-<li><label><input type="checkbox" /><strong>P1.38</strong> —
-<code>api/auth/rbac.py</code> : dépendances FastAPI pour les 4 rôles
-(reader, analyst, senior_analyst, admin)</label></li>
-<li><label><input type="checkbox" /><strong>P1.39</strong> —
-<code>api/routers/events.py</code> : <code>GET /events</code>,
-<code>GET /events/{id}</code>,
-<code>GET /events/stats</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.40</strong> —
-<code>api/routers/auth.py</code> : <code>POST /auth/token</code>,
-<code>/refresh</code>, <code>/logout</code>,
-<code>/me</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.41</strong> —
-<code>api/routers/health.py</code> : <code>GET /health</code>,
-<code>GET /health/detailed</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.42</strong> —
-<code>api/ws/manager.py</code> : <code>WebSocketManager</code> +
-endpoint <code>WS /ws/events</code></label></li>
-<li><label><input type="checkbox" /><strong>P1.43</strong> —
-<code>audit/middleware.py</code> : FastAPI middleware loggant chaque
-requête dans <code>api_audit_log</code></label></li>
-</ul>
-<h3 id="16--workers-dev-mode-monolithe">1.6 — Workers dev (mode
-monolithe)</h3>
-<p><em>Dépend de : P1.26–P1.32, P1.33–P1.36</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.44</strong> —
-<code>workers/</code> : stubs des 5 workers +
-<code>core/runner.py</code> mode monolithe
-(<code>asyncio.gather</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P1.45</strong> —
-<code>workers/storage_writer.py</code> : consomme
-<code>events:normalized</code>, appelle
-<code>StorageRouter.insert_events</code></label></li>
-</ul>
-<h3 id="17--tests-phase-1">1.7 — Tests Phase 1</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P1.46</strong> — Tests
-unitaires : hash chain BLAKE3, signature Ed25519, buffer SQLite
-(Go)</label></li>
-<li><label><input type="checkbox" /><strong>P1.47</strong> — Tests
-unitaires : NormalizerEngine, adapters eBPF + auditd
-(Python)</label></li>
-<li><label><input type="checkbox" /><strong>P1.48</strong> — Test
-d'intégration : agent → server gRPC → normalizer → PostgreSQL →
-<code>GET /events</code> retourne l'event</label></li>
-<li><label><input type="checkbox" /><strong>P1.49</strong> — Test
-WebSocket : event inséré → reçu sur <code>WS /ws/events</code> en &lt;
-1s</label></li>
-</ul>
-<p><strong>Livrable P1 :</strong> Events réels de la machine hôte
-visibles en DB et streamés via WebSocket.</p>
-<hr />
-<h2 id="phase-2--full-collection-s4s6">Phase 2 — Full Collection
-<code>S4–S6</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> 9 collectors Linux opérationnels. Agent
-robuste face aux pannes réseau.</p>
-</blockquote>
-<p><em>Dépend de : Phase 1 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" checked="" /><strong>P2.01</strong> —
-<code>platform/linux/fanotify/</code> : collecteur fanotify (accès
-fichiers système)</label></li>
-<li><label><input type="checkbox" checked="" /><strong>P2.02</strong> —
-<code>platform/linux/inotify/</code> : collecteur inotify (watch paths
-configurables)</label></li>
-<li><label><input type="checkbox" /><strong>P2.03</strong> —
-<code>platform/linux/netlink/</code> : collecteur netlink (connexions
-réseau kernel)</label></li>
-<li><label><input type="checkbox" /><strong>P2.04</strong> —
-<code>platform/linux/journald/</code> : collecteur journald (systemd
-logs)</label></li>
-<li><label><input type="checkbox" /><strong>P2.05</strong> —
-<code>platform/linux/udev/</code> : collecteur udev (events
-devices)</label></li>
-<li><label><input type="checkbox" /><strong>P2.06</strong> —
-<code>platform/linux/syslog/</code> : collecteur syslog
-(<code>/dev/log</code> ou UDP 514)</label></li>
-<li><label><input type="checkbox" /><strong>P2.07</strong> — Adapters
-normalizer correspondants : fanotify, inotify, netlink, journald, udev,
-syslog</label></li>
-<li><label><input type="checkbox" /><strong>P2.08</strong> —
-<code>internal/watchdog/resource.go</code> : CPU/mem self-monitoring,
-throttle adaptatif si CPU &gt;4%</label></li>
-<li><label><input type="checkbox" /><strong>P2.09</strong> —
-<code>ingest/backpressure.py</code> :
-<code>BackpressureController</code> — calcule facteur throttle depuis
-lag bus, push aux agents via <code>StreamCommands</code> gRPC toutes les
-10s</label></li>
-<li><label><input type="checkbox" /><strong>P2.10</strong> — Buffer
-offline : replay automatique depuis <code>last_sent_id</code> après
-reconnexion + cleanup post-ACK</label></li>
-<li><label><input type="checkbox" /><strong>P2.11</strong> —
-<code>api/routers/agents.py</code> : <code>GET /agents</code>,
-<code>GET /agents/{id}</code>, <code>GET /agents/{id}/status</code>,
-<code>POST /agents/enroll</code>,
-<code>POST /agents/{id}/renew-cert</code></label></li>
-<li><label><input type="checkbox" /><strong>P2.12</strong> —
-<code>scripts/generate_certs.sh</code> : enrollment OTP agent (génère
-OTP, valide CSR, signe avec intermediate CA)</label></li>
-<li><label><input type="checkbox" /><strong>P2.13</strong> — DaemonSet
-K8s dev : déploiement sur cluster de test local</label></li>
-<li><label><input type="checkbox" /><strong>P2.14</strong> — Tests :
-mocks kernel pour chacun des 6 nouveaux collectors, couverture &gt;
-80%</label></li>
-<li><label><input type="checkbox" /><strong>P2.15</strong> — Test de
-résilience : déconnexion réseau 60s → reconnexion → vérifier replay sans
-perte d'events</label></li>
-</ul>
-<p><strong>Livrable P2 :</strong> 9 collectors actifs. L'agent survit à
-60s de coupure réseau et rejoue les events bufferisés.</p>
-<hr />
-<h2 id="phase-3--détection-s7s9">Phase 3 — Détection
-<code>S7–S9</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Règles déclenchées, alertes créées,
-visibles par les analystes.</p>
-</blockquote>
-<p><em>Dépend de : Phase 2 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P3.01</strong> —
-<code>rule_engine/parser.py</code> : lecture YAML/TOML depuis
-<code>rules/builtin/</code> et <code>rules/custom/</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.02</strong> —
-<code>rule_engine/evaluator.py</code> : évaluateur <code>asteval</code>
-— comparaisons, chaînes, regex, <code>in</code>, booléens</label></li>
-<li><label><input type="checkbox" /><strong>P3.03</strong> —
-<code>rule_engine/evaluator.py</code> : support
-<code>count_events(filter, seconds)</code> avec fenêtres temporelles en
-mémoire</label></li>
-<li><label><input type="checkbox" /><strong>P3.04</strong> —
-<code>rule_engine/engine.py</code> : <code>RuleEngine.evaluate()</code>
-+ hot-reload via watchdog fichiers</label></li>
-<li><label><input type="checkbox" /><strong>P3.05</strong> —
-<code>workers/rule_worker.py</code> : consomme
-<code>events:normalized</code>, publie
-<code>analysis:rules:{host}</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.06</strong> —
-<code>storage/repositories/alert_repo.py</code> : CRUD
-alertes</label></li>
-<li><label><input type="checkbox" /><strong>P3.07</strong> — Ruleset
-intégré : 30+ règles YAML dans <code>rules/builtin/</code> couvrant les
-techniques MITRE principales</label></li>
-</ul>
-<table>
-<thead>
-<tr class="header">
-<th>Catégorie</th>
-<th>Règles minimum</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>Credential access</td>
-<td>shadow_read, passwd_write, ssh_key_theft, dumping_memory</td>
-</tr>
-<tr class="even">
-<td>Privilege escalation</td>
-<td>suid_execution, sudo_abuse, capabilities_add, ptrace_inject</td>
-</tr>
-<tr class="odd">
-<td>Persistence</td>
-<td>crontab_write, rc_local_modify, systemd_unit_new, bashrc_write</td>
-</tr>
-<tr class="even">
-<td>Defense evasion</td>
-<td>log_delete, history_clear, binary_rename, timestamp_tamper</td>
-</tr>
-<tr class="odd">
-<td>Lateral movement</td>
-<td>ssh_new_host, scp_exfil, port_scan_internal</td>
-</tr>
-<tr class="even">
-<td>Discovery</td>
-<td>whoami_burst, network_scan, shadow_read_burst</td>
-</tr>
-<tr class="odd">
-<td>C2 / Exfiltration</td>
-<td>dns_burst, large_upload, reverse_shell_port</td>
-</tr>
-<tr class="even">
-<td>Ransomware</td>
-<td>mass_rename_extension, mass_encryption_pattern</td>
-</tr>
-<tr class="odd">
-<td>Windows</td>
-<td>registry_run_key, lsass_access, wmi_exec, powershell_encoded</td>
-</tr>
-<tr class="even">
-<td>macOS</td>
-<td>launchd_new, tcc_bypass, dylib_hijack</td>
-</tr>
-</tbody>
-</table>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P3.08</strong> — Condition
-<code>event.platform</code> dans l'évaluateur : règles cross-OS
-fonctionnelles</label></li>
-<li><label><input type="checkbox" /><strong>P3.09</strong> —
-<code>api/routers/alerts.py</code> : <code>GET /alerts</code>,
-<code>GET /alerts/{id}</code>, <code>PATCH</code>,
-<code>POST .../acknowledge</code>, <code>POST .../false-positive</code>,
-<code>GET /alerts/stats</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.10</strong> —
-<code>api/routers/rules.py</code> : CRUD complet +
-<code>POST /rules/validate</code> +
-<code>POST /rules/reload</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.11</strong> —
-<code>api/ws/manager.py</code> : broadcast sur
-<code>WS /ws/alerts</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.12</strong> —
-<code>api/auth/api_keys.py</code> : génération / révocation clés API,
-header <code>X-API-Key</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.13</strong> — RBAC
-enforced sur tous les endpoints existants</label></li>
-<li><label><input type="checkbox" /><strong>P3.14</strong> — Boucle
-feedback faux positifs → <code>rules.false_positive_count</code>
-incrémenté + log <code>rule_versions</code></label></li>
-<li><label><input type="checkbox" /><strong>P3.15</strong> — Tests :
-évaluateur (30+ cas de conditions), fenêtres temporelles, toutes les
-règles builtin</label></li>
-</ul>
-<p><strong>Livrable P3 :</strong> <code>chmod 777 /etc/shadow</code> sur
-un hôte surveillé → alerte visible sur l'API en &lt; 500ms.</p>
-<hr />
-<h2 id="phase-4--intelligence-s10s12">Phase 4 — Intelligence
-<code>S10–S12</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Events enrichis TI, chaînes de
-corrélation reconstruites.</p>
-</blockquote>
-<p><em>Dépend de : Phase 3 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P4.01</strong> —
-<code>threat_intel/providers/abuseipdb.py</code> +
-<code>virustotal.py</code> : enrichissement IP et hash</label></li>
-<li><label><input type="checkbox" /><strong>P4.02</strong> —
-<code>threat_intel/cache.py</code> : cache Redis (TTL 1h IP, 24h hash,
-6h IOC)</label></li>
-<li><label><input type="checkbox" /><strong>P4.03</strong> —
-<code>threat_intel/providers/stix_taxii.py</code> : ingestion feeds
-STIX/TAXII publics</label></li>
-<li><label><input type="checkbox" /><strong>P4.04</strong> —
-<code>threat_intel/providers/misp.py</code> : intégration
-MISP</label></li>
-<li><label><input type="checkbox" /><strong>P4.05</strong> —
-<code>threat_intel/scheduler.py</code> : refresh périodique des feeds
-IOC</label></li>
-<li><label><input type="checkbox" /><strong>P4.06</strong> —
-<code>workers/ti_worker.py</code> : consomme
-<code>events:normalized</code>, publie
-<code>events:enriched</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.07</strong> — Circuit
-breaker sur chaque provider TI (pybreaker) avec fallback
-<code>ti_tags=["provider:unavailable"]</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.08</strong> —
-<code>correlation/graph.py</code> : <code>EventGraph</code> rustworkx
-DiGraph (noeuds=events, arêtes typées)</label></li>
-<li><label><input type="checkbox" /><strong>P4.09</strong> —
-<code>correlation/linkers/pid_ppid.py</code> + <code>resource.py</code>
-+ <code>user.py</code> + <code>temporal.py</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.10</strong> —
-<code>correlation/engine.py</code> : appel des linkers à chaque event
-enrichi</label></li>
-<li><label><input type="checkbox" /><strong>P4.11</strong> —
-<code>correlation/chain_builder.py</code> : extraction
-<code>IncidentChain</code> depuis sous-graphe connexe</label></li>
-<li><label><input type="checkbox" /><strong>P4.12</strong> —
-<code>workers/correlation_worker.py</code> : publie
-<code>analysis:correlated</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.13</strong> —
-<code>storage/repositories/entity_repo.py</code> : CRUD
-<code>EntityProfile</code> + mise à jour
-<code>risk_score</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.14</strong> —
-<code>api/routers/events.py</code> : <code>GET /events/{id}/chain</code>
-+ <code>GET /events/{id}/context</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.15</strong> —
-<code>api/routers/entities.py</code> : tous les endpoints (liste,
-détail, events, alerts, risk history, whitelist)</label></li>
-<li><label><input type="checkbox" /><strong>P4.16</strong> — DLQ : table
-<code>dlq_entries</code> + topic <code>events:dlq:*</code> +
-<code>GET /health/dlq</code></label></li>
-<li><label><input type="checkbox" /><strong>P4.17</strong> — Tests
-d'intégration : scénario SSH login → sudo → exfiltration → vérifier
-IncidentChain</label></li>
-</ul>
-<p><strong>Livrable P4 :</strong> Séquence SSH → sudo → exfil
-reconstruite comme incident unique corrélé.</p>
-<hr />
-<h2 id="phase-5--decision-engine-s13s15">Phase 5 — Decision Engine
-<code>S13–S15</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Décisions autonomes tracées, queue
-approbation humaine fonctionnelle.</p>
-</blockquote>
-<p><em>Dépend de : Phase 4 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P5.01</strong> —
-<code>decision/weighted_scorer.py</code> : agrégation
-<code>(rule×0.4) + (ml×0.3) + (ti×0.2) + (correlation×0.1)</code></label></li>
-<li><label><input type="checkbox" /><strong>P5.02</strong> —
-<code>decision/risk_matrix.py</code> : mapping score →
-<code>decision_type</code> (IGNORE / ESCALATE / ALERT+INVESTIGATE /
-ALERT+ISOLATE / +REQUEST_HUMAN)</label></li>
-<li><label><input type="checkbox" /><strong>P5.03</strong> —
-<code>decision/journal.py</code> : append-only, BLAKE3 hash chain, signé
-Ed25519 server key</label></li>
-<li><label><input type="checkbox" /><strong>P5.04</strong> —
-<code>decision/engine.py</code> : orchestration — scorer → matrix →
-policy overrides → journal → publish</label></li>
-<li><label><input type="checkbox" /><strong>P5.05</strong> —
-<code>decision/human_queue.py</code> : queue approbation + handler
-timeout (décision auto à expiration)</label></li>
-<li><label><input type="checkbox" /><strong>P5.06</strong> —
-<code>decision/action_executor.py</code> : ALERT (déjà fait), NOTIFY
-(webhook), ESCALATE (email/slack), COLLECT_MORE (push profil
-investigation), ISOLATE (stub — log uniquement en P5)</label></li>
-<li><label><input type="checkbox" /><strong>P5.07</strong> —
-<code>workers/decision_worker.py</code> : consomme
-<code>analysis:correlated</code>, publie
-<code>decisions:completed</code> +
-<code>decisions:pending</code></label></li>
-<li><label><input type="checkbox" /><strong>P5.08</strong> —
-<code>api/routers/decisions.py</code> : tous les endpoints (liste,
-détail, pending, approve, reject,
-<code>GET /decisions/journal/verify</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P5.09</strong> —
-<code>api/ws/manager.py</code> : broadcast
-<code>WS /ws/decisions</code></label></li>
-<li><label><input type="checkbox" /><strong>P5.10</strong> — Webhooks
-sortants : <code>POST /webhooks</code>, livraison HMAC-SHA256, retry
-exponentiel 5x</label></li>
-<li><label><input type="checkbox" /><strong>P5.11</strong> — Trigger
-PostgreSQL <code>prevent_decision_update</code> : immuabilité des champs
-core</label></li>
-<li><label><input type="checkbox" /><strong>P5.12</strong> —
-<code>core/lifecycle.py</code> : <code>GracefulWorker</code> — SIGTERM →
-drain → flush → commit offsets → exit 0</label></li>
-<li><label><input type="checkbox" /><strong>P5.13</strong> — Tests :
-&gt; 100 scénarios de décisions avec résultats attendus, précision &gt;
-95%, vérification intégrité journal</label></li>
-</ul>
-<p><strong>Livrable P5 :</strong> Décisions justifiées avec traçabilité
-complète. Humain peut approuver/rejeter ISOLATE.</p>
-<hr />
-<h2 id="phase-6--ml-engine-s16s19">Phase 6 — ML Engine
-<code>S16–S19</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Baseline comportementale, scores
-d'anomalie augmentant la détection rule-based.</p>
-</blockquote>
-<p><em>Dépend de : Phase 5 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P6.01</strong> —
-<code>ml_engine/feature_extractor.py</code> :
-<code>EntityFeatureVector</code> depuis <code>entity_hourly_stats</code>
-ClickHouse</label></li>
-<li><label><input type="checkbox" /><strong>P6.02</strong> —
-<code>ml_engine/baseline.py</code> : <code>IsolationForest</code> River
-(online learning), une instance par <code>entity_id</code></label></li>
-<li><label><input type="checkbox" /><strong>P6.03</strong> —
-<code>ml_engine/scorer.py</code> : <code>BehavioralScorer</code> →
-<code>ml_score ∈ [0, 100]</code></label></li>
-<li><label><input type="checkbox" /><strong>P6.04</strong> —
-<code>ml_engine/mitre_classifier.py</code> : classifier scikit-learn,
-dataset labellisé MITRE ATT&amp;CK</label></li>
-<li><label><input type="checkbox" /><strong>P6.05</strong> —
-<code>ml_engine/model_store.py</code> : versioning + persistance
-modèles, checkpoint toutes les 15 min</label></li>
-<li><label><input type="checkbox" /><strong>P6.06</strong> —
-<code>workers/ml_worker.py</code> : consomme
-<code>events:normalized</code>, publie <code>analysis:ml</code>,
-checkpoint automatique</label></li>
-<li><label><input type="checkbox" /><strong>P6.07</strong> — Intégration
-score ML dans <code>DecisionEngine.WeightedScorer</code></label></li>
-<li><label><input type="checkbox" /><strong>P6.08</strong> — Framework
-A/B test : déploiement parallèle nouveau modèle vs. modèle courant,
-comparaison métriques</label></li>
-<li><label><input type="checkbox" /><strong>P6.09</strong> — Vue
-matérialisée ClickHouse <code>entity_hourly_stats</code> : features ML
-pré-calculées</label></li>
-<li><label><input type="checkbox" /><strong>P6.10</strong> — Tests : FP
-rate &lt; 5% sur workloads propres, recall &gt; 80% sur scénarios
-d'attaque de référence</label></li>
-</ul>
-<p><strong>Livrable P6 :</strong> Exfiltration lente via DNS (non
-couverte par règles) → alerte ML.</p>
-<hr />
-<h2 id="phase-7--forensics-s20s22">Phase 7 — Forensics
-<code>S20–S22</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Gestion de cas complète, exports
-légalement admissibles.</p>
-</blockquote>
-<p><em>Dépend de : Phase 6 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P7.01</strong> — Agent :
-<code>snapshot.go</code> — capture <code>procfs</code> +
-<code>netlink</code> → sérialise état complet processus +
-connexions</label></li>
-<li><label><input type="checkbox" /><strong>P7.02</strong> — Agent :
-gRPC endpoint <code>TakeSnapshot</code> dans
-<code>AgentService</code></label></li>
-<li><label><input type="checkbox" /><strong>P7.03</strong> —
-<code>forensic/snapshot.py</code> : <code>POST /snapshots</code> + diff
-entre deux snapshots</label></li>
-<li><label><input type="checkbox" /><strong>P7.04</strong> —
-<code>forensic/case_manager.py</code> : CRUD <code>ForensicCase</code> +
-custody log append-only</label></li>
-<li><label><input type="checkbox" /><strong>P7.05</strong> —
-<code>forensic/timeline.py</code> : reconstruction chronologique triée
-par <code>timestamp_ns</code></label></li>
-<li><label><input type="checkbox" /><strong>P7.06</strong> —
-<code>forensic/exporter/json_export.py</code> +
-<code>html_report.py</code> + <code>pdf_report.py</code> (via
-WeasyPrint)</label></li>
-<li><label><input type="checkbox" /><strong>P7.07</strong> —
-<code>forensic/exporter/misp_export.py</code> : création event MISP
-depuis case</label></li>
-<li><label><input type="checkbox" /><strong>P7.08</strong> —
-<code>forensic/exporter/thehive_export.py</code> : création case TheHive
-depuis case OSEye</label></li>
-<li><label><input type="checkbox" /><strong>P7.09</strong> —
-<code>api/routers/cases.py</code> : tous les endpoints (CRUD, events,
-alerts, notes, evidence, timeline, export, custody)</label></li>
-<li><label><input type="checkbox" /><strong>P7.10</strong> —
-<code>api/routers/snapshots.py</code> : POST, GET, diff</label></li>
-<li><label><input type="checkbox" /><strong>P7.11</strong> — Trigger
-PostgreSQL <code>prevent_custody_update</code> : immuabilité du custody
-log</label></li>
-<li><label><input type="checkbox" /><strong>P7.12</strong> — Tests :
-immuabilité custody log, export PDF généré et lisible, diff snapshot
-détecte un nouveau processus</label></li>
-</ul>
-<p><strong>Livrable P7 :</strong> Analyste ouvre un cas, annote, exporte
-un rapport PDF défendable.</p>
-<hr />
-<h2 id="phase-8--policy-engine--plugin-sdk-s23s25">Phase 8 — Policy
-Engine + Plugin SDK <code>S23–S25</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Profils de surveillance hot-swap,
-écosystème de plugins extensible.</p>
-</blockquote>
-<p><em>Dépend de : Phase 7 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P8.01</strong> —
-<code>policy/schema.py</code> : <code>SurveillanceProfile</code> +
-<code>CollectorConfig</code> (avec champ
-<code>platforms</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P8.02</strong> —
-<code>policy/engine.py</code> : chargement des 6 profils YAML intégrés +
-validation</label></li>
-<li><label><input type="checkbox" /><strong>P8.03</strong> —
-<code>policy/engine.py</code> : push vers agents via
-<code>policy:push:{agent_id}</code> bus → gRPC
-<code>ReceivePolicy</code></label></li>
-<li><label><input type="checkbox" /><strong>P8.04</strong> — Agent :
-<code>policy/receiver.go</code> — reçoit
-<code>SurveillanceProfile</code>, filtre les collectors non disponibles
-sur cet OS, active/désactive en &lt; 2s</label></li>
-<li><label><input type="checkbox" /><strong>P8.05</strong> —
-<code>api/routers/policies.py</code> : CRUD profils +
-<code>POST .../apply</code></label></li>
-<li><label><input type="checkbox" /><strong>P8.06</strong> —
-<code>sdk/oseye_sdk/plugin.py</code> : classes de base
-<code>Plugin</code>, <code>CollectorPlugin</code>,
-<code>AnalyzerPlugin</code>, <code>ExporterPlugin</code></label></li>
-<li><label><input type="checkbox" /><strong>P8.07</strong> —
-<code>sdk/oseye_sdk/event.py</code> : modèle <code>Event</code> exposé
-aux plugins (sous-ensemble de <code>UniversalEvent</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P8.08</strong> —
-<code>sdk/oseye_sdk/ipc.py</code> : communication IPC plugin ↔︎ server
-(Unix socket)</label></li>
-<li><label><input type="checkbox" /><strong>P8.09</strong> —
-<code>plugin/verifier.py</code> : vérification signature Ed25519 du
-package plugin</label></li>
-<li><label><input type="checkbox" /><strong>P8.10</strong> —
-<code>plugin/sandbox.py</code> : isolation <code>subprocess</code> +
-cgroups v2 (CPU/mem limits)</label></li>
-<li><label><input type="checkbox" /><strong>P8.11</strong> —
-<code>plugin/manager.py</code> : load/unload plugins,
-lifecycle</label></li>
-<li><label><input type="checkbox" /><strong>P8.12</strong> —
-<code>api/routers/plugins.py</code> : install, enable, disable,
-delete</label></li>
-<li><label><input type="checkbox" /><strong>P8.13</strong> — Plugins
-exemple : <code>notifier_pagerduty</code>,
-<code>exporter_s3</code></label></li>
-<li><label><input type="checkbox" /><strong>P8.14</strong> — Publication
-SDK sur PyPI (ou registry privé)</label></li>
-<li><label><input type="checkbox" /><strong>P8.15</strong> — Tests :
-basculement workstation→investigation en &lt; 2s, plugin tourne en
-sandbox isolé sans accès FS root</label></li>
-</ul>
-<p><strong>Livrable P8 :</strong> Switch de profil en &lt; 2s. Plugin
-tiers sandboxé.</p>
-<hr />
-<h2 id="phase-9--dashboard-ui-s26s29">Phase 9 — Dashboard UI
-<code>S26–S29</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Interface web production-grade pour tous
-les workflows analyste.</p>
-</blockquote>
-<p><em>Dépend de : Phase 8 complète</em></p>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P9.01</strong> — Setup Vite
-+ React 18 + TypeScript + Tailwind + Zustand + React Router</label></li>
-<li><label><input type="checkbox" /><strong>P9.02</strong> — Génération
-client API TypeScript depuis OpenAPI
-(<code>openapi-typescript-codegen</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P9.03</strong> —
-<code>hooks/useWebSocket.ts</code> : connexion WS avec reconnexion
-automatique, dispatch vers stores</label></li>
-<li><label><input type="checkbox" /><strong>P9.04</strong> — Auth flow :
-page Login → <code>POST /auth/token</code> → store JWT → refresh
-automatique avant expiration</label></li>
-<li><label><input type="checkbox" /><strong>P9.05</strong> —
-<code>pages/Dashboard.tsx</code> : events/s temps réel, compteur alertes
-ouvertes, heatmap risque par entité</label></li>
-<li><label><input type="checkbox" /><strong>P9.06</strong> —
-<code>pages/Events.tsx</code> : timeline avec filtres avancés (category,
-severity, hostname, process, resource, plage de temps)</label></li>
-<li><label><input type="checkbox" /><strong>P9.07</strong> —
-<code>pages/Alerts.tsx</code> : queue alertes + workflow acknowledge /
-faux-positif / assign</label></li>
-<li><label><input type="checkbox" /><strong>P9.08</strong> —
-<code>pages/Decisions.tsx</code> : journal + cartes approbation humaine
-avec compte à rebours</label></li>
-<li><label><input type="checkbox" /><strong>P9.09</strong> —
-<code>pages/Cases.tsx</code> : liste, détail, vue timeline, formulaire
-ajout evidence, export</label></li>
-<li><label><input type="checkbox" /><strong>P9.10</strong> —
-<code>pages/Entities.tsx</code> : profils de risque, graphe d'évolution,
-arbre de processus</label></li>
-<li><label><input type="checkbox" /><strong>P9.11</strong> —
-<code>pages/Rules.tsx</code> : liste, éditeur YAML inline,
-enable/disable, stats FP</label></li>
-<li><label><input type="checkbox" /><strong>P9.12</strong> —
-<code>pages/NetworkGraph.tsx</code> : force-directed D3 des events
-corrélés (IncidentChain)</label></li>
-<li><label><input type="checkbox" /><strong>P9.13</strong> — Live
-updates WebSocket sur toutes les pages (alertes, decisions,
-events)</label></li>
-<li><label><input type="checkbox" /><strong>P9.14</strong> — Responsive
-design + dark mode</label></li>
-<li><label><input type="checkbox" /><strong>P9.15</strong> — Tests E2E
-Playwright : golden path dashboard, création case, approbation
-décision</label></li>
-</ul>
-<p><strong>Livrable P9 :</strong> Dashboard complet, toutes les pages
-fonctionnelles, mises à jour live.</p>
-<hr />
-<h2 id="phase-10--hardening--distribution-s30s33">Phase 10 — Hardening +
-Distribution <code>S30–S33</code></h2>
-<blockquote>
-<p><strong>Objectif :</strong> Production-grade, performance validée,
-packaging multi-OS.</p>
-</blockquote>
-<p><em>Dépend de : Phase 9 complète</em></p>
-<h3 id="101--action-isolate-réelle">10.1 — Action ISOLATE réelle</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P10.01</strong> — Agent
-Linux : <code>SIGSTOP</code> + freeze cgroup v2 + timer rollback
-configurable</label></li>
-<li><label><input type="checkbox" /><strong>P10.02</strong> — Agent
-Windows : <code>SuspendProcess</code> (Win32 API) + isolation réseau via
-Windows Firewall API</label></li>
-<li><label><input type="checkbox" /><strong>P10.03</strong> — Agent
-macOS : <code>SIGSTOP</code> + pf firewall rule push</label></li>
-<li><label><input type="checkbox" /><strong>P10.04</strong> — Tests :
-isolation effective + rollback automatique après timeout</label></li>
-</ul>
-<h3 id="102--drivers-windows-et-macos">10.2 — Drivers Windows et
-macOS</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P10.05</strong> —
-<code>platform/windows/driver.go</code> : <code>WindowsDriver</code> +
-<code>ETWCollector</code>, <code>WinLogCollector</code>,
-<code>RegistryCollector</code>, <code>WMICollector</code>,
-<code>SysmonCollector</code></label></li>
-<li><label><input type="checkbox" /><strong>P10.06</strong> —
-<code>platform/windows/etw/consumer.go</code> : provider
-Microsoft-Windows-Security-Auditing</label></li>
-<li><label><input type="checkbox" /><strong>P10.07</strong> —
-<code>platform/darwin/driver.go</code> : <code>DarwinDriver</code> +
-<code>EndpointSecurityCollector</code>, <code>FSEventsCollector</code>,
-<code>OpenBSMCollector</code>,
-<code>UnifiedLogCollector</code></label></li>
-<li><label><input type="checkbox" /><strong>P10.08</strong> — Adapters
-normalizer Windows (<code>etw</code>, <code>winlog_security</code>,
-<code>registry</code>, <code>wmi</code>,
-<code>sysmon</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P10.09</strong> — Adapters
-normalizer macOS (<code>endpoint_security</code>, <code>fsevents</code>,
-<code>openbsm</code>, <code>unified_log</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P10.10</strong> — Tests
-intégration : rules cross-OS déclenchées sur Windows +
-macOS</label></li>
-</ul>
-<h3 id="103--hardening-sécurité">10.3 — Hardening sécurité</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P10.11</strong> — mTLS
-enforced sur toute la communication agent↔︎server (vérification
-CN)</label></li>
-<li><label><input type="checkbox" /><strong>P10.12</strong> — TLS 1.3
-minimum sur API REST (rejet TLS &lt; 1.3)</label></li>
-<li><label><input type="checkbox" /><strong>P10.13</strong> — Rate
-limiting token bucket Redis (600 req/min JWT, 300 req/min API key) sur
-tous les endpoints</label></li>
-<li><label><input type="checkbox" /><strong>P10.14</strong> — Row-Level
-Security PostgreSQL : politique <code>org_isolation</code> sur toutes
-les tables + retrait <code>DEFAULT org_id</code></label></li>
-<li><label><input type="checkbox" /><strong>P10.15</strong> — Pentest
-OWASP Top 10 sur l'API REST OSEye (auto-pentest)</label></li>
-<li><label><input type="checkbox" /><strong>P10.16</strong> — Secrets
-Vault : intégration HashiCorp Vault pour clés JWT + mots de passe
-DB</label></li>
-</ul>
-<h3 id="104--performance">10.4 — Performance</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P10.17</strong> — Benchmark
-: validation &gt; 100 000 events/s (ClickHouse + pipeline
-complet)</label></li>
-<li><label><input type="checkbox" /><strong>P10.18</strong> — Mesure
-latence P50/P95/P99 event→alerte, validation P99 &lt; 500ms</label></li>
-<li><label><input type="checkbox" /><strong>P10.19</strong> — Profiling
-CPU agent Linux sous charge, optimisation &lt; 2% CPU</label></li>
-</ul>
-<h3 id="105--packaging-et-distribution">10.5 — Packaging et
-distribution</h3>
-<ul class="task-list">
-<li><label><input type="checkbox" /><strong>P10.20</strong> — Packages
-Linux : <code>.deb</code> + <code>.rpm</code> via FPM (agent +
-server)</label></li>
-<li><label><input type="checkbox" /><strong>P10.21</strong> — Installeur
-Windows : NSIS ou MSI (agent)</label></li>
-<li><label><input type="checkbox" /><strong>P10.22</strong> — Package
-macOS : <code>.pkg</code> signé (agent)</label></li>
-<li><label><input type="checkbox" /><strong>P10.23</strong> — Images
-Docker officielles multi-arch : <code>amd64</code> + <code>arm64</code>
-(agent + server + ui)</label></li>
-<li><label><input type="checkbox" /><strong>P10.24</strong> — Helm chart
-<code>oseye/</code> : values.yaml, DaemonSet agent, Deployments
-server/workers/ui, HPA, NetworkPolicy, cert-manager</label></li>
-<li><label><input type="checkbox" /><strong>P10.25</strong> — Playbook
-Ansible <code>infra/ansible/deploy.yml</code> : déploiement grande
-échelle sans K8s</label></li>
-<li><label><input type="checkbox" /><strong>P10.26</strong> —
-Documentation API : export OpenAPI + site Docusaurus
-(<code>docs/api/</code>)</label></li>
-<li><label><input type="checkbox" /><strong>P10.27</strong> —
-<code>CHANGELOG.md</code> + release GitHub Actions : tag → build → push
-images + packages</label></li>
-</ul>
-<p><strong>Livrable P10 :</strong> OSEye v1.0 distribuable sur
-Linux/Windows/macOS, &gt; 100k events/s validés, pentest passé.</p>
-<hr />
-<h2 id="récapitulatif">Récapitulatif</h2>
-<table>
-<thead>
-<tr class="header">
-<th>Phase</th>
-<th>Semaines</th>
-<th>Tâches</th>
-<th>Livrable clé</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>1 — Foundation</td>
-<td>S1–S3</td>
-<td>49</td>
-<td>Pipeline end-to-end, events en DB</td>
-</tr>
-<tr class="even">
-<td>2 — Full Collection</td>
-<td>S4–S6</td>
-<td>15</td>
-<td>9 collectors, agent résilient</td>
-</tr>
-<tr class="odd">
-<td>3 — Détection</td>
-<td>S7–S9</td>
-<td>15</td>
-<td>Alerte en &lt; 500ms sur attaque réelle</td>
-</tr>
-<tr class="even">
-<td>4 — Intelligence</td>
-<td>S10–S12</td>
-<td>17</td>
-<td>Corrélation incident multi-events</td>
-</tr>
-<tr class="odd">
-<td>5 — Decision Engine</td>
-<td>S13–S15</td>
-<td>13</td>
-<td>Décisions traçables, approbation humaine</td>
-</tr>
-<tr class="even">
-<td>6 — ML Engine</td>
-<td>S16–S19</td>
-<td>10</td>
-<td>Détection anomalies comportementales</td>
-</tr>
-<tr class="odd">
-<td>7 — Forensics</td>
-<td>S20–S22</td>
-<td>12</td>
-<td>Export PDF cas forensique</td>
-</tr>
-<tr class="even">
-<td>8 — Policy + SDK</td>
-<td>S23–S25</td>
-<td>15</td>
-<td>Hot-swap profils, plugins sandboxés</td>
-</tr>
-<tr class="odd">
-<td>9 — Dashboard UI</td>
-<td>S26–S29</td>
-<td>15</td>
-<td>Interface web complète</td>
-</tr>
-<tr class="even">
-<td>10 — Hardening</td>
-<td>S30–S33</td>
-<td>27</td>
-<td>v1.0 multi-OS, &gt; 100k evt/s, distribué</td>
-</tr>
-<tr class="odd">
-<td><strong>Total</strong></td>
-<td><strong>33 semaines</strong></td>
-<td><strong>188 tâches</strong></td>
-<td><strong>OSEye v1.0</strong></td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="ordre-de-démarrage-absolu-semaine-1">Ordre de démarrage absolu
-(semaine 1)</h2>
-<pre><code>Jour 1–2 : P1.01 → P1.11  (fichiers contrats + codegen proto)
+
+<div id="sidebar">
+  <div class="sidebar-brand">
+    <span class="logo-text">OSEye</span>
+    <span class="logo-badge">v1.0</span>
+  </div>
+    <ul>
+    <li><a href="#oseye-plan-daction-de-développement"
+    id="toc-oseye-plan-daction-de-développement">OSEye — Plan d’action
+    de développement</a>
+    <ul>
+    <li><a href="#lecture-du-plan" id="toc-lecture-du-plan">Lecture du
+    plan</a></li>
+    <li><a href="#phase-1-foundation-s1s3"
+    id="toc-phase-1-foundation-s1s3">Phase 1 — Foundation
+    <code>S1–S3</code></a>
+    <ul>
+    <li><a href="#fichiers-contrats-bloque-tout"
+    id="toc-fichiers-contrats-bloque-tout">1.0 — Fichiers contrats ⚠
+    (bloque tout)</a></li>
+    <li><a href="#infrastructure-monorepo"
+    id="toc-infrastructure-monorepo">1.1 — Infrastructure
+    monorepo</a></li>
+    <li><a href="#agent-go-linux-collecte-minimale"
+    id="toc-agent-go-linux-collecte-minimale">1.2 — Agent Go (Linux —
+    collecte minimale)</a></li>
+    <li><a href="#server-python-ingestion-normalisation"
+    id="toc-server-python-ingestion-normalisation">1.3 — Server Python
+    (ingestion + normalisation)</a></li>
+    <li><a href="#stockage" id="toc-stockage">1.4 — Stockage</a></li>
+    <li><a href="#api-rest-auth" id="toc-api-rest-auth">1.5 — API REST +
+    Auth</a></li>
+    <li><a href="#workers-dev-mode-monolithe"
+    id="toc-workers-dev-mode-monolithe">1.6 — Workers dev (mode
+    monolithe)</a></li>
+    <li><a href="#tests-phase-1" id="toc-tests-phase-1">1.7 — Tests
+    Phase 1</a></li>
+    </ul></li>
+    <li><a href="#phase-2-full-collection-s4s6"
+    id="toc-phase-2-full-collection-s4s6">Phase 2 — Full Collection
+    <code>S4–S6</code></a></li>
+    <li><a href="#phase-3-détection-s7s9"
+    id="toc-phase-3-détection-s7s9">Phase 3 — Détection
+    <code>S7–S9</code></a></li>
+    <li><a href="#phase-4-intelligence-s10s12"
+    id="toc-phase-4-intelligence-s10s12">Phase 4 — Intelligence
+    <code>S10–S12</code></a></li>
+    <li><a href="#phase-5-decision-engine-s13s15"
+    id="toc-phase-5-decision-engine-s13s15">Phase 5 — Decision Engine
+    <code>S13–S15</code></a></li>
+    <li><a href="#phase-6-ml-engine-s16s19"
+    id="toc-phase-6-ml-engine-s16s19">Phase 6 — ML Engine
+    <code>S16–S19</code></a></li>
+    <li><a href="#phase-7-forensics-s20s22"
+    id="toc-phase-7-forensics-s20s22">Phase 7 — Forensics
+    <code>S20–S22</code></a></li>
+    <li><a href="#phase-8-policy-engine-plugin-sdk-s23s25"
+    id="toc-phase-8-policy-engine-plugin-sdk-s23s25">Phase 8 — Policy
+    Engine + Plugin SDK <code>S23–S25</code></a></li>
+    <li><a href="#phase-9-dashboard-ui-s26s29"
+    id="toc-phase-9-dashboard-ui-s26s29">Phase 9 — Dashboard UI
+    <code>S26–S29</code></a></li>
+    <li><a href="#phase-10-hardening-distribution-s30s33"
+    id="toc-phase-10-hardening-distribution-s30s33">Phase 10 — Hardening
+    + Distribution <code>S30–S33</code></a>
+    <ul>
+    <li><a href="#action-isolate-réelle"
+    id="toc-action-isolate-réelle">10.1 — Action ISOLATE réelle</a></li>
+    <li><a href="#drivers-windows-et-macos"
+    id="toc-drivers-windows-et-macos">10.2 — Drivers Windows et
+    macOS</a></li>
+    <li><a href="#hardening-sécurité" id="toc-hardening-sécurité">10.3 —
+    Hardening sécurité</a></li>
+    <li><a href="#performance" id="toc-performance">10.4 —
+    Performance</a></li>
+    <li><a href="#packaging-et-distribution"
+    id="toc-packaging-et-distribution">10.5 — Packaging et
+    distribution</a></li>
+    </ul></li>
+    <li><a href="#récapitulatif"
+    id="toc-récapitulatif">Récapitulatif</a></li>
+    <li><a href="#ordre-de-démarrage-absolu-semaine-1"
+    id="toc-ordre-de-démarrage-absolu-semaine-1">Ordre de démarrage
+    absolu (semaine 1)</a></li>
+    </ul></li>
+    </ul>
+  </div>
+
+<div id="main">
+  <article id="article">
+    <h1 id="oseye-plan-daction-de-développement">OSEye — Plan d’action
+    de développement</h1>
+    <p><strong>Version:</strong> 1.0<br />
+    <strong>Date:</strong> 2026-07-28<br />
+    <strong>Basé sur:</strong> ARCHITECTURE.md v1.1<br />
+    <strong>Classification:</strong> Confidentiel — usage interne</p>
+    <hr />
+    <h2 id="lecture-du-plan">Lecture du plan</h2>
+    <p>Chaque tâche est identifiée par un code <code>Pn.m</code> (Phase
+    n, tâche m).<br />
+    <strong>Statuts :</strong> <code>[ ]</code> à faire ·
+    <code>[~]</code> en cours · <code>[x]</code> terminé<br />
+    <strong>Dépendances :</strong> une tâche ne commence pas tant que
+    ses dépendances ne sont pas <code>[x]</code>.<br />
+    <strong>Priorité critique</strong> : les tâches marquées ⚠ bloquent
+    tout le reste si non faites en premier.</p>
+    <hr />
+    <h2 id="phase-1-foundation-s1s3">Phase 1 — Foundation
+    <code>S1–S3</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Pipeline end-to-end fonctionnel :
+    agent → server → stockage → query API.</p>
+    </blockquote>
+    <h3 id="fichiers-contrats-bloque-tout">1.0 — Fichiers contrats ⚠
+    (bloque tout)</h3>
+    <p>Ces fichiers doivent être finalisés et reviewés <strong>avant
+    d’écrire le moindre code fonctionnel</strong>.</p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.01</strong> —
+    <code>proto/event.proto</code> : définir
+    <code>UniversalEventPB</code>, <code>IngestRequest</code>,
+    <code>IngestResponse</code>, service <code>AgentService</code>
+    (IngestEvents + ReceivePolicy + StreamCommands)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.02</strong> —
+    <code>server/oseye/core/schema.py</code> : modèles Pydantic
+    <code>UniversalEvent</code>, <code>Alert</code>,
+    <code>Decision</code>, <code>ForensicCase</code>, <code>Rule</code>,
+    <code>SurveillanceProfile</code>,
+    <code>EntityProfile</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.03</strong> —
+    <code>server/oseye/bus/interface.py</code> : Protocol
+    <code>EventBus</code> (publish, subscribe,
+    subscribe_pattern)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.04</strong> —
+    <code>agent/internal/platform/interface.go</code> : interface
+    <code>PlatformDriver</code> +
+    <code>PlatformCapabilities</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.05</strong> —
+    <code>agent/internal/platform/registry.go</code> : registre
+    auto-enregistrement</label></li>
+    <li><label><input type="checkbox" /><strong>P1.06</strong> —
+    <code>agent/internal/collector/interface.go</code> : interface
+    <code>Collector</code> + struct <code>RawEvent</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.07</strong> —
+    <code>server/oseye/storage/interface.py</code> : Protocols
+    <code>EventRepository</code>, <code>AlertRepository</code>,
+    <code>DecisionRepository</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.08</strong> —
+    <code>server/oseye/storage/router.py</code> :
+    <code>StorageRouter</code> (routage PG vs ClickHouse)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.09</strong> —
+    <code>server/oseye/config.py</code> : <code>Settings</code>
+    pydantic-settings, toutes les variables d’env</label></li>
+    <li><label><input type="checkbox" /><strong>P1.10</strong> —
+    <code>server/oseye/core/observability.py</code> : setup OTel +
+    logger JSON structuré</label></li>
+    <li><label><input type="checkbox" /><strong>P1.11</strong> — Codegen
+    Protobuf : <code>scripts/generate_proto.sh</code> (génère Go +
+    Python depuis <code>proto/</code>)</label></li>
+    </ul>
+    <h3 id="infrastructure-monorepo">1.1 — Infrastructure monorepo</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.12</strong> —
+    Scaffolding monorepo : <code>agent/</code>, <code>server/</code>,
+    <code>sdk/</code>, <code>ui/</code>, <code>proto/</code>,
+    <code>rules/</code>, <code>infra/</code>,
+    <code>scripts/</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.13</strong> —
+    <code>agent/go.mod</code> + <code>server/pyproject.toml</code> +
+    <code>ui/package.json</code> initialisés</label></li>
+    <li><label><input type="checkbox" /><strong>P1.14</strong> —
+    <code>.github/workflows/ci.yml</code> : lint + test + build, matrix
+    <code>GOOS: [linux, windows, darwin]</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.15</strong> —
+    <code>infra/docker/docker-compose.dev.yml</code> (Redis + PostgreSQL
+    + oseye-server + oseye-agent + oseye-ui)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.16</strong> —
+    <code>scripts/generate_certs.sh</code> : PKI dev (CA + server.crt +
+    agent.crt)</label></li>
+    </ul>
+    <h3 id="agent-go-linux-collecte-minimale">1.2 — Agent Go (Linux —
+    collecte minimale)</h3>
+    <p><em>Dépend de : P1.01–P1.06</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.17</strong> —
+    <code>platform/linux/driver.go</code> : <code>LinuxDriver</code>
+    implémentant <code>PlatformDriver</code>, <code>init()</code>
+    auto-register</label></li>
+    <li><label><input type="checkbox" /><strong>P1.18</strong> —
+    <code>platform/linux/ebpf/loader.go</code> + programmes C :
+    <code>execve.c</code>, <code>openat.c</code>,
+    <code>connect.c</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.19</strong> —
+    <code>platform/linux/auditd/</code> : collecteur auditd (parsing
+    <code>audit.log</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.20</strong> —
+    <code>platform/linux/procfs/</code> : collecteur procfs (scan
+    <code>/proc</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.21</strong> —
+    <code>internal/chain/hasher.go</code> : BLAKE3 hash chain
+    per-event</label></li>
+    <li><label><input type="checkbox" /><strong>P1.22</strong> —
+    <code>internal/buffer/sqlite_buffer.go</code> : queue offline SQLite
+    avec cursor <code>last_sent_id</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.23</strong> —
+    <code>internal/transport/grpc_client.go</code> : streaming gRPC +
+    reconnexion automatique + backpressure</label></li>
+    <li><label><input type="checkbox" /><strong>P1.24</strong> —
+    <code>internal/signer/ed25519.go</code> : signature de batch (toutes
+    les 1000 events ou 1s)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.25</strong> —
+    <code>cmd/oseye-agent/main.go</code> : bootstrap —
+    <code>platform.Resolve()</code> → <code>CollectorManager</code> →
+    pipeline</label></li>
+    </ul>
+    <h3 id="server-python-ingestion-normalisation">1.3 — Server Python
+    (ingestion + normalisation)</h3>
+    <p><em>Dépend de : P1.01–P1.11</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.26</strong> —
+    <code>bus/memory.py</code> : <code>InMemoryBus</code> (tests
+    unitaires)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.27</strong> —
+    <code>bus/redis_streams.py</code> : <code>RedisBus</code>
+    (multi-process dev)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.28</strong> —
+    <code>ingest/grpc_service.py</code> : réception gRPC, vérification
+    CN mTLS = agent_id, validation signature batch</label></li>
+    <li><label><input type="checkbox" /><strong>P1.29</strong> —
+    <code>ingest/validator.py</code> : vérification hash chain +
+    signature Ed25519</label></li>
+    <li><label><input type="checkbox" /><strong>P1.30</strong> —
+    <code>normalizer/engine.py</code> : <code>NormalizerEngine</code> +
+    dispatch par <code>raw.OS</code> +
+    <code>raw.source</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.31</strong> —
+    <code>normalizer/adapters/linux/ebpf.py</code> +
+    <code>auditd.py</code> + <code>procfs.py</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.32</strong> —
+    <code>normalizer/secret_masker.py</code> : regex masking credentials
+    dans cmdline/resource</label></li>
+    </ul>
+    <h3 id="stockage">1.4 — Stockage</h3>
+    <p><em>Dépend de : P1.07, P1.08, P1.09</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.33</strong> — Alembic
+    init + migration V001 : toutes les tables PostgreSQL (events,
+    alerts, decisions, forensic_cases, agents, rules, entity_profiles,
+    ti_cache_ip, ti_cache_hash, ti_ioc_feed, api_audit_log,
+    organizations, rule_versions, dlq_entries)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.34</strong> —
+    <code>storage/backends/postgresql.py</code> : implémente les
+    Protocols Repository</label></li>
+    <li><label><input type="checkbox" /><strong>P1.35</strong> —
+    <code>storage/backends/sqlite.py</code> : même interface,
+    substitutions de types</label></li>
+    <li><label><input type="checkbox" /><strong>P1.36</strong> —
+    <code>storage/repositories/event_repo.py</code> :
+    <code>insert_batch</code>, <code>get</code>, <code>query</code> avec
+    filtres</label></li>
+    </ul>
+    <h3 id="api-rest-auth">1.5 — API REST + Auth</h3>
+    <p><em>Dépend de : P1.33–P1.36</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.37</strong> —
+    <code>api/auth/jwt.py</code> : issue/verify/refresh JWT
+    RS256</label></li>
+    <li><label><input type="checkbox" /><strong>P1.38</strong> —
+    <code>api/auth/rbac.py</code> : dépendances FastAPI pour les 4 rôles
+    (reader, analyst, senior_analyst, admin)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.39</strong> —
+    <code>api/routers/events.py</code> : <code>GET /events</code>,
+    <code>GET /events/{id}</code>,
+    <code>GET /events/stats</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.40</strong> —
+    <code>api/routers/auth.py</code> : <code>POST /auth/token</code>,
+    <code>/refresh</code>, <code>/logout</code>,
+    <code>/me</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.41</strong> —
+    <code>api/routers/health.py</code> : <code>GET /health</code>,
+    <code>GET /health/detailed</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.42</strong> —
+    <code>api/ws/manager.py</code> : <code>WebSocketManager</code> +
+    endpoint <code>WS /ws/events</code></label></li>
+    <li><label><input type="checkbox" /><strong>P1.43</strong> —
+    <code>audit/middleware.py</code> : FastAPI middleware loggant chaque
+    requête dans <code>api_audit_log</code></label></li>
+    </ul>
+    <h3 id="workers-dev-mode-monolithe">1.6 — Workers dev (mode
+    monolithe)</h3>
+    <p><em>Dépend de : P1.26–P1.32, P1.33–P1.36</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.44</strong> —
+    <code>workers/</code> : stubs des 5 workers +
+    <code>core/runner.py</code> mode monolithe
+    (<code>asyncio.gather</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.45</strong> —
+    <code>workers/storage_writer.py</code> : consomme
+    <code>events:normalized</code>, appelle
+    <code>StorageRouter.insert_events</code></label></li>
+    </ul>
+    <h3 id="tests-phase-1">1.7 — Tests Phase 1</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P1.46</strong> — Tests
+    unitaires : hash chain BLAKE3, signature Ed25519, buffer SQLite
+    (Go)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.47</strong> — Tests
+    unitaires : NormalizerEngine, adapters eBPF + auditd
+    (Python)</label></li>
+    <li><label><input type="checkbox" /><strong>P1.48</strong> — Test
+    d’intégration : agent → server gRPC → normalizer → PostgreSQL →
+    <code>GET /events</code> retourne l’event</label></li>
+    <li><label><input type="checkbox" /><strong>P1.49</strong> — Test
+    WebSocket : event inséré → reçu sur <code>WS /ws/events</code> en
+    &lt; 1s</label></li>
+    </ul>
+    <p><strong>Livrable P1 :</strong> Events réels de la machine hôte
+    visibles en DB et streamés via WebSocket.</p>
+    <hr />
+    <h2 id="phase-2-full-collection-s4s6">Phase 2 — Full Collection
+    <code>S4–S6</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> 9 collectors Linux opérationnels.
+    Agent robuste face aux pannes réseau.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 1 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P2.01</strong> —
+    <code>platform/linux/fanotify/</code> : collecteur fanotify (accès
+    fichiers système)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.02</strong> —
+    <code>platform/linux/inotify/</code> : collecteur inotify (watch
+    paths configurables)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.03</strong> —
+    <code>platform/linux/netlink/</code> : collecteur netlink
+    (connexions réseau kernel)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.04</strong> —
+    <code>platform/linux/journald/</code> : collecteur journald (systemd
+    logs)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.05</strong> —
+    <code>platform/linux/udev/</code> : collecteur udev (events
+    devices)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.06</strong> —
+    <code>platform/linux/syslog/</code> : collecteur syslog
+    (<code>/dev/log</code> ou UDP 514)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.07</strong> —
+    Adapters normalizer correspondants : fanotify, inotify, netlink,
+    journald, udev, syslog</label></li>
+    <li><label><input type="checkbox" /><strong>P2.08</strong> —
+    <code>internal/watchdog/resource.go</code> : CPU/mem
+    self-monitoring, throttle adaptatif si CPU &gt;4%</label></li>
+    <li><label><input type="checkbox" /><strong>P2.09</strong> —
+    <code>ingest/backpressure.py</code> :
+    <code>BackpressureController</code> — calcule facteur throttle
+    depuis lag bus, push aux agents via <code>StreamCommands</code> gRPC
+    toutes les 10s</label></li>
+    <li><label><input type="checkbox" /><strong>P2.10</strong> — Buffer
+    offline : replay automatique depuis <code>last_sent_id</code> après
+    reconnexion + cleanup post-ACK</label></li>
+    <li><label><input type="checkbox" /><strong>P2.11</strong> —
+    <code>api/routers/agents.py</code> : <code>GET /agents</code>,
+    <code>GET /agents/{id}</code>, <code>GET /agents/{id}/status</code>,
+    <code>POST /agents/enroll</code>,
+    <code>POST /agents/{id}/renew-cert</code></label></li>
+    <li><label><input type="checkbox" /><strong>P2.12</strong> —
+    <code>scripts/generate_certs.sh</code> : enrollment OTP agent
+    (génère OTP, valide CSR, signe avec intermediate CA)</label></li>
+    <li><label><input type="checkbox" /><strong>P2.13</strong> —
+    DaemonSet K8s dev : déploiement sur cluster de test
+    local</label></li>
+    <li><label><input type="checkbox" /><strong>P2.14</strong> — Tests :
+    mocks kernel pour chacun des 6 nouveaux collectors, couverture &gt;
+    80%</label></li>
+    <li><label><input type="checkbox" /><strong>P2.15</strong> — Test de
+    résilience : déconnexion réseau 60s → reconnexion → vérifier replay
+    sans perte d’events</label></li>
+    </ul>
+    <p><strong>Livrable P2 :</strong> 9 collectors actifs. L’agent
+    survit à 60s de coupure réseau et rejoue les events bufferisés.</p>
+    <hr />
+    <h2 id="phase-3-détection-s7s9">Phase 3 — Détection
+    <code>S7–S9</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Règles déclenchées, alertes créées,
+    visibles par les analystes.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 2 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P3.01</strong> —
+    <code>rule_engine/parser.py</code> : lecture YAML/TOML depuis
+    <code>rules/builtin/</code> et
+    <code>rules/custom/</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.02</strong> —
+    <code>rule_engine/evaluator.py</code> : évaluateur
+    <code>asteval</code> — comparaisons, chaînes, regex,
+    <code>in</code>, booléens</label></li>
+    <li><label><input type="checkbox" /><strong>P3.03</strong> —
+    <code>rule_engine/evaluator.py</code> : support
+    <code>count_events(filter, seconds)</code> avec fenêtres temporelles
+    en mémoire</label></li>
+    <li><label><input type="checkbox" /><strong>P3.04</strong> —
+    <code>rule_engine/engine.py</code> :
+    <code>RuleEngine.evaluate()</code> + hot-reload via watchdog
+    fichiers</label></li>
+    <li><label><input type="checkbox" /><strong>P3.05</strong> —
+    <code>workers/rule_worker.py</code> : consomme
+    <code>events:normalized</code>, publie
+    <code>analysis:rules:{host}</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.06</strong> —
+    <code>storage/repositories/alert_repo.py</code> : CRUD
+    alertes</label></li>
+    <li><label><input type="checkbox" /><strong>P3.07</strong> — Ruleset
+    intégré : 30+ règles YAML dans <code>rules/builtin/</code> couvrant
+    les techniques MITRE principales</label></li>
+    </ul>
+    <table>
+    <colgroup>
+    <col style="width: 42%" />
+    <col style="width: 57%" />
+    </colgroup>
+    <thead>
+    <tr class="header">
+    <th>Catégorie</th>
+    <th>Règles minimum</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr class="odd">
+    <td>Credential access</td>
+    <td>shadow_read, passwd_write, ssh_key_theft, dumping_memory</td>
+    </tr>
+    <tr class="even">
+    <td>Privilege escalation</td>
+    <td>suid_execution, sudo_abuse, capabilities_add, ptrace_inject</td>
+    </tr>
+    <tr class="odd">
+    <td>Persistence</td>
+    <td>crontab_write, rc_local_modify, systemd_unit_new,
+    bashrc_write</td>
+    </tr>
+    <tr class="even">
+    <td>Defense evasion</td>
+    <td>log_delete, history_clear, binary_rename, timestamp_tamper</td>
+    </tr>
+    <tr class="odd">
+    <td>Lateral movement</td>
+    <td>ssh_new_host, scp_exfil, port_scan_internal</td>
+    </tr>
+    <tr class="even">
+    <td>Discovery</td>
+    <td>whoami_burst, network_scan, shadow_read_burst</td>
+    </tr>
+    <tr class="odd">
+    <td>C2 / Exfiltration</td>
+    <td>dns_burst, large_upload, reverse_shell_port</td>
+    </tr>
+    <tr class="even">
+    <td>Ransomware</td>
+    <td>mass_rename_extension, mass_encryption_pattern</td>
+    </tr>
+    <tr class="odd">
+    <td>Windows</td>
+    <td>registry_run_key, lsass_access, wmi_exec,
+    powershell_encoded</td>
+    </tr>
+    <tr class="even">
+    <td>macOS</td>
+    <td>launchd_new, tcc_bypass, dylib_hijack</td>
+    </tr>
+    </tbody>
+    </table>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P3.08</strong> —
+    Condition <code>event.platform</code> dans l’évaluateur : règles
+    cross-OS fonctionnelles</label></li>
+    <li><label><input type="checkbox" /><strong>P3.09</strong> —
+    <code>api/routers/alerts.py</code> : <code>GET /alerts</code>,
+    <code>GET /alerts/{id}</code>, <code>PATCH</code>,
+    <code>POST .../acknowledge</code>,
+    <code>POST .../false-positive</code>,
+    <code>GET /alerts/stats</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.10</strong> —
+    <code>api/routers/rules.py</code> : CRUD complet +
+    <code>POST /rules/validate</code> +
+    <code>POST /rules/reload</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.11</strong> —
+    <code>api/ws/manager.py</code> : broadcast sur
+    <code>WS /ws/alerts</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.12</strong> —
+    <code>api/auth/api_keys.py</code> : génération / révocation clés
+    API, header <code>X-API-Key</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.13</strong> — RBAC
+    enforced sur tous les endpoints existants</label></li>
+    <li><label><input type="checkbox" /><strong>P3.14</strong> — Boucle
+    feedback faux positifs → <code>rules.false_positive_count</code>
+    incrémenté + log <code>rule_versions</code></label></li>
+    <li><label><input type="checkbox" /><strong>P3.15</strong> — Tests :
+    évaluateur (30+ cas de conditions), fenêtres temporelles, toutes les
+    règles builtin</label></li>
+    </ul>
+    <p><strong>Livrable P3 :</strong> <code>chmod 777 /etc/shadow</code>
+    sur un hôte surveillé → alerte visible sur l’API en &lt; 500ms.</p>
+    <hr />
+    <h2 id="phase-4-intelligence-s10s12">Phase 4 — Intelligence
+    <code>S10–S12</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Events enrichis TI, chaînes de
+    corrélation reconstruites.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 3 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P4.01</strong> —
+    <code>threat_intel/providers/abuseipdb.py</code> +
+    <code>virustotal.py</code> : enrichissement IP et hash</label></li>
+    <li><label><input type="checkbox" /><strong>P4.02</strong> —
+    <code>threat_intel/cache.py</code> : cache Redis (TTL 1h IP, 24h
+    hash, 6h IOC)</label></li>
+    <li><label><input type="checkbox" /><strong>P4.03</strong> —
+    <code>threat_intel/providers/stix_taxii.py</code> : ingestion feeds
+    STIX/TAXII publics</label></li>
+    <li><label><input type="checkbox" /><strong>P4.04</strong> —
+    <code>threat_intel/providers/misp.py</code> : intégration
+    MISP</label></li>
+    <li><label><input type="checkbox" /><strong>P4.05</strong> —
+    <code>threat_intel/scheduler.py</code> : refresh périodique des
+    feeds IOC</label></li>
+    <li><label><input type="checkbox" /><strong>P4.06</strong> —
+    <code>workers/ti_worker.py</code> : consomme
+    <code>events:normalized</code>, publie
+    <code>events:enriched</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.07</strong> — Circuit
+    breaker sur chaque provider TI (pybreaker) avec fallback
+    <code>ti_tags=["provider:unavailable"]</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.08</strong> —
+    <code>correlation/graph.py</code> : <code>EventGraph</code>
+    rustworkx DiGraph (noeuds=events, arêtes typées)</label></li>
+    <li><label><input type="checkbox" /><strong>P4.09</strong> —
+    <code>correlation/linkers/pid_ppid.py</code> +
+    <code>resource.py</code> + <code>user.py</code> +
+    <code>temporal.py</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.10</strong> —
+    <code>correlation/engine.py</code> : appel des linkers à chaque
+    event enrichi</label></li>
+    <li><label><input type="checkbox" /><strong>P4.11</strong> —
+    <code>correlation/chain_builder.py</code> : extraction
+    <code>IncidentChain</code> depuis sous-graphe connexe</label></li>
+    <li><label><input type="checkbox" /><strong>P4.12</strong> —
+    <code>workers/correlation_worker.py</code> : publie
+    <code>analysis:correlated</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.13</strong> —
+    <code>storage/repositories/entity_repo.py</code> : CRUD
+    <code>EntityProfile</code> + mise à jour
+    <code>risk_score</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.14</strong> —
+    <code>api/routers/events.py</code> :
+    <code>GET /events/{id}/chain</code> +
+    <code>GET /events/{id}/context</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.15</strong> —
+    <code>api/routers/entities.py</code> : tous les endpoints (liste,
+    détail, events, alerts, risk history, whitelist)</label></li>
+    <li><label><input type="checkbox" /><strong>P4.16</strong> — DLQ :
+    table <code>dlq_entries</code> + topic <code>events:dlq:*</code> +
+    <code>GET /health/dlq</code></label></li>
+    <li><label><input type="checkbox" /><strong>P4.17</strong> — Tests
+    d’intégration : scénario SSH login → sudo → exfiltration → vérifier
+    IncidentChain</label></li>
+    </ul>
+    <p><strong>Livrable P4 :</strong> Séquence SSH → sudo → exfil
+    reconstruite comme incident unique corrélé.</p>
+    <hr />
+    <h2 id="phase-5-decision-engine-s13s15">Phase 5 — Decision Engine
+    <code>S13–S15</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Décisions autonomes tracées, queue
+    approbation humaine fonctionnelle.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 4 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P5.01</strong> —
+    <code>decision/weighted_scorer.py</code> : agrégation
+    <code>(rule×0.4) + (ml×0.3) + (ti×0.2) + (correlation×0.1)</code></label></li>
+    <li><label><input type="checkbox" /><strong>P5.02</strong> —
+    <code>decision/risk_matrix.py</code> : mapping score →
+    <code>decision_type</code> (IGNORE / ESCALATE / ALERT+INVESTIGATE /
+    ALERT+ISOLATE / +REQUEST_HUMAN)</label></li>
+    <li><label><input type="checkbox" /><strong>P5.03</strong> —
+    <code>decision/journal.py</code> : append-only, BLAKE3 hash chain,
+    signé Ed25519 server key</label></li>
+    <li><label><input type="checkbox" /><strong>P5.04</strong> —
+    <code>decision/engine.py</code> : orchestration — scorer → matrix →
+    policy overrides → journal → publish</label></li>
+    <li><label><input type="checkbox" /><strong>P5.05</strong> —
+    <code>decision/human_queue.py</code> : queue approbation + handler
+    timeout (décision auto à expiration)</label></li>
+    <li><label><input type="checkbox" /><strong>P5.06</strong> —
+    <code>decision/action_executor.py</code> : ALERT (déjà fait), NOTIFY
+    (webhook), ESCALATE (email/slack), COLLECT_MORE (push profil
+    investigation), ISOLATE (stub — log uniquement en P5)</label></li>
+    <li><label><input type="checkbox" /><strong>P5.07</strong> —
+    <code>workers/decision_worker.py</code> : consomme
+    <code>analysis:correlated</code>, publie
+    <code>decisions:completed</code> +
+    <code>decisions:pending</code></label></li>
+    <li><label><input type="checkbox" /><strong>P5.08</strong> —
+    <code>api/routers/decisions.py</code> : tous les endpoints (liste,
+    détail, pending, approve, reject,
+    <code>GET /decisions/journal/verify</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P5.09</strong> —
+    <code>api/ws/manager.py</code> : broadcast
+    <code>WS /ws/decisions</code></label></li>
+    <li><label><input type="checkbox" /><strong>P5.10</strong> —
+    Webhooks sortants : <code>POST /webhooks</code>, livraison
+    HMAC-SHA256, retry exponentiel 5x</label></li>
+    <li><label><input type="checkbox" /><strong>P5.11</strong> — Trigger
+    PostgreSQL <code>prevent_decision_update</code> : immuabilité des
+    champs core</label></li>
+    <li><label><input type="checkbox" /><strong>P5.12</strong> —
+    <code>core/lifecycle.py</code> : <code>GracefulWorker</code> —
+    SIGTERM → drain → flush → commit offsets → exit 0</label></li>
+    <li><label><input type="checkbox" /><strong>P5.13</strong> — Tests :
+    &gt; 100 scénarios de décisions avec résultats attendus, précision
+    &gt; 95%, vérification intégrité journal</label></li>
+    </ul>
+    <p><strong>Livrable P5 :</strong> Décisions justifiées avec
+    traçabilité complète. Humain peut approuver/rejeter ISOLATE.</p>
+    <hr />
+    <h2 id="phase-6-ml-engine-s16s19">Phase 6 — ML Engine
+    <code>S16–S19</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Baseline comportementale, scores
+    d’anomalie augmentant la détection rule-based.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 5 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P6.01</strong> —
+    <code>ml_engine/feature_extractor.py</code> :
+    <code>EntityFeatureVector</code> depuis
+    <code>entity_hourly_stats</code> ClickHouse</label></li>
+    <li><label><input type="checkbox" /><strong>P6.02</strong> —
+    <code>ml_engine/baseline.py</code> : <code>IsolationForest</code>
+    River (online learning), une instance par
+    <code>entity_id</code></label></li>
+    <li><label><input type="checkbox" /><strong>P6.03</strong> —
+    <code>ml_engine/scorer.py</code> : <code>BehavioralScorer</code> →
+    <code>ml_score ∈ [0, 100]</code></label></li>
+    <li><label><input type="checkbox" /><strong>P6.04</strong> —
+    <code>ml_engine/mitre_classifier.py</code> : classifier
+    scikit-learn, dataset labellisé MITRE ATT&amp;CK</label></li>
+    <li><label><input type="checkbox" /><strong>P6.05</strong> —
+    <code>ml_engine/model_store.py</code> : versioning + persistance
+    modèles, checkpoint toutes les 15 min</label></li>
+    <li><label><input type="checkbox" /><strong>P6.06</strong> —
+    <code>workers/ml_worker.py</code> : consomme
+    <code>events:normalized</code>, publie <code>analysis:ml</code>,
+    checkpoint automatique</label></li>
+    <li><label><input type="checkbox" /><strong>P6.07</strong> —
+    Intégration score ML dans
+    <code>DecisionEngine.WeightedScorer</code></label></li>
+    <li><label><input type="checkbox" /><strong>P6.08</strong> —
+    Framework A/B test : déploiement parallèle nouveau modèle vs. modèle
+    courant, comparaison métriques</label></li>
+    <li><label><input type="checkbox" /><strong>P6.09</strong> — Vue
+    matérialisée ClickHouse <code>entity_hourly_stats</code> : features
+    ML pré-calculées</label></li>
+    <li><label><input type="checkbox" /><strong>P6.10</strong> — Tests :
+    FP rate &lt; 5% sur workloads propres, recall &gt; 80% sur scénarios
+    d’attaque de référence</label></li>
+    </ul>
+    <p><strong>Livrable P6 :</strong> Exfiltration lente via DNS (non
+    couverte par règles) → alerte ML.</p>
+    <hr />
+    <h2 id="phase-7-forensics-s20s22">Phase 7 — Forensics
+    <code>S20–S22</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Gestion de cas complète, exports
+    légalement admissibles.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 6 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P7.01</strong> — Agent :
+    <code>snapshot.go</code> — capture <code>procfs</code> +
+    <code>netlink</code> → sérialise état complet processus +
+    connexions</label></li>
+    <li><label><input type="checkbox" /><strong>P7.02</strong> — Agent :
+    gRPC endpoint <code>TakeSnapshot</code> dans
+    <code>AgentService</code></label></li>
+    <li><label><input type="checkbox" /><strong>P7.03</strong> —
+    <code>forensic/snapshot.py</code> : <code>POST /snapshots</code> +
+    diff entre deux snapshots</label></li>
+    <li><label><input type="checkbox" /><strong>P7.04</strong> —
+    <code>forensic/case_manager.py</code> : CRUD
+    <code>ForensicCase</code> + custody log append-only</label></li>
+    <li><label><input type="checkbox" /><strong>P7.05</strong> —
+    <code>forensic/timeline.py</code> : reconstruction chronologique
+    triée par <code>timestamp_ns</code></label></li>
+    <li><label><input type="checkbox" /><strong>P7.06</strong> —
+    <code>forensic/exporter/json_export.py</code> +
+    <code>html_report.py</code> + <code>pdf_report.py</code> (via
+    WeasyPrint)</label></li>
+    <li><label><input type="checkbox" /><strong>P7.07</strong> —
+    <code>forensic/exporter/misp_export.py</code> : création event MISP
+    depuis case</label></li>
+    <li><label><input type="checkbox" /><strong>P7.08</strong> —
+    <code>forensic/exporter/thehive_export.py</code> : création case
+    TheHive depuis case OSEye</label></li>
+    <li><label><input type="checkbox" /><strong>P7.09</strong> —
+    <code>api/routers/cases.py</code> : tous les endpoints (CRUD,
+    events, alerts, notes, evidence, timeline, export,
+    custody)</label></li>
+    <li><label><input type="checkbox" /><strong>P7.10</strong> —
+    <code>api/routers/snapshots.py</code> : POST, GET, diff</label></li>
+    <li><label><input type="checkbox" /><strong>P7.11</strong> — Trigger
+    PostgreSQL <code>prevent_custody_update</code> : immuabilité du
+    custody log</label></li>
+    <li><label><input type="checkbox" /><strong>P7.12</strong> — Tests :
+    immuabilité custody log, export PDF généré et lisible, diff snapshot
+    détecte un nouveau processus</label></li>
+    </ul>
+    <p><strong>Livrable P7 :</strong> Analyste ouvre un cas, annote,
+    exporte un rapport PDF défendable.</p>
+    <hr />
+    <h2 id="phase-8-policy-engine-plugin-sdk-s23s25">Phase 8 — Policy
+    Engine + Plugin SDK <code>S23–S25</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Profils de surveillance hot-swap,
+    écosystème de plugins extensible.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 7 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P8.01</strong> —
+    <code>policy/schema.py</code> : <code>SurveillanceProfile</code> +
+    <code>CollectorConfig</code> (avec champ
+    <code>platforms</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P8.02</strong> —
+    <code>policy/engine.py</code> : chargement des 6 profils YAML
+    intégrés + validation</label></li>
+    <li><label><input type="checkbox" /><strong>P8.03</strong> —
+    <code>policy/engine.py</code> : push vers agents via
+    <code>policy:push:{agent_id}</code> bus → gRPC
+    <code>ReceivePolicy</code></label></li>
+    <li><label><input type="checkbox" /><strong>P8.04</strong> — Agent :
+    <code>policy/receiver.go</code> — reçoit
+    <code>SurveillanceProfile</code>, filtre les collectors non
+    disponibles sur cet OS, active/désactive en &lt; 2s</label></li>
+    <li><label><input type="checkbox" /><strong>P8.05</strong> —
+    <code>api/routers/policies.py</code> : CRUD profils +
+    <code>POST .../apply</code></label></li>
+    <li><label><input type="checkbox" /><strong>P8.06</strong> —
+    <code>sdk/oseye_sdk/plugin.py</code> : classes de base
+    <code>Plugin</code>, <code>CollectorPlugin</code>,
+    <code>AnalyzerPlugin</code>,
+    <code>ExporterPlugin</code></label></li>
+    <li><label><input type="checkbox" /><strong>P8.07</strong> —
+    <code>sdk/oseye_sdk/event.py</code> : modèle <code>Event</code>
+    exposé aux plugins (sous-ensemble de
+    <code>UniversalEvent</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P8.08</strong> —
+    <code>sdk/oseye_sdk/ipc.py</code> : communication IPC plugin ↔︎
+    server (Unix socket)</label></li>
+    <li><label><input type="checkbox" /><strong>P8.09</strong> —
+    <code>plugin/verifier.py</code> : vérification signature Ed25519 du
+    package plugin</label></li>
+    <li><label><input type="checkbox" /><strong>P8.10</strong> —
+    <code>plugin/sandbox.py</code> : isolation <code>subprocess</code> +
+    cgroups v2 (CPU/mem limits)</label></li>
+    <li><label><input type="checkbox" /><strong>P8.11</strong> —
+    <code>plugin/manager.py</code> : load/unload plugins,
+    lifecycle</label></li>
+    <li><label><input type="checkbox" /><strong>P8.12</strong> —
+    <code>api/routers/plugins.py</code> : install, enable, disable,
+    delete</label></li>
+    <li><label><input type="checkbox" /><strong>P8.13</strong> — Plugins
+    exemple : <code>notifier_pagerduty</code>,
+    <code>exporter_s3</code></label></li>
+    <li><label><input type="checkbox" /><strong>P8.14</strong> —
+    Publication SDK sur PyPI (ou registry privé)</label></li>
+    <li><label><input type="checkbox" /><strong>P8.15</strong> — Tests :
+    basculement workstation→investigation en &lt; 2s, plugin tourne en
+    sandbox isolé sans accès FS root</label></li>
+    </ul>
+    <p><strong>Livrable P8 :</strong> Switch de profil en &lt; 2s.
+    Plugin tiers sandboxé.</p>
+    <hr />
+    <h2 id="phase-9-dashboard-ui-s26s29">Phase 9 — Dashboard UI
+    <code>S26–S29</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Interface web production-grade pour
+    tous les workflows analyste.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 8 complète</em></p>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P9.01</strong> — Setup
+    Vite + React 18 + TypeScript + Tailwind + Zustand + React
+    Router</label></li>
+    <li><label><input type="checkbox" /><strong>P9.02</strong> —
+    Génération client API TypeScript depuis OpenAPI
+    (<code>openapi-typescript-codegen</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P9.03</strong> —
+    <code>hooks/useWebSocket.ts</code> : connexion WS avec reconnexion
+    automatique, dispatch vers stores</label></li>
+    <li><label><input type="checkbox" /><strong>P9.04</strong> — Auth
+    flow : page Login → <code>POST /auth/token</code> → store JWT →
+    refresh automatique avant expiration</label></li>
+    <li><label><input type="checkbox" /><strong>P9.05</strong> —
+    <code>pages/Dashboard.tsx</code> : events/s temps réel, compteur
+    alertes ouvertes, heatmap risque par entité</label></li>
+    <li><label><input type="checkbox" /><strong>P9.06</strong> —
+    <code>pages/Events.tsx</code> : timeline avec filtres avancés
+    (category, severity, hostname, process, resource, plage de
+    temps)</label></li>
+    <li><label><input type="checkbox" /><strong>P9.07</strong> —
+    <code>pages/Alerts.tsx</code> : queue alertes + workflow acknowledge
+    / faux-positif / assign</label></li>
+    <li><label><input type="checkbox" /><strong>P9.08</strong> —
+    <code>pages/Decisions.tsx</code> : journal + cartes approbation
+    humaine avec compte à rebours</label></li>
+    <li><label><input type="checkbox" /><strong>P9.09</strong> —
+    <code>pages/Cases.tsx</code> : liste, détail, vue timeline,
+    formulaire ajout evidence, export</label></li>
+    <li><label><input type="checkbox" /><strong>P9.10</strong> —
+    <code>pages/Entities.tsx</code> : profils de risque, graphe
+    d’évolution, arbre de processus</label></li>
+    <li><label><input type="checkbox" /><strong>P9.11</strong> —
+    <code>pages/Rules.tsx</code> : liste, éditeur YAML inline,
+    enable/disable, stats FP</label></li>
+    <li><label><input type="checkbox" /><strong>P9.12</strong> —
+    <code>pages/NetworkGraph.tsx</code> : force-directed D3 des events
+    corrélés (IncidentChain)</label></li>
+    <li><label><input type="checkbox" /><strong>P9.13</strong> — Live
+    updates WebSocket sur toutes les pages (alertes, decisions,
+    events)</label></li>
+    <li><label><input type="checkbox" /><strong>P9.14</strong> —
+    Responsive design + dark mode</label></li>
+    <li><label><input type="checkbox" /><strong>P9.15</strong> — Tests
+    E2E Playwright : golden path dashboard, création case, approbation
+    décision</label></li>
+    </ul>
+    <p><strong>Livrable P9 :</strong> Dashboard complet, toutes les
+    pages fonctionnelles, mises à jour live.</p>
+    <hr />
+    <h2 id="phase-10-hardening-distribution-s30s33">Phase 10 — Hardening
+    + Distribution <code>S30–S33</code></h2>
+    <blockquote>
+    <p><strong>Objectif :</strong> Production-grade, performance
+    validée, packaging multi-OS.</p>
+    </blockquote>
+    <p><em>Dépend de : Phase 9 complète</em></p>
+    <h3 id="action-isolate-réelle">10.1 — Action ISOLATE réelle</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P10.01</strong> — Agent
+    Linux : <code>SIGSTOP</code> + freeze cgroup v2 + timer rollback
+    configurable</label></li>
+    <li><label><input type="checkbox" /><strong>P10.02</strong> — Agent
+    Windows : <code>SuspendProcess</code> (Win32 API) + isolation réseau
+    via Windows Firewall API</label></li>
+    <li><label><input type="checkbox" /><strong>P10.03</strong> — Agent
+    macOS : <code>SIGSTOP</code> + pf firewall rule push</label></li>
+    <li><label><input type="checkbox" /><strong>P10.04</strong> — Tests
+    : isolation effective + rollback automatique après
+    timeout</label></li>
+    </ul>
+    <h3 id="drivers-windows-et-macos">10.2 — Drivers Windows et
+    macOS</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P10.05</strong> —
+    <code>platform/windows/driver.go</code> : <code>WindowsDriver</code>
+    + <code>ETWCollector</code>, <code>WinLogCollector</code>,
+    <code>RegistryCollector</code>, <code>WMICollector</code>,
+    <code>SysmonCollector</code></label></li>
+    <li><label><input type="checkbox" /><strong>P10.06</strong> —
+    <code>platform/windows/etw/consumer.go</code> : provider
+    Microsoft-Windows-Security-Auditing</label></li>
+    <li><label><input type="checkbox" /><strong>P10.07</strong> —
+    <code>platform/darwin/driver.go</code> : <code>DarwinDriver</code> +
+    <code>EndpointSecurityCollector</code>,
+    <code>FSEventsCollector</code>, <code>OpenBSMCollector</code>,
+    <code>UnifiedLogCollector</code></label></li>
+    <li><label><input type="checkbox" /><strong>P10.08</strong> —
+    Adapters normalizer Windows (<code>etw</code>,
+    <code>winlog_security</code>, <code>registry</code>,
+    <code>wmi</code>, <code>sysmon</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.09</strong> —
+    Adapters normalizer macOS (<code>endpoint_security</code>,
+    <code>fsevents</code>, <code>openbsm</code>,
+    <code>unified_log</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.10</strong> — Tests
+    intégration : rules cross-OS déclenchées sur Windows +
+    macOS</label></li>
+    </ul>
+    <h3 id="hardening-sécurité">10.3 — Hardening sécurité</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P10.11</strong> — mTLS
+    enforced sur toute la communication agent↔︎server (vérification
+    CN)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.12</strong> — TLS
+    1.3 minimum sur API REST (rejet TLS &lt; 1.3)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.13</strong> — Rate
+    limiting token bucket Redis (600 req/min JWT, 300 req/min API key)
+    sur tous les endpoints</label></li>
+    <li><label><input type="checkbox" /><strong>P10.14</strong> —
+    Row-Level Security PostgreSQL : politique <code>org_isolation</code>
+    sur toutes les tables + retrait
+    <code>DEFAULT org_id</code></label></li>
+    <li><label><input type="checkbox" /><strong>P10.15</strong> —
+    Pentest OWASP Top 10 sur l’API REST OSEye
+    (auto-pentest)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.16</strong> —
+    Secrets Vault : intégration HashiCorp Vault pour clés JWT + mots de
+    passe DB</label></li>
+    </ul>
+    <h3 id="performance">10.4 — Performance</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P10.17</strong> —
+    Benchmark : validation &gt; 100 000 events/s (ClickHouse + pipeline
+    complet)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.18</strong> — Mesure
+    latence P50/P95/P99 event→alerte, validation P99 &lt;
+    500ms</label></li>
+    <li><label><input type="checkbox" /><strong>P10.19</strong> —
+    Profiling CPU agent Linux sous charge, optimisation &lt; 2%
+    CPU</label></li>
+    </ul>
+    <h3 id="packaging-et-distribution">10.5 — Packaging et
+    distribution</h3>
+    <ul class="task-list">
+    <li><label><input type="checkbox" /><strong>P10.20</strong> —
+    Packages Linux : <code>.deb</code> + <code>.rpm</code> via FPM
+    (agent + server)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.21</strong> —
+    Installeur Windows : NSIS ou MSI (agent)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.22</strong> —
+    Package macOS : <code>.pkg</code> signé (agent)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.23</strong> — Images
+    Docker officielles multi-arch : <code>amd64</code> +
+    <code>arm64</code> (agent + server + ui)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.24</strong> — Helm
+    chart <code>oseye/</code> : values.yaml, DaemonSet agent,
+    Deployments server/workers/ui, HPA, NetworkPolicy,
+    cert-manager</label></li>
+    <li><label><input type="checkbox" /><strong>P10.25</strong> —
+    Playbook Ansible <code>infra/ansible/deploy.yml</code> : déploiement
+    grande échelle sans K8s</label></li>
+    <li><label><input type="checkbox" /><strong>P10.26</strong> —
+    Documentation API : export OpenAPI + site Docusaurus
+    (<code>docs/api/</code>)</label></li>
+    <li><label><input type="checkbox" /><strong>P10.27</strong> —
+    <code>CHANGELOG.md</code> + release GitHub Actions : tag → build →
+    push images + packages</label></li>
+    </ul>
+    <p><strong>Livrable P10 :</strong> OSEye v1.0 distribuable sur
+    Linux/Windows/macOS, &gt; 100k events/s validés, pentest passé.</p>
+    <hr />
+    <h2 id="récapitulatif">Récapitulatif</h2>
+    <table>
+    <colgroup>
+    <col style="width: 18%" />
+    <col style="width: 26%" />
+    <col style="width: 21%" />
+    <col style="width: 34%" />
+    </colgroup>
+    <thead>
+    <tr class="header">
+    <th>Phase</th>
+    <th>Semaines</th>
+    <th>Tâches</th>
+    <th>Livrable clé</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr class="odd">
+    <td>1 — Foundation</td>
+    <td>S1–S3</td>
+    <td>49</td>
+    <td>Pipeline end-to-end, events en DB</td>
+    </tr>
+    <tr class="even">
+    <td>2 — Full Collection</td>
+    <td>S4–S6</td>
+    <td>15</td>
+    <td>9 collectors, agent résilient</td>
+    </tr>
+    <tr class="odd">
+    <td>3 — Détection</td>
+    <td>S7–S9</td>
+    <td>15</td>
+    <td>Alerte en &lt; 500ms sur attaque réelle</td>
+    </tr>
+    <tr class="even">
+    <td>4 — Intelligence</td>
+    <td>S10–S12</td>
+    <td>17</td>
+    <td>Corrélation incident multi-events</td>
+    </tr>
+    <tr class="odd">
+    <td>5 — Decision Engine</td>
+    <td>S13–S15</td>
+    <td>13</td>
+    <td>Décisions traçables, approbation humaine</td>
+    </tr>
+    <tr class="even">
+    <td>6 — ML Engine</td>
+    <td>S16–S19</td>
+    <td>10</td>
+    <td>Détection anomalies comportementales</td>
+    </tr>
+    <tr class="odd">
+    <td>7 — Forensics</td>
+    <td>S20–S22</td>
+    <td>12</td>
+    <td>Export PDF cas forensique</td>
+    </tr>
+    <tr class="even">
+    <td>8 — Policy + SDK</td>
+    <td>S23–S25</td>
+    <td>15</td>
+    <td>Hot-swap profils, plugins sandboxés</td>
+    </tr>
+    <tr class="odd">
+    <td>9 — Dashboard UI</td>
+    <td>S26–S29</td>
+    <td>15</td>
+    <td>Interface web complète</td>
+    </tr>
+    <tr class="even">
+    <td>10 — Hardening</td>
+    <td>S30–S33</td>
+    <td>27</td>
+    <td>v1.0 multi-OS, &gt; 100k evt/s, distribué</td>
+    </tr>
+    <tr class="odd">
+    <td><strong>Total</strong></td>
+    <td><strong>33 semaines</strong></td>
+    <td><strong>188 tâches</strong></td>
+    <td><strong>OSEye v1.0</strong></td>
+    </tr>
+    </tbody>
+    </table>
+    <hr />
+    <h2 id="ordre-de-démarrage-absolu-semaine-1">Ordre de démarrage
+    absolu (semaine 1)</h2>
+    <pre><code>Jour 1–2 : P1.01 → P1.11  (fichiers contrats + codegen proto)
 Jour 3   : P1.12 → P1.16  (scaffolding monorepo + CI + docker-compose)
 Jour 4–7 : P1.17 → P1.25  (agent Go Linux minimal)
            P1.26 → P1.32  (server ingest + normalizer) — en parallèle
 Semaine 2 : P1.33 → P1.45 (storage + API + workers stubs)
 Semaine 3 : P1.46 → P1.49 (tests + livrable P1)</code></pre>
+  </article>
 </div>
-<script>
-  const sp = document.getElementById('sp');
-  window.addEventListener('scroll', () => {
-    const pct = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100;
-    sp.style.width = pct + '%';
-  });
-</script>
+
 </body>
 </html>

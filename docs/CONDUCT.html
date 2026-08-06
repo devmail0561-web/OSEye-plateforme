@@ -1,185 +1,454 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CODE DE CONDUITE</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --yellow: #d29922;
-    --red: #f85149;
-    --code-bg: #1f2937;
-    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 15px;
-    line-height: 1.7;
-    padding: 0;
-  }
-  .page-header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 32px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-  .page-header .logo {
-    font-weight: 700;
-    font-size: 18px;
-    color: var(--accent);
-    letter-spacing: -0.5px;
-  }
-  .page-header .sep { color: var(--border); }
-  .page-header .doc-title { color: var(--muted); font-size: 14px; }
-  .layout {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 40px 32px 80px;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    color: var(--text);
-    font-weight: 600;
-    line-height: 1.3;
-    margin-top: 2em;
-    margin-bottom: 0.6em;
-  }
-  h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.4em; margin-top: 0.5em; }
-  h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
-  h3 { font-size: 1.2em; }
-  h4 { font-size: 1em; color: var(--accent); }
-  p { margin-bottom: 1em; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  strong { color: var(--text); font-weight: 600; }
-  em { color: var(--muted); }
-  code {
-    font-family: var(--font-mono);
-    font-size: 0.875em;
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0.1em 0.4em;
-    color: #f0883e;
-  }
-  pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 18px 20px;
-    overflow-x: auto;
-    margin: 1.2em 0;
-    line-height: 1.5;
-  }
-  pre code {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--text);
-    font-size: 0.85em;
-  }
-  blockquote {
-    border-left: 3px solid var(--accent);
-    background: var(--surface);
-    margin: 1em 0;
-    padding: 12px 20px;
-    border-radius: 0 6px 6px 0;
-    color: var(--muted);
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1.2em 0;
-    font-size: 0.9em;
-  }
-  th {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 10px 14px;
-    text-align: left;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    font-size: 0.75em;
-    letter-spacing: 0.05em;
-  }
-  td {
-    border: 1px solid var(--border);
-    padding: 8px 14px;
-    vertical-align: top;
-  }
-  tr:hover td { background: var(--surface); }
-  ul, ol {
-    padding-left: 1.6em;
-    margin-bottom: 1em;
-  }
-  li { margin-bottom: 0.25em; }
-  li > ul, li > ol { margin-top: 0.25em; margin-bottom: 0.25em; }
-  hr {
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 2em 0;
-  }
-  /* Task list checkboxes */
-  input[type="checkbox"] {
-    margin-right: 6px;
-    accent-color: var(--green);
-  }
-  /* Badges inline */
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.75em;
-    font-weight: 600;
-  }
-  /* Scroll indicator */
-  .scroll-progress {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 2px;
-    background: var(--accent);
-    z-index: 200;
-    transition: width 0.1s;
-  }
-  /* Print */
-  @media print {
-    body { background: white; color: black; }
-    .page-header, .scroll-progress { display: none; }
-    pre, code { background: #f5f5f5; color: black; border-color: #ddd; }
-    table, th, td { border-color: #ddd; }
-    a { color: #0066cc; }
-  }
-  @media (max-width: 768px) {
-    .layout { padding: 20px 16px 60px; }
-    .page-header { padding: 12px 16px; }
-    table { font-size: 0.8em; }
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSEye — Code de conduite</title>
+  <style>
+  <style>
+/* ============================================================
+   RESET — écrase les styles par défaut de pandoc
+   ============================================================ */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ============================================================
+   BASE
+   ============================================================ */
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-size: 15px;
+  line-height: 1.75;
+  display: flex;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+#sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 268px;
+  height: 100vh;
+  overflow-y: auto;
+  background: #161b22;
+  border-right: 1px solid #21262d;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+#sidebar::-webkit-scrollbar { width: 3px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 6px;
+}
+
+.sidebar-brand .logo-text {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #58a6ff;
+}
+
+.sidebar-brand .logo-badge {
+  font-size: 10px;
+  background: #1f3a5f;
+  color: #79c0ff;
+  border: 1px solid #1c4a7a;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* pandoc génère <nav id="TOC"> à l'intérieur du sidebar */
+#sidebar nav#TOC { /* conteneur nav pandoc */ }
+
+#sidebar nav#TOC ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#sidebar nav#TOC li { margin: 0; }
+
+/* Niveau 1 */
+#sidebar nav#TOC > ul > li > a {
+  display: block;
+  padding: 5px 20px;
+  color: #c9d1d9;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+/* Niveau 2 */
+#sidebar nav#TOC ul ul > li > a {
+  display: block;
+  padding: 4px 20px 4px 34px;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+/* Niveau 3 */
+#sidebar nav#TOC ul ul ul > li > a {
+  padding-left: 48px;
+  font-size: 11.5px;
+  color: #6e7681;
+}
+
+#sidebar nav#TOC a:hover {
+  color: #e6edf3;
+  background: #1c2128;
+  border-left-color: #3b82f6;
+  text-decoration: none;
+}
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+#main {
+  margin-left: 268px;
+  width: calc(100% - 268px);
+  min-height: 100vh;
+}
+
+/* ============================================================
+   ARTICLE
+   ============================================================ */
+#article {
+  padding: 52px 64px 100px;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.3;
+  color: #e6edf3;
+}
+
+/* Premier h1 = titre du document */
+#article h1:first-child {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #e6edf3;
+  margin: 0 0 16px 0;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #21262d;
+}
+
+h1 {
+  font-size: 26px;
+  margin: 48px 0 16px;
+}
+
+h2 {
+  font-size: 20px;
+  margin: 44px 0 14px;
+  padding: 0 0 10px 14px;
+  border-left: 4px solid #3b82f6;
+  border-bottom: 1px solid #21262d;
+  color: #e6edf3;
+}
+
+h3 {
+  font-size: 16px;
+  margin: 30px 0 10px;
+  color: #58a6ff;
+}
+
+h4 {
+  font-size: 12px;
+  margin: 22px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6e7681;
+  font-weight: 600;
+}
+
+p { margin: 12px 0; }
+ul, ol { margin: 10px 0; padding-left: 22px; }
+li { margin: 4px 0; }
+li > ul, li > ol { margin: 4px 0; }
+strong { color: #e6edf3; font-weight: 600; }
+em { color: #79c0ff; font-style: italic; }
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; color: #79c0ff; }
+hr { border: none; border-top: 1px solid #21262d; margin: 36px 0; }
+
+/* ============================================================
+   CODE — override complet des styles pandoc sourceCode
+   ============================================================ */
+
+/* Inline code */
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  background: #161b22;
+  color: #79c0ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #30363d;
+}
+
+/* Pandoc sourceCode container */
+div.sourceCode {
+  background: #161b22 !important;
+  border: 1px solid #21262d !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+  margin: 16px 0 !important;
+}
+
+/* Pre dans sourceCode */
+div.sourceCode pre.sourceCode {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 16px 20px !important;
+  overflow-x: auto !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+}
+
+/* Pre générique (blocs non-syntaxiques) */
+pre {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  white-space: pre;
+  word-wrap: normal;
+  margin: 16px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+pre > code,
+pre.sourceCode > code.sourceCode {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  color: #c9d1d9;
+  font-size: 13px;
+  white-space: pre !important;
+}
+
+/* Fix pandoc span layout dans code */
+pre > code.sourceCode > span {
+  display: block !important;
+  line-height: 1.6 !important;
+}
+
+pre > code.sourceCode > span > a:first-child::before {
+  content: '';
+}
+
+/* Numéros de ligne */
+td.lineNumbers {
+  color: #3d444d;
+  border-right: 1px solid #21262d;
+  padding-right: 12px;
+  user-select: none;
+  font-size: 12px;
+}
+
+td.sourceCode { padding-left: 16px; }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+table {
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 16px 0;
+  width: 100%;
+  display: block;       /* permet le scroll horizontal */
+  overflow-x: auto;
+}
+
+thead tr {
+  background: #1c2128;
+  border-bottom: 2px solid #3b82f6;
+}
+
+thead th {
+  color: #58a6ff;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid #21262d;
+  transition: background 0.1s;
+}
+
+tbody tr:hover { background: #161b22; }
+
+td {
+  padding: 9px 14px;
+  vertical-align: top;
+  color: #c9d1d9;
+}
+
+td:first-child { font-weight: 500; color: #e6edf3; }
+
+/* ============================================================
+   BLOCKQUOTE
+   ============================================================ */
+blockquote {
+  border-left: 3px solid #3b82f6;
+  background: #161b22;
+  margin: 16px 0;
+  padding: 12px 18px;
+  border-radius: 0 6px 6px 0;
+  color: #8b949e;
+}
+
+blockquote p { margin: 4px 0; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  #sidebar { display: none; }
+  #main { margin-left: 0; width: 100%; }
+  #article { padding: 28px 24px 60px; }
+}
+
+@media print {
+  #sidebar { display: none; }
+  body { display: block; background: white; color: #111; }
+  #main { margin-left: 0; width: 100%; }
+  a { color: #2563eb; }
+  pre, div.sourceCode { border: 1px solid #ccc; background: #f8f8f8; }
+  code { color: #333; background: #f0f0f0; }
+}
+  </style>
+
+  </style>
 </head>
 <body>
-<div class="scroll-progress" id="sp"></div>
-<header class="page-header">
-  <span class="logo">OSEye</span>
-  <span class="sep">›</span>
-  <span class="doc-title">CODE DE CONDUITE</span>
-</header>
-<div class="layout">
+
+<div id="sidebar">
+  <div class="sidebar-brand">
+    <span class="logo-text">OSEye</span>
+    <span class="logo-badge">2026</span>
+  </div>
+  <ul>
+  <li><a href="#code-de-conduite" id="toc-code-de-conduite">CODE DE
+  CONDUITE</a>
+  <ul>
+  <li><a href="#notre-engagement" id="toc-notre-engagement">NOTRE
+  ENGAGEMENT</a></li>
+  <li><a href="#nos-standards" id="toc-nos-standards">NOS STANDARDS</a>
+  <ul>
+  <li><a href="#comportements-attendus-faire"
+  id="toc-comportements-attendus-faire">Comportements attendus
+  (FAIRE)</a></li>
+  <li><a href="#comportements-inacceptables-ne-pas-faire"
+  id="toc-comportements-inacceptables-ne-pas-faire">Comportements
+  inacceptables (NE PAS FAIRE)</a></li>
+  </ul></li>
+  <li><a href="#responsabilités-des-mainteneurs"
+  id="toc-responsabilités-des-mainteneurs">RESPONSABILITÉS DES
+  MAINTENEURS</a></li>
+  <li><a href="#portée" id="toc-portée">PORTÉE</a>
+  <ul>
+  <li><a href="#espaces-du-projet" id="toc-espaces-du-projet">Espaces du
+  projet</a></li>
+  <li><a href="#représentation-publique"
+  id="toc-représentation-publique">Représentation publique</a></li>
+  </ul></li>
+  <li><a href="#application" id="toc-application">APPLICATION</a>
+  <ul>
+  <li><a href="#signalement" id="toc-signalement">Signalement</a></li>
+  <li><a href="#processus-dinvestigation"
+  id="toc-processus-dinvestigation">Processus d'investigation</a></li>
+  <li><a href="#sanctions" id="toc-sanctions">Sanctions</a></li>
+  </ul></li>
+  <li><a href="#résolution-des-conflits-techniques"
+  id="toc-résolution-des-conflits-techniques">RÉSOLUTION DES CONFLITS
+  TECHNIQUES</a>
+  <ul>
+  <li><a href="#différence-entre-désaccord-technique-et-toxicité"
+  id="toc-différence-entre-désaccord-technique-et-toxicité">Différence
+  entre désaccord technique et toxicité</a></li>
+  <li><a href="#escalade-technique-pas-une-violation-du-code"
+  id="toc-escalade-technique-pas-une-violation-du-code">Escalade
+  technique (pas une violation du Code)</a></li>
+  </ul></li>
+  <li><a href="#modification-du-code-de-conduite"
+  id="toc-modification-du-code-de-conduite">MODIFICATION DU CODE DE
+  CONDUITE</a></li>
+  <li><a href="#attribution" id="toc-attribution">ATTRIBUTION</a></li>
+  <li><a href="#questions-fréquentes"
+  id="toc-questions-fréquentes">QUESTIONS FRÉQUENTES</a>
+  <ul>
+  <li><a href="#que-faire-si-je-suis-témoin-dune-violation-"
+  id="toc-que-faire-si-je-suis-témoin-dune-violation-">Que faire si je
+  suis témoin d'une violation ?</a></li>
+  <li><a href="#que-faire-si-je-suis-accusé-à-tort-"
+  id="toc-que-faire-si-je-suis-accusé-à-tort-">Que faire si je suis
+  accusé à tort ?</a></li>
+  <li><a href="#les-mainteneurs-sont-ils-eux-aussi-soumis-à-ce-code-"
+  id="toc-les-mainteneurs-sont-ils-eux-aussi-soumis-à-ce-code-">Les
+  mainteneurs sont-ils eux aussi soumis à ce Code ?</a></li>
+  <li><a href="#puis-je-signaler-de-manière-anonyme-"
+  id="toc-puis-je-signaler-de-manière-anonyme-">Puis-je signaler de
+  manière anonyme ?</a></li>
+  <li><a
+  href="#que-se-passe-t-il-si-le-contrevenant-est-le-lead-du-projet-virus-one-"
+  id="toc-que-se-passe-t-il-si-le-contrevenant-est-le-lead-du-projet-virus-one-">Que
+  se passe-t-il si le contrevenant est le lead du projet (@virus-one)
+  ?</a></li>
+  </ul></li>
+  <li><a href="#engagements-des-mainteneurs"
+  id="toc-engagements-des-mainteneurs">ENGAGEMENTS DES
+  MAINTENEURS</a></li>
+  <li><a href="#ressources" id="toc-ressources">RESSOURCES</a></li>
+  </ul></li>
+  </ul>
+</div>
+
+<div id="main">
+  <article id="article">
 <h1 id="code-de-conduite">CODE DE CONDUITE</h1>
 <p><strong>Version :</strong> 1.0<br />
 <strong>Date :</strong> 2026-08-06<br />
@@ -539,13 +808,23 @@ productif.</strong></p>
 <li>@virus-one (Lead)</li>
 <li>[À compléter au fur et à mesure de l'arrivée des mainteneurs]</li>
 </ul>
+  </article>
 </div>
+
 <script>
-  const sp = document.getElementById('sp');
-  window.addEventListener('scroll', () => {
-    const pct = window.scrollY / (document.documentElement.scrollHeight - window.innerHeight) * 100;
-    sp.style.width = pct + '%';
+const links = document.querySelectorAll('#sidebar a');
+const headings = document.querySelectorAll('#article h1,#article h2,#article h3,#article h4');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector('#sidebar a[href="#' + entry.target.id + '"]');
+      if (a) a.classList.add('active');
+    }
   });
+}, { rootMargin: '-20% 0px -70% 0px' });
+headings.forEach(h => observer.observe(h));
 </script>
+
 </body>
 </html>
