@@ -15,6 +15,11 @@ Depuis la racine du projet :
     make run-workers — lancer les workers background (normalizer + storage_writer)
     make run-agent   — lancer l'agent en local (procfs collector, buffer SQLite)
 
+Tests d'interaction (depuis server/) :
+    pytest tests/integration/   — tests d'interaction entre modules (bus, normalizer, storage, API)
+    pytest tests/scenarios/     — scénarios bout-en-bout (agent→gRPC→bus→DB→API)
+    pytest tests/               — toute la suite (unit + integration + scenarios)
+
 Prérequis installés :
     Go 1.23.8       → ~/go/bin/go
     Python 3.12     → .venv/bin/python3.12  (venv à la racine du projet)
