@@ -208,7 +208,9 @@ class SQLCaseRepository:
                 row.alert_ids = updated.alert_ids
         return case
 
-    async def list(self, filters: dict[str, object], pagination: Pagination) -> PageResult[ForensicCase]:
+    async def list(
+        self, filters: dict[str, object], pagination: Pagination
+    ) -> PageResult[ForensicCase]:
         async with self._session_factory() as session:
             stmt = select(ForensicCaseRow)
             if filters.get("status"):
