@@ -1,7 +1,7 @@
 # OSEye — Software Architecture Document
 
-**Version:** 1.0  
-**Date:** 2026-07-28  
+**Version:** 1.1  
+**Date:** 2026-08-06  
 **Statut:** Référence de développement  
 **Classification:** Confidentiel — usage interne
 
@@ -34,13 +34,16 @@
 | **Agent** | Go 1.23 | Binaire statique, faible empreinte mémoire, compilation conditionnelle par OS via build tags (`//go:build linux\|windows\|darwin`). Un seul codebase, un binaire par plateforme. |
 | **Platform drivers** | Go (build tags) | Chaque OS fournit son `PlatformDriver` : Linux (eBPF/auditd/fanotify), Windows (ETW/WinLog/Registry), macOS (EndpointSecurity/FSEvents). Compilés séparément, interface commune. |
 | **eBPF programs** | C (compilé via `clang/llvm`) | Linux uniquement. Seul langage supporté par le kernel verifier. Chargé par le loader Go. |
+| **Hash chain** | Go — zeebo/blake3 (asm AVX2) | 428 MB/s sur i7-8665U. **Rust/FFI non justifié** — 5× marge vs cible 500 MB/s. Zéro CGO. |
+| **Signatures batch** | Go — crypto/ed25519 stdlib | 43.7 µs/sign → 22 900 signs/s. **Rust/FFI non justifié** — 11 450× marge vs cible 2 signs/s. |
+| **Buffer offline** | Go — dual build : `mattn/go-sqlite3` CGO (prod) + `modernc/sqlite` pure-Go (CI) | mattn+WAL : 14 ms/1000 events. modernc : 34 ms (fallback CI cross-platform CGO_ENABLED=0). |
 | **Server** | Python 3.12 | Richesse de l'écosystème ML/data, FastAPI async natif, code expressif pour les moteurs de règles |
 | **API** | FastAPI + Uvicorn (asyncio) | OpenAPI auto-généré, type hints stricts, performances proches de Node.js |
 | **Event Bus** | Interface interne → Redis Streams (multi-process) → Kafka (distribué) | Migration transparente grâce au pattern Adapter |
 | **ML** | scikit-learn + River (online learning) | River pour le baseline online (pas de batch retraining nécessaire), scikit pour les classifiers offline |
 | **Base de données events** | ClickHouse | Insertion colonaire >1M events/s, compression 10x, agrégats temps-réel |
 | **Base de données relationnelle** | PostgreSQL 16 | ACID, JSONB, partitionnement natif, excellent pour alerts/cases/decisions |
-| **Dev/test** | SQLite | Zero-config, même interface repository, CI rapide |
+| **Dev/test** | SQLite (aiosqlite async) | Zero-config, même interface repository, CI rapide |
 | **Sérialisation** | Protocol Buffers v3 | Schéma strict, 5-10x plus compact que JSON, génération de code Go+Python |
 | **Transport agent↔server** | gRPC + mTLS | Streaming bidirectionnel, multiplexage HTTP/2, certificats client |
 | **UI** | React 18 + TypeScript + Vite | Typage fort, recharts/d3 pour les graphes, tailwindcss |
@@ -48,6 +51,15 @@
 | **Validation** | Pydantic v2 | Zéro overhead, validation stricte des events à l'entrée |
 | **CI/CD** | GitHub Actions | Lint → test → build → push image. Matrix build : `linux/amd64`, `linux/arm64`, `windows/amd64`, `darwin/amd64`, `darwin/arm64` |
 | **Packaging** | FPM (.deb/.rpm), NSIS/MSI (Windows), pkg (macOS), Docker multi-arch, Helm | Couverture maximale des cibles de déploiement |
+
+### Décision multi-langage (validée par benchmarks 2026-08-06)
+
+L'architecture reste **Go + Python uniquement**. Rust et C ne sont pas intégrés dans le chemin chaud :
+
+- **BLAKE3** : zeebo/blake3 (asm natif Go) offre 5× de marge — Rust crate serait 30% plus rapide mais ne justifie pas la complexité FFI.
+- **Ed25519** : stdlib Go suffisant à 11 450× de marge. dalek (Rust) n'est pas justifié.
+- **SQLite buffer** : seul point CGO — `mattn/go-sqlite3` pour le runtime prod, `modernc` pour CI. C'est le **seul franchissement de barrière CGO** dans l'agent, et il se fait par batch (non par event).
+- **Règle absolue** : ne jamais traverser CGO par event (overhead ~80 ns × 500k events/s = 4% CPU). Toujours par batch.
 
 ---
 
@@ -110,11 +122,15 @@ oseye/
 │   │   │   ├── interface.go        # interface Collector (OS-agnostique)
 │   │   │   └── manager.go          # CollectorManager — lifecycle, hot-reload profile
 │   │   ├── chain/
-│   │   │   └── hasher.go           # BLAKE3 hash chain
+│   │   │   ├── chain.go            # BLAKE3 hash chain (zeebo/blake3 asm AVX2)
+│   │   │   └── chain_bench_test.go # Benchmarks : 428 MB/s sur 1 KB
 │   │   ├── signer/
-│   │   │   └── ed25519.go          # Signature des batches
+│   │   │   ├── signer.go           # Ed25519 stdlib — Sign/PublicKey/NewEphemeral
+│   │   │   └── signer_bench_test.go
 │   │   ├── buffer/
-│   │   │   └── sqlite_buffer.go    # Buffer offline (SQLite local)
+│   │   │   ├── buffer.go           # SQLite offline pure-Go (//go:build !cgo)
+│   │   │   ├── buffer_cgo.go       # SQLite offline mattn+WAL (//go:build cgo)
+│   │   │   └── buffer_bench_test.go
 │   │   ├── transport/
 │   │   │   └── grpc_client.go      # gRPC streaming vers server
 │   │   ├── policy/
@@ -133,10 +149,11 @@ oseye/
 │   │   │   ├── constants.py        # Enums, severity levels, categories
 │   │   │   └── observability.py    # Setup OTel + logger structuré JSON
 │   │   ├── bus/
-│   │   │   ├── interface.py        # Protocol EventBus
-│   │   │   ├── memory.py           # InMemoryBus (tests)
-│   │   │   ├── redis_streams.py    # RedisBus
-│   │   │   └── kafka.py            # KafkaBus
+│   │   │   ├── interface.py        # Protocol EventBus (publish/subscribe/subscribe_pattern)
+│   │   │   ├── memory_bus.py       # InMemoryEventBus — asyncio.Queue, eager subscription
+│   │   │   ├── redis_bus.py        # RedisEventBus — XADD/XREADGROUP Streams
+│   │   │   ├── factory.py          # create_bus(settings) → EventBus
+│   │   │   └── kafka.py            # KafkaBus (Phase 4+, non implémenté)
 │   │   ├── ingest/
 │   │   │   ├── grpc_service.py     # Réception events depuis agents (gRPC)
 │   │   │   └── validator.py        # Vérification signature, hash chain
@@ -218,20 +235,22 @@ oseye/
 │   │   │   ├── sandbox.py          # Isolation subprocess + cgroups v2
 │   │   │   └── interface.py        # Plugin ABC (on_load, on_event, on_unload)
 │   │   ├── storage/
-│   │   │   ├── interface.py        # Repository Protocols
-│   │   │   ├── router.py           # StorageRouter : PG pour relations, CH pour events volumétrie
-│   │   │   ├── migrations/         # Alembic migrations
+│   │   │   ├── interface.py        # Repository Protocols + Page[T] + EventFilter
+│   │   │   ├── models.py           # ORM SQLAlchemy déclaratif (8 tables)
+│   │   │   ├── router.py           # StorageRouter : PG relations, CH events volumétrie
+│   │   │   ├── migrations/
+│   │   │   │   └── __init__.py     # run_migrations() + triggers immuabilité PG (SEC-0002)
 │   │   │   ├── backends/
-│   │   │   │   ├── sqlite.py
-│   │   │   │   ├── postgresql.py
-│   │   │   │   └── clickhouse.py
+│   │   │   │   ├── sqlite.py       # SQLiteBackend async (aiosqlite)
+│   │   │   │   ├── postgresql.py   # (Phase 2+)
+│   │   │   │   └── clickhouse.py   # (Phase 4+)
 │   │   │   └── repositories/
-│   │   │       ├── event_repo.py
-│   │   │       ├── alert_repo.py
-│   │   │       ├── decision_repo.py
-│   │   │       ├── case_repo.py
-│   │   │       ├── rule_repo.py
-│   │   │       └── entity_repo.py
+│   │   │       ├── events.py       # SQLEventRepository — insert_batch, query, count
+│   │   │       ├── alerts.py       # SQLAlertRepository
+│   │   │       ├── decisions.py    # SQLDecisionRepository — append-only
+│   │   │       ├── cases.py        # SQLCaseRepository — custody append-only
+│   │   │       ├── rule_repo.py    # (Phase 3+)
+│   │   │       └── entity_repo.py  # (Phase 6+)
 │   │   ├── audit/
 │   │   │   ├── logger.py           # AuditLogger — append-only, structuré JSON
 │   │   │   └── middleware.py       # FastAPI middleware : log chaque requête API
@@ -265,8 +284,13 @@ oseye/
 │   │   └── decision_worker.py      # Entry point : python -m oseye.workers.decision_worker
 │   ├── tests/
 │   │   ├── unit/
+│   │   │   ├── test_schema_completeness.py  # 15 tests Pydantic
+│   │   │   ├── test_bus.py                  # 9 tests InMemoryEventBus
+│   │   │   └── test_storage.py              # 16 tests repositories SQLite :memory:
+│   │   ├── benchmarks/
+│   │   │   └── bench_storage.py             # insert_batch, event↔row conversion
 │   │   ├── integration/
-│   │   └── scenarios/              # Scénarios d'attaques de référence
+│   │   └── scenarios/              # Scénarios d'attaques de référence (Phase 3+)
 │   ├── pyproject.toml
 │   └── Dockerfile
 │

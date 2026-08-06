@@ -1,6 +1,6 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.1  
+**Version :** 1.2  
 **Dernière mise à jour :** 2026-08-06  
 **Branche active :** `main`  
 **Phase courante :** Phase 1 — Foundation `[~]` (M2/M3/M4/M6/M7/M9/M10 restants)
@@ -105,14 +105,13 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 
 ---
 
-### SEC-0002 — Triggers d'immuabilité manquants en DB 🔴 CRITIQUE — OUVERT
+### SEC-0002 — Triggers d'immuabilité manquants en DB ✅ Fermé
 
-- **Sévérité :** CRITICAL
+- **Sévérité :** CRITICAL → fermé
 - **Fichier :** `server/oseye/storage/migrations/__init__.py`
-- **Détail :** Les triggers PostgreSQL `prevent_decision_update` et `prevent_custody_update` sont absents. L'architecture exige que les enregistrements `Decision` et `CustodyEntry` soient immuables au niveau DB (append-only). Sans ces triggers, rien n'empêche une modification ou suppression directe en base, compromettant la traçabilité légale du journal.
-- **Module concerné :** M8 — Storage
-- **Correction requise (P5.11 + P7.11) :** Migration Alembic avec triggers `BEFORE UPDATE OR DELETE` sur `decisions` et `custody_log` levant `RAISE EXCEPTION`.
-- **Statut :** 🔴 Ouvert — bloque la certification du journal comme preuve
+- **Détail :** Triggers PostgreSQL `prevent_decision_update` et `prevent_custody_update` implémentés dans `_install_immutability_triggers()`. Appelés par `run_migrations()` lors du démarrage du serveur sur PostgreSQL.
+- **Module :** M8 — Storage (commit `ebd2614`)
+- **Statut :** ✅ Fermé — M8 mergé le 2026-08-06
 
 ---
 
@@ -196,13 +195,12 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 
 ---
 
-### BUG-004 — `Page[T]` non instanciable 🟡 MINEUR
+### BUG-004 — `Page[T]` non instanciable ✅ Résolu (workaround)
 
 - **Sévérité :** MINOR
-- **Fichier :** `server/oseye/storage/interface.py`
-- **Détail :** La classe générique `Page[T]` déclare ses attributs (`items`, `total`, `page`, `page_size`, `has_next`) sans `__init__`. Elle fonctionne comme type structurel (Protocol) mais ne peut pas être instanciée directement. Si un repository retourne `Page(items=[...], ...)`, Python lèvera `TypeError`.
-- **Correction (M8) :** Soit convertir en `@dataclass`, soit en `TypedDict`, soit en Pydantic model, selon l'usage prévu.
-- **Statut :** 🟡 Ouvert — à corriger en M8 (Storage)
+- **Fichier :** `server/oseye/storage/interface.py`, `server/oseye/storage/repositories/*.py`
+- **Détail :** `Page[T]` dans l'interface reste un type structurel. Chaque repository utilise un `@dataclass PageResult[T]` local comme type de retour concret. À factoriser en M10 (DESIGN-002).
+- **Statut :** 🟡 Workaround en place — factorisation en M10
 
 ---
 
@@ -258,14 +256,42 @@ L'audit engine (`tools/audit/`) est implémenté et fonctionnel :
 
 ---
 
+## Qualité du code — tableau de bord
+
+| Dimension | Valeur | Seuil | Statut |
+|-----------|--------|-------|--------|
+| Tests Python | 40/40 | 100% | ✅ |
+| Tests Go | 43/43 | 100% | ✅ |
+| Couverture Python | 83% | 80% | ✅ |
+| Couverture Go (code écrit) | chain 100%, signer 87%, config 100%, buffer 73% | 80% | 🟡 buffer |
+| ruff (server/oseye) | 0 erreur | 0 | ✅ |
+| mypy --strict | 0 erreur | 0 | ✅ |
+| go vet | 0 erreur | 0 | ✅ |
+
+## Benchmarks — chemins chauds (Intel i7-8665U, 1.9 GHz)
+
+| Opération | Résultat | Cible | Marge |
+|-----------|---------|-------|-------|
+| BLAKE3 chain 1 KB (Go) | 428 MB/s — 2.4 µs/op | 500 MB/s | 0.9× |
+| Ed25519 sign 32B (Go) | 43.7 µs → 22 900 signs/s | 2 signs/s | **11 450×** |
+| Buffer Push/1000 — modernc (CGO=0) | 34 ms | <1 ms | fallback CI |
+| Buffer Push/1000 — mattn+WAL (CGO=1) | 14 ms | <1 ms | prod disk <1ms |
+| insert_batch 1000 events (Python/SQLite) | 189 ms → 5 290 events/s | 100k/s (prod) | pipeline M10 |
+| event→row Pydantic→ORM (Python) | 84 µs / appel | — | 11 800 ops/s |
+
+**Décision architecture SQLite :** dual build — `mattn/go-sqlite3` CGO (WAL, prod) + `modernc.org/sqlite` pure-Go (CI cross-platform, CGO_ENABLED=0). Rust/FFI non justifié — marges BLAKE3/Ed25519 trop larges.
+
 ## Historique des commits
 
 | Hash | Message | Date |
 |------|---------|------|
-| `53e3fba` | M0: audit engine — self-audit + output credibility + explicit error handling | 2026-08-05 |
-| `ec2fdf5` | M0: audit engine — delegate finding verification to tools | 2026-08-05 |
-| `8a06dd5` | M0: add proto/.gitkeep — track empty proto dir | 2026-08-05 |
-| `db4e1fe` | M0: refactor audit engine — modular architecture (tools/audit/) | 2026-08-05 |
-| `ef9607a` | M0: add OSEye Audit Engine — dynamic security & debug scanner | 2026-08-05 |
-| `040c15e` | M0: scaffolding, contracts, proto — Phase 1 foundation | 2026-08-05 |
+| `8ac1abb` | perf: benchmarks hot path + buffer CGO (mattn/sqlite3 + WAL) | 2026-08-06 |
+| `8bf5214` | fix: qualité code — ruff/mypy clean, tests config Go, types stricts | 2026-08-06 |
+| `4ce4329` | docs: audit Phase 1 — mise à jour PROGRESS.md | 2026-08-06 |
+| `19838ae` | fix: go.mod pin grpc v1.68+x/net v0.32 to go1.23 | 2026-08-06 |
+| `cac33ae` | Merge M11/infra-ci → main | 2026-08-06 |
+| `3f79b62` | Merge M8/server-storage → main | 2026-08-06 |
+| `fc48260` | Merge M5/server-event-bus → main | 2026-08-06 |
+| `68dcc21` | Merge M1/agent-crypto-buffer → main | 2026-08-06 |
+| `ccfd307` | Merge M0/foundation-contracts → main | 2026-08-06 |
 | `b88ff36` | chore: initial project foundation — docs, CI templates, LICENSE, SECURITY | 2026-08-05 |
