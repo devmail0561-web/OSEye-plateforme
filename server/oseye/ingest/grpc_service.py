@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import grpc
 from cryptography.x509 import load_der_x509_certificate
@@ -15,6 +15,18 @@ from oseye.bus.interface import EventBus
 from oseye.core.observability import get_logger
 from oseye.ingest.normalizer_bridge import pb_to_event
 from oseye.ingest.validator import BatchValidator
+
+if TYPE_CHECKING:
+    pass
+
+# Lazy imports — gen/ is auto-generated and has no type stubs.
+# Imported at module level to avoid repeated dynamic imports in hot paths.
+try:
+    from server.gen import event_pb2 as _pb2
+    from server.gen import event_pb2_grpc as _pb2_grpc
+except ImportError:  # pragma: no cover — only missing in isolated unit tests
+    _pb2 = None  # type: ignore[assignment]
+    _pb2_grpc = None  # type: ignore[assignment]
 
 _logger = get_logger(__name__)
 
@@ -34,18 +46,30 @@ def _extract_cn_from_context(context: grpc.ServicerContext) -> str | None:
         if not attrs:
             return None
         value = attrs[0].value
-        # NameAttribute.value is str | bytes — normalise to str
         return value if isinstance(value, str) else value.decode("utf-8", errors="replace")
     except Exception as exc:  # noqa: BLE001
         _logger.warning("mtls_cn_parse_failed", error=str(exc))
         return None
 
 
+def _require_cn(context: grpc.ServicerContext) -> str | None:
+    """Return the CN or abort the RPC with UNAUTHENTICATED.
+
+    SEC-PREV-001: any stream that cannot verify the caller's identity via the
+    mTLS certificate CN is immediately terminated.  The caller's agent_id from
+    the request payload is never trusted as a fallback.
+    """
+    cn = _extract_cn_from_context(context)
+    if cn is None:
+        context.abort(grpc.StatusCode.UNAUTHENTICATED, "mTLS client certificate CN required")
+    return cn
+
+
 class AgentServiceServicer:
     """gRPC servicer that receives event batches from agents.
 
     SEC-PREV-001: agent_id is always taken from the CN of the client certificate
-    via ``_extract_cn_from_context``, never from ``request.agent_id``.
+    via ``_require_cn``, never from ``request.agent_id``.
     """
 
     def __init__(self, bus: EventBus, validator: BatchValidator) -> None:
@@ -61,20 +85,10 @@ class AgentServiceServicer:
         request_iterator: Iterator[Any],
         context: grpc.ServicerContext,
     ) -> Any:
-        """Receive a stream of IngestRequest batches from a single agent.
-
-        For each batch:
-        1. Extract agent_id from the mTLS cert CN (SEC-PREV-001).
-        2. Validate with BatchValidator.
-        3. Convert each accepted event via pb_to_event.
-        4. Publish on ``events:raw:{agent_id}``.
-        5. Return IngestResponse.
-        """
-        from server.gen import event_pb2 as _pb2
-
-        cn = _extract_cn_from_context(context)
+        """Receive a stream of IngestRequest batches from a single agent."""
+        cn = _require_cn(context)
         if cn is None:
-            _logger.warning("ingest_no_mtls_cn", peer=context.peer())
+            return  # aborted above
 
         total_accepted = 0
         total_rejected = 0
@@ -92,8 +106,7 @@ class AgentServiceServicer:
             total_rejected += result.rejected
             all_errors.extend(result.errors)
 
-            agent_topic_id = cn if cn is not None else "unknown"
-            topic = f"events:raw:{agent_topic_id}"
+            topic = f"events:raw:{cn}"
 
             for event_index, pb_event in enumerate(request.events):
                 is_rejected = any(
@@ -120,6 +133,9 @@ class AgentServiceServicer:
                 rejected=result.rejected,
             )
 
+        if _pb2 is None:  # pragma: no cover
+            return None
+
         return _pb2.IngestResponse(  # type: ignore[attr-defined]
             accepted=total_accepted,
             rejected=total_rejected,
@@ -137,19 +153,14 @@ class AgentServiceServicer:
     ) -> Iterator[Any]:
         """Stream SurveillanceProfilePB updates to the agent.
 
-        Subscribes to ``policy:push:{agent_id}`` and yields updates as they
-        arrive on the bus.  The agent_id is taken from the mTLS CN
-        (SEC-PREV-001).
+        SEC-PREV-001: aborts with UNAUTHENTICATED if no mTLS CN is present.
         """
-        from server.gen import event_pb2 as _pb2
+        cn = _require_cn(context)
+        if cn is None:
+            return  # aborted above
 
-        cn = _extract_cn_from_context(context)
-        agent_id: str = cn if cn is not None else bytes(request.agent_id).decode(
-            "utf-8", errors="replace"
-        )
-        topic = f"policy:push:{agent_id}"
-
-        _logger.info("policy_stream_opened", agent_id=agent_id, topic=topic)
+        topic = f"policy:push:{cn}"
+        _logger.info("policy_stream_opened", agent_id=cn, topic=topic)
 
         async def _collect() -> list[bytes]:
             sub = await self._bus.subscribe(topic)
@@ -157,7 +168,7 @@ class AgentServiceServicer:
             async with asyncio.timeout(30.0):
                 async for msg in sub:
                     msgs.append(msg)
-                    break  # one at a time, caller re-subscribes
+                    break
             return msgs
 
         while context.is_active() is not False:
@@ -167,6 +178,9 @@ class AgentServiceServicer:
                 continue
             except Exception as exc:  # noqa: BLE001
                 _logger.error("policy_stream_error", error=str(exc))
+                break
+
+            if _pb2 is None:  # pragma: no cover
                 break
 
             for raw in msgs:
@@ -193,18 +207,14 @@ class AgentServiceServicer:
     ) -> Iterator[Any]:
         """Stream AgentCommand messages to the agent.
 
-        Subscribes to ``commands:{agent_id}`` and yields commands.
-        The agent_id is taken from the mTLS CN (SEC-PREV-001).
+        SEC-PREV-001: aborts with UNAUTHENTICATED if no mTLS CN is present.
         """
-        from server.gen import event_pb2 as _pb2
+        cn = _require_cn(context)
+        if cn is None:
+            return  # aborted above
 
-        cn = _extract_cn_from_context(context)
-        agent_id: str = cn if cn is not None else bytes(request.agent_id).decode(
-            "utf-8", errors="replace"
-        )
-        topic = f"commands:{agent_id}"
-
-        _logger.info("commands_stream_opened", agent_id=agent_id, topic=topic)
+        topic = f"commands:{cn}"
+        _logger.info("commands_stream_opened", agent_id=cn, topic=topic)
 
         async def _collect() -> list[bytes]:
             sub = await self._bus.subscribe(topic)
@@ -224,6 +234,9 @@ class AgentServiceServicer:
                 _logger.error("commands_stream_error", error=str(exc))
                 break
 
+            if _pb2 is None:  # pragma: no cover
+                break
+
             for raw in msgs:
                 try:
                     data = json.loads(raw)
@@ -236,15 +249,10 @@ class AgentServiceServicer:
                     _logger.error("command_deserialize_error", error=str(exc))
 
 
-def register_servicer(
-    servicer: AgentServiceServicer,
-    server: Any,
-) -> None:
-    """Register the servicer with a gRPC server instance.
-
-    Accepts both ``grpc.Server`` and ``grpc.aio.Server`` (the two ABC roots
-    share the same add_*_to_server contract but are not related by inheritance).
-    """
-    from server.gen import event_pb2_grpc as _grpc
-
-    _grpc.add_AgentServiceServicer_to_server(servicer, server)  # type: ignore[no-untyped-call]
+def register_servicer(servicer: AgentServiceServicer, server: Any) -> None:
+    """Register the servicer with a gRPC server instance."""
+    if _pb2_grpc is None:  # pragma: no cover
+        raise RuntimeError("server.gen not available — run scripts/generate_proto.sh")
+    _pb2_grpc.add_AgentServiceServicer_to_server(  # type: ignore[no-untyped-call]
+        servicer, server
+    )
