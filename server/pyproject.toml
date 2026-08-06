@@ -51,6 +51,10 @@ dependencies = [
     # UUID v7
     "uuid7>=0.1.0",
 
+    # Rate limiting (SEC-PREV-002)
+    "slowapi>=0.1.9",
+    "python-multipart>=0.0.9",
+
     # HTTP client (TI providers)
     "httpx>=0.28.0",
     "pybreaker>=1.2.0",
