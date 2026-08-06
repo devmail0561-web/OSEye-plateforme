@@ -1,5 +1,27 @@
+## Commandes de développement (Makefile)
+
+Depuis la racine du projet :
+
+    make setup      — vérifier que l'environnement est prêt (Go + Python + protoc)
+    make proto      — régénérer les stubs Go et Python depuis proto/event.proto
+    make test       — tous les tests (Go + Python)
+    make test-go    — go test -race ./...
+    make test-py    — pytest server/tests/ -v
+    make lint       — ruff (Python) + go vet (Go)
+    make audit      — scanner de sécurité interne (tools/audit/)
+    make dev-up     — démarrer Redis + Postgres via Docker Compose
+    make dev-down   — arrêter les services Docker
+
+Prérequis installés :
+    Go 1.23.8       → ~/go/bin/go
+    Python 3.12     → .venv/bin/python3.12  (venv à la racine du projet)
+    protoc 29.3     → ~/.local/bin/protoc
+    Activer le venv : source .venv/bin/activate
+
+---
+
 ↓
- 
+
 Actions
 ```
  

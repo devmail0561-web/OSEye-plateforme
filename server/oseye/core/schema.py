@@ -1,0 +1,292 @@
+"""Canonical data models for OSEye — all components share these types."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Universal Event
+# ---------------------------------------------------------------------------
+
+class UniversalEvent(BaseModel):
+    # Identity
+    event_id: UUID
+    timestamp_ns: int
+    hostname: str
+    agent_id: UUID
+
+    # Classification
+    category: Literal["file", "process", "network", "user", "device"]
+    type: str
+    severity: Literal["info", "low", "medium", "high", "critical"]
+    collector: str
+    os: Literal["linux", "windows", "darwin"] = "linux"
+
+    # Subject identity
+    uid: int = 0
+    gid: int = 0
+    pid: int = 0
+    ppid: int = 0
+    process_name: str = ""
+    executable: str = ""
+    cmdline: str = ""
+    cwd: str = ""
+    session_id: int | None = None
+
+    # Target resource
+    resource: str = ""
+    result: str = "success"
+
+    # File hashes
+    file_hash_before: str | None = None
+    file_hash_after: str | None = None
+
+    # Network fields
+    src_ip: str | None = None
+    src_port: int | None = None
+    dst_ip: str | None = None
+    dst_port: int | None = None
+    protocol: str | None = None
+    bytes_sent: int | None = None
+    bytes_recv: int | None = None
+
+    # Integrity
+    hash_chain: str = ""
+    signature: str | None = None
+
+    # Server-side enrichments (added after collection)
+    ml_score: float | None = None
+    risk_score: float | None = None
+    rule_match_ids: list[str] = Field(default_factory=list)
+    mitre_techniques: list[str] = Field(default_factory=list)
+    ti_tags: list[str] = Field(default_factory=list)
+    incident_chain_id: UUID | None = None
+
+    extra: dict = Field(default_factory=dict)
+
+    model_config = {"frozen": False}
+
+
+# ---------------------------------------------------------------------------
+# Alert
+# ---------------------------------------------------------------------------
+
+class AlertNote(BaseModel):
+    note_id: UUID
+    created_at: datetime
+    updated_at: datetime | None = None
+    author: str
+    content: str
+
+
+class Alert(BaseModel):
+    alert_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    severity: Literal["low", "medium", "high", "critical"]
+    status: Literal["open", "acknowledged", "investigating", "resolved", "false_positive"]
+
+    rule_id: str | None = None
+    ml_triggered: bool = False
+    ti_triggered: bool = False
+
+    entity_id: str
+    hostname: str
+
+    trigger_event_id: UUID
+    related_event_ids: list[UUID] = Field(default_factory=list)
+    incident_chain_id: UUID | None = None
+
+    title: str
+    description: str = ""
+    mitre_techniques: list[str] = Field(default_factory=list)
+
+    assigned_to: str | None = None
+    notes: list[AlertNote] = Field(default_factory=list)
+    false_positive_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Decision
+# ---------------------------------------------------------------------------
+
+class Decision(BaseModel):
+    decision_id: UUID
+    created_at: datetime
+
+    decision_type: Literal[
+        "ALERT", "IGNORE", "ESCALATE", "INVESTIGATE",
+        "ISOLATE", "REQUEST_HUMAN", "COLLECT_MORE", "NOTIFY"
+    ]
+
+    # Input signals
+    rule_score: float
+    ml_score: float
+    ti_score: float
+    correlation_depth: int
+    final_score: float
+
+    # Context
+    entity_id: str
+    trigger_alert_id: UUID | None = None
+    incident_chain_id: UUID | None = None
+    related_event_ids: list[UUID] = Field(default_factory=list)
+
+    # Policy applied
+    policy_version: str
+    explanation: str
+
+    # Human approval
+    requires_human: bool = False
+    human_decision: Literal["approved", "rejected"] | None = None
+    human_operator: str | None = None
+    human_note: str | None = None
+    approved_at: datetime | None = None
+    timeout_at: datetime | None = None
+
+    # Immutable journal
+    prev_journal_hash: str
+    journal_hash: str
+
+
+# ---------------------------------------------------------------------------
+# Forensic Case
+# ---------------------------------------------------------------------------
+
+class CustodyEntry(BaseModel):
+    timestamp: datetime
+    operator: str
+    action: str
+    detail: str
+    hash: str  # BLAKE3 of this entry
+
+
+class EvidenceItem(BaseModel):
+    evidence_id: UUID
+    type: Literal["event", "file_hash", "screenshot", "note", "external"]
+    content: str
+    description: str | None = None
+    added_by: str
+    added_at: datetime
+    marked_as_evidence_at: datetime
+
+
+class CaseNote(BaseModel):
+    note_id: UUID
+    case_id: UUID
+    created_at: datetime
+    updated_at: datetime | None = None
+    author: str
+    content: str
+
+
+class ForensicCase(BaseModel):
+    case_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    title: str
+    description: str = ""
+    severity: Literal["low", "medium", "high", "critical"]
+    status: Literal["open", "in_progress", "resolved", "archived"]
+    tags: list[str] = Field(default_factory=list)
+
+    assigned_to: str | None = None
+    created_by: str
+
+    event_ids: list[UUID] = Field(default_factory=list)
+    alert_ids: list[UUID] = Field(default_factory=list)
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+    notes: list[CaseNote] = Field(default_factory=list)
+    custody_log: list[CustodyEntry] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Rule
+# ---------------------------------------------------------------------------
+
+class Rule(BaseModel):
+    id: str
+    name: str
+    enabled: bool = True
+    severity: Literal["info", "low", "medium", "high", "critical"]
+    condition_yaml: str
+    timeframe: int | None = None  # seconds for temporal rules
+    actions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    mitre: list[str] = Field(default_factory=list)
+    explanation: str = ""
+
+    match_count: int = 0
+    last_matched: datetime | None = None
+    false_positive_count: int = 0
+    source: Literal["builtin", "custom", "imported"] = "custom"
+
+
+# ---------------------------------------------------------------------------
+# Entity Profile
+# ---------------------------------------------------------------------------
+
+class EntityProfile(BaseModel):
+    entity_id: str
+    entity_type: Literal["process", "user", "connection", "file"]
+    hostname: str
+
+    risk_score: float = 0.0
+    baseline_score: float = 0.0
+    alert_count: int = 0
+    last_seen: datetime | None = None
+    whitelisted: bool = False
+    whitelist_expires_at: datetime | None = None
+
+    risk_history: list[tuple[datetime, float]] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Surveillance Profile
+# ---------------------------------------------------------------------------
+
+class CollectorConfig(BaseModel):
+    enabled: bool = True
+    throttle: float = 1.0
+    params: dict = Field(default_factory=dict)
+
+
+class SurveillanceProfile(BaseModel):
+    name: str
+    description: str = ""
+    version: int = 1
+    platforms: list[Literal["linux", "windows", "darwin"]] = Field(default_factory=list)
+
+    collectors: dict[str, CollectorConfig] = Field(default_factory=dict)
+
+    ignore_uids: list[int] = Field(default_factory=list)
+    ignore_paths_prefix: list[str] = Field(default_factory=list)
+    ignore_processes: list[str] = Field(default_factory=list)
+
+    min_severity: Literal["info", "low", "medium", "high", "critical"] = "low"
+    push_interval_s: int = 60
+
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Agent Info
+# ---------------------------------------------------------------------------
+
+class AgentInfo(BaseModel):
+    agent_id: UUID
+    hostname: str
+    enrolled_at: datetime
+    last_seen: datetime | None = None
+    cert_serial: str | None = None
+    cert_expires_at: datetime | None = None
+    active_profile: str = "workstation"
+    revoked: bool = False
+    online: bool = False

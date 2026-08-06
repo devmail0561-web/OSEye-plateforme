@@ -1,0 +1,99 @@
+name: oseye-dev
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oseye
+      POSTGRES_USER: oseye
+      POSTGRES_PASSWORD: oseye_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oseye"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  oseye-server:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+    environment:
+      OSEYE_DB_BACKEND: sqlite
+      OSEYE_DB_URL: sqlite+aiosqlite:///./oseye_dev.db
+      OSEYE_REDIS_URL: redis://redis:6379/0
+      OSEYE_API_PORT: "8000"
+      OSEYE_GRPC_PORT: "50051"
+      OSEYE_LOG_LEVEL: DEBUG
+      OSEYE_TLS_CERT_FILE: /certs/server.crt
+      OSEYE_TLS_KEY_FILE: /certs/server.key
+      OSEYE_TLS_CA_CERT_FILE: /certs/ca.crt
+      OSEYE_JWT_PRIVATE_KEY_PATH: /certs/jwt_private.pem
+      OSEYE_JWT_PUBLIC_KEY_PATH: /certs/jwt_public.pem
+    ports:
+      - "8000:8000"
+      - "50051:50051"
+    volumes:
+      - ../../infra/certs:/certs:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  oseye-agent:
+    build:
+      context: ../../agent
+      dockerfile: Dockerfile
+    privileged: true   # required for eBPF
+    network_mode: host  # required for network event collection
+    environment:
+      OSEYE_GRPC_ADDR: localhost:50051
+      OSEYE_TLS_CERT: /certs/agent-dev.crt
+      OSEYE_TLS_KEY: /certs/agent-dev.key
+      OSEYE_TLS_CA: /certs/ca.crt
+      OSEYE_BUFFER_PATH: /var/lib/oseye/buffer.db
+      OSEYE_AGENT_ID: agent-dev-00000000
+      OSEYE_LOG_LEVEL: DEBUG
+    volumes:
+      - ../../infra/certs:/certs:ro
+      - agent_buffer:/var/lib/oseye
+    depends_on:
+      oseye-server:
+        condition: service_healthy
+
+  oseye-ui:
+    build:
+      context: ../../ui
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:8000
+    depends_on:
+      - oseye-server
+
+volumes:
+  postgres_data:
+  agent_buffer:

@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package oseye.v1;
+
+option go_package = "github.com/oseye/agent/gen/oseye/v1;oseyev1";
+
+// UniversalEventPB is the canonical on-wire representation of any collected event.
+// Generated from kernel sources (eBPF, auditd, procfs, etc.) and sent to the server.
+message UniversalEventPB {
+    bytes   event_id        = 1;   // UUID v7 bytes (16 bytes)
+    int64   timestamp_ns    = 2;   // monotonic nanosecond timestamp
+    string  hostname        = 3;
+    bytes   agent_id        = 4;   // UUID bytes (16 bytes)
+
+    // Classification
+    string  category        = 5;   // "file" | "process" | "network" | "user" | "device"
+    string  type            = 6;   // "exec" | "open" | "connect" | "login" | ...
+    string  severity        = 7;   // "info" | "low" | "medium" | "high" | "critical"
+    string  collector       = 8;   // "ebpf" | "auditd" | "procfs" | "netlink" | ...
+    string  os              = 9;   // "linux" | "windows" | "darwin"
+
+    // Subject identity
+    int32   uid             = 10;
+    int32   gid             = 11;
+    int32   pid             = 12;
+    int32   ppid            = 13;
+    string  process_name    = 14;
+    string  executable      = 15;
+    string  cmdline         = 16;
+    string  cwd             = 17;
+    int32   session_id      = 18;  // -1 if not applicable
+
+    // Target resource
+    string  resource        = 19;  // file path, IP:port, device path...
+    string  result          = 20;  // "success" | "denied" | "error"
+
+    // File hashes (present when category == "file")
+    string  file_hash_before = 21; // SHA-256 hex
+    string  file_hash_after  = 22; // SHA-256 hex
+
+    // Network fields (present when category == "network")
+    string  src_ip          = 23;
+    int32   src_port        = 24;
+    string  dst_ip          = 25;
+    int32   dst_port        = 26;
+    string  protocol        = 27;  // "tcp" | "udp" | "icmp"
+    int64   bytes_sent      = 28;
+    int64   bytes_recv      = 29;
+
+    // Integrity
+    bytes   hash_chain      = 30;  // BLAKE3 32 bytes
+    bytes   signature       = 31;  // Ed25519 64 bytes (on batches, may be empty per-event)
+
+    // Extra fields (JSON-encoded, OS-specific or collector-specific data)
+    bytes   extra_json      = 32;
+}
+
+// IngestRequest wraps a batch of events with a batch-level Ed25519 signature.
+// The signature covers BLAKE3(hash_chain[0] || ... || hash_chain[N-1]).
+message IngestRequest {
+    bytes                    batch_signature = 1; // Ed25519 64 bytes
+    repeated UniversalEventPB events         = 2;
+}
+
+message IngestResponse {
+    int32           accepted = 1;
+    int32           rejected = 2;
+    repeated string errors   = 3; // one per rejected event (index-matched)
+}
+
+// PolicyRequest is sent by the agent to receive its active SurveillanceProfile.
+message PolicyRequest {
+    bytes  agent_id = 1;
+}
+
+// SurveillanceProfilePB carries the active surveillance profile for an agent.
+// The agent filters collectors based on what is available on its OS.
+message SurveillanceProfilePB {
+    string  name            = 1;
+    string  description     = 2;
+    int32   version         = 3;
+    bytes   config_json     = 4;  // JSON-encoded SurveillanceProfile
+}
+
+// CommandRequest opens the server→agent command stream.
+message CommandRequest {
+    bytes  agent_id = 1;
+}
+
+// AgentCommand is a server→agent instruction.
+message AgentCommand {
+    string  command_type    = 1; // "SET_THROTTLE" | "RELOAD_PROFILE" | "TAKE_SNAPSHOT"
+    bytes   payload_json    = 2; // command-specific JSON payload
+}
+
+// AgentService is the gRPC service exposed by the server.
+// Agents connect over mTLS; the CN of the client certificate must equal the agent_id.
+service AgentService {
+    // IngestEvents streams event batches from agent to server.
+    // Client streams IngestRequest; server replies once with IngestResponse per batch.
+    rpc IngestEvents(stream IngestRequest) returns (IngestResponse);
+
+    // ReceivePolicy opens a server→agent stream delivering SurveillanceProfile updates.
+    rpc ReceivePolicy(PolicyRequest) returns (stream SurveillanceProfilePB);
+
+    // StreamCommands opens a server→agent command channel.
+    rpc StreamCommands(CommandRequest) returns (stream AgentCommand);
+}
