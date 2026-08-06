@@ -43,4 +43,5 @@ def configure(log_level: str = "INFO", service_name: str = "oseye-server") -> No
 
 def get_logger(name: str) -> structlog.BoundLogger:
     """Return a structlog bound logger tagged with the given name."""
-    return structlog.get_logger(name)
+    logger: structlog.BoundLogger = structlog.get_logger(name)
+    return logger

@@ -13,12 +13,11 @@ a list of reopened findings.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import ROOT, AuditState, Finding, Pattern
-from .scanner import scan_regex, scan_script, scan_inverse
-
+from .scanner import scan_inverse, scan_regex, scan_script
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -88,7 +87,7 @@ def verify_regressions(
     Returns the list of re-opened findings.
     """
     pmap = _pattern_map(patterns)
-    now = datetime.now().isoformat()
+    now = datetime.now(UTC).isoformat()
     reopened: list[Finding] = []
 
     for finding in state.findings.values():
@@ -130,7 +129,7 @@ def verify_findings(
         ValueError if finding_id is given but not found or not open.
     """
     pmap = _pattern_map(patterns)
-    now = datetime.now().isoformat()
+    now = datetime.now(UTC).isoformat()
     confirmed: list[Finding] = []
     resolved: list[Finding] = []
 
@@ -192,7 +191,7 @@ def verify_findings_for_files(
         (confirmed, resolved) — same semantics as verify_findings()
     """
     pmap = _pattern_map(patterns)
-    now = datetime.now().isoformat()
+    now = datetime.now(UTC).isoformat()
     confirmed: list[Finding] = []
     resolved: list[Finding] = []
 

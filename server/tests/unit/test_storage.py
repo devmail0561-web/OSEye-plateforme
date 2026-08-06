@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-import pytest
-
 from oseye.core.schema import (
     Alert,
-    CustodyEntry,
     Decision,
     EvidenceItem,
     ForensicCase,
@@ -22,7 +19,6 @@ from oseye.storage.repositories.alerts import SQLAlertRepository
 from oseye.storage.repositories.cases import SQLCaseRepository
 from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.storage.repositories.events import SQLEventRepository
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -68,7 +64,7 @@ def make_event(**overrides: Any) -> UniversalEvent:
 
 
 def make_alert(**overrides: Any) -> Alert:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     defaults: dict[str, Any] = {
         "alert_id": uuid4(),
         "created_at": now,
@@ -85,7 +81,7 @@ def make_alert(**overrides: Any) -> Alert:
 
 
 def make_decision(**overrides: Any) -> Decision:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     defaults: dict[str, Any] = {
         "decision_id": uuid4(),
         "created_at": now,
@@ -106,7 +102,7 @@ def make_decision(**overrides: Any) -> Decision:
 
 
 def make_case(**overrides: Any) -> ForensicCase:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     defaults: dict[str, Any] = {
         "case_id": uuid4(),
         "created_at": now,
@@ -313,7 +309,7 @@ async def test_case_create_and_append_custody() -> None:
     await repo.create(case)
 
     entry = {
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "timestamp": datetime.now(tz=UTC).isoformat(),
         "operator": "analyst1",
         "action": "evidence_added",
         "detail": "Added network capture",
@@ -338,7 +334,7 @@ async def test_case_custody_append_multiple() -> None:
         await repo.append_custody(
             case.case_id,
             {
-                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                "timestamp": datetime.now(tz=UTC).isoformat(),
                 "operator": f"op{i}",
                 "action": "step",
                 "detail": f"step {i}",
@@ -354,7 +350,7 @@ async def test_case_custody_append_multiple() -> None:
 async def test_case_with_evidence() -> None:
     backend = await _make_backend()
     repo = SQLCaseRepository(backend.session_factory)
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     ev = EvidenceItem(
         evidence_id=uuid4(),
         type="note",

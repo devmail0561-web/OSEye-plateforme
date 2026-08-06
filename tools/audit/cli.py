@@ -21,12 +21,28 @@ Usage (from repo root):
 from __future__ import annotations
 
 import argparse
-import sys
-from datetime import datetime
+from datetime import UTC, datetime
 
-from .commands import cmd_add_pattern, cmd_false_positive, cmd_mark_fixed, get_sorted_patterns
-from .modules import detect_modules, get_changed_files, update_file_hashes, all_source_files, resolve_globs
-from .persistence import load_patterns, load_state, save_patterns, save_report, save_state
+from .commands import (
+    cmd_add_pattern,
+    cmd_false_positive,
+    cmd_mark_fixed,
+    get_sorted_patterns,
+)
+from .modules import (
+    all_source_files,
+    detect_modules,
+    get_changed_files,
+    resolve_globs,
+    update_file_hashes,
+)
+from .persistence import (
+    load_patterns,
+    load_state,
+    save_patterns,
+    save_report,
+    save_state,
+)
 from .reporter import (
     build_json_report,
     print_full_report,
@@ -125,7 +141,7 @@ def main() -> int:
         save_state(state)
 
         report = {
-            "generated_at": datetime.now().isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "label": "verify",
             "finding_id": finding_id,
             "confirmed": [f.id for f in confirmed],
@@ -175,15 +191,15 @@ def main() -> int:
             print_scan_report(state, new_findings, [], module_status, args.mode, incremental=True)
 
         report = {
-            "generated_at": datetime.now().isoformat(),
-            "label": f"verify_files",
+            "generated_at": datetime.now(UTC).isoformat(),
+            "label": "verify_files",
             "glob": args.verify_files,
             "files_checked": [str(f) for f in target_files],
             "confirmed": [f.id for f in confirmed],
             "resolved": [f.id for f in resolved],
             "new_findings": [f.id for f in new_findings],
         }
-        report_path = save_report(report, f"verify_files")
+        report_path = save_report(report, "verify_files")
         print(f"  Rapport JSON : {report_path}\n")
 
         blockers = sum(
@@ -260,7 +276,7 @@ def main() -> int:
     update_file_hashes(state, all_source_files())
 
     # Timestamps
-    now = datetime.now().isoformat()
+    now = datetime.now(UTC).isoformat()
     if args.diff:
         state.last_incremental_scan = now
     else:

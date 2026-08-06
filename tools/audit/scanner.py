@@ -5,10 +5,10 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
-from .models import ROOT, AuditState, Finding, Pattern, SEVERITY_ORDER
+from .models import ROOT, SEVERITY_ORDER, AuditState, Finding, Pattern
 from .modules import resolve_globs
 
 
@@ -47,7 +47,7 @@ def scan_script(pattern: Pattern) -> list[tuple[str, int, str]]:
     cmd = pattern.script.replace("{ROOT}", str(ROOT))
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=ROOT,
+            cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=ROOT, check=False,
         )
         if result.returncode not in (0, 1) and result.stderr.strip():
             _warn(f"Pattern {pattern.id} — script exit {result.returncode}: {result.stderr.strip()[:120]}")
@@ -59,7 +59,7 @@ def scan_script(pattern: Pattern) -> list[tuple[str, int, str]]:
     except subprocess.TimeoutExpired:
         _warn(f"Pattern {pattern.id} — script timeout (30s)")
         return []
-    except Exception as exc:
+    except OSError as exc:
         _warn(f"Pattern {pattern.id} — script error: {exc}")
         return []
 
@@ -121,7 +121,7 @@ def run_scan(
     Returns:
         List of newly created or re-opened findings.
     """
-    now = datetime.now().isoformat()
+    now = datetime.now(UTC).isoformat()
     new_findings: list[Finding] = []
 
     active = [

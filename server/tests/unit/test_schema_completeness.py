@@ -1,15 +1,12 @@
 """Smoke tests: verify all schema models can be instantiated with minimal data."""
 
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
-
-import pytest
+from datetime import UTC, datetime
+from uuid import uuid4
 
 from oseye.core.schema import (
     AgentInfo,
     Alert,
     AlertNote,
-    CaseNote,
     CollectorConfig,
     CustodyEntry,
     Decision,
@@ -21,7 +18,7 @@ from oseye.core.schema import (
     UniversalEvent,
 )
 
-NOW = datetime.now(tz=timezone.utc)
+NOW = datetime.now(tz=UTC)
 UID = uuid4()
 
 

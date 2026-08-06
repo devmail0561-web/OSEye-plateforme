@@ -66,7 +66,7 @@ class UniversalEvent(BaseModel):
     ti_tags: list[str] = Field(default_factory=list)
     incident_chain_id: UUID | None = None
 
-    extra: dict = Field(default_factory=dict)
+    extra: dict[str, object] = Field(default_factory=dict)
 
     model_config = {"frozen": False}
 
@@ -254,7 +254,7 @@ class EntityProfile(BaseModel):
 class CollectorConfig(BaseModel):
     enabled: bool = True
     throttle: float = 1.0
-    params: dict = Field(default_factory=dict)
+    params: dict[str, object] = Field(default_factory=dict)
 
 
 class SurveillanceProfile(BaseModel):

@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from datetime import UTC, datetime
+from pathlib import Path
 
 from .models import (
+    PATTERNS_FILE,
+    REPORTS_DIR,
+    STATE_FILE,
     AuditState,
     Finding,
     Pattern,
-    PATTERNS_FILE,
-    STATE_FILE,
-    REPORTS_DIR,
 )
 
 # ---------------------------------------------------------------------------
@@ -419,10 +421,9 @@ def save_patterns(patterns: list[Pattern]) -> None:
 # Report persistence
 # ---------------------------------------------------------------------------
 
-def save_report(report: dict, label: str) -> "Path":
-    from datetime import datetime
+def save_report(report: dict, label: str) -> Path:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     path = REPORTS_DIR / f"audit_{label}_{ts}.json"
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
     return path

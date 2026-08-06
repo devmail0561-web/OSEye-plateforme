@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 
-from .models import AuditState, Finding, Pattern, SEVERITY_ORDER
-from .persistence import save_state, save_patterns
-
+from .models import SEVERITY_ORDER, AuditState, Finding, Pattern
+from .persistence import save_patterns, save_state
 
 # ---------------------------------------------------------------------------
 # --fix
@@ -19,7 +17,7 @@ def cmd_mark_fixed(state: AuditState, finding_id: str, note: str) -> None:
         print(f"  Finding '{finding_id}' introuvable.")
         return
     finding.status = "fixed"
-    finding.fix_note = note or f"Marqué fixé le {datetime.now().isoformat()}"
+    finding.fix_note = note or f"Marqué fixé le {datetime.now(UTC).isoformat()}"
     save_state(state)
     print(f"  ✓ {finding_id} marqué comme fixé")
     print(f"    Conseil : lancez --verify {finding_id} pour confirmer la correction.")
@@ -40,7 +38,7 @@ def cmd_false_positive(
         print(f"  Finding '{finding_id}' introuvable.")
         return
     finding.status = "accepted"
-    finding.fix_note = note or f"Faux positif accepté le {datetime.now().isoformat()}"
+    finding.fix_note = note or f"Faux positif accepté le {datetime.now(UTC).isoformat()}"
 
     for p in patterns:
         if p.id == finding.pattern_id:
@@ -100,7 +98,7 @@ def cmd_add_pattern(patterns: list[Pattern]) -> None:
         id=pid, category=cat, module=mod, name=name, description=desc,
         severity=sev, targets=targets, regex=regex, script=script,
         enabled=True, hit_count=0, false_positive_count=0,
-        added_date=datetime.now().strftime("%Y-%m-%d"),
+        added_date=datetime.now(UTC).strftime("%Y-%m-%d"),
         added_by="user", notes=notes,
     )
     patterns.append(pattern)

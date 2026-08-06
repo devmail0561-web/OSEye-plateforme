@@ -21,7 +21,7 @@ _IGNORE_DIRS = frozenset({
 def file_hash(path: Path) -> str:
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-    except Exception:
+    except OSError:
         return ""
 
 

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 
-from .models import AuditState, Finding, Pattern, SEVERITY_ORDER, SEVERITY_COLOR
-
+from .models import SEVERITY_COLOR, SEVERITY_ORDER, AuditState, Finding, Pattern
 
 C = SEVERITY_COLOR
 R = C["RESET"]
@@ -34,7 +33,7 @@ def print_scan_report(
     auto_resolved: list[Finding] | None = None,
 ) -> None:
     print(f"\n{B}{_bar('═')}{R}")
-    print(f"  {B}OSEye Audit — mode={mode}{'  [incrémental]' if incremental else ''} — {datetime.now().strftime('%Y-%m-%d %H:%M')}{R}")
+    print(f"  {B}OSEye Audit — mode={mode}{'  [incrémental]' if incremental else ''} — {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}{R}")
     print(f"{B}{_bar('═')}{R}\n")
 
     # Modules
@@ -84,7 +83,7 @@ def print_verify_report(
 ) -> None:
     scope = f"finding {finding_id}" if finding_id else "tous les findings ouverts"
     print(f"\n{B}{_bar('═')}{R}")
-    print(f"  {B}OSEye Verify — {scope} — {datetime.now().strftime('%Y-%m-%d %H:%M')}{R}")
+    print(f"  {B}OSEye Verify — {scope} — {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}{R}")
     print(f"{B}{_bar('═')}{R}\n")
 
     if confirmed:
@@ -117,7 +116,7 @@ def print_full_report(state: AuditState) -> None:
     total = len(state.findings)
 
     print(f"\n{B}{_bar('═')}{R}")
-    print(f"  {B}OSEye Rapport consolidé — {datetime.now().strftime('%Y-%m-%d %H:%M')}{R}")
+    print(f"  {B}OSEye Rapport consolidé — {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}{R}")
     print(f"  Dernier scan complet    : {state.last_full_scan or '—'}")
     print(f"  Dernier scan incrémental: {state.last_incremental_scan or '—'}")
     print(f"  Dernière vérification   : {state.last_verify or '—'}")
@@ -213,7 +212,7 @@ def build_json_report(
 ) -> dict:
     open_all = [f for f in state.findings.values() if f.status == "open"]
     return {
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "label": label,
         "module_status": module_status,
         "new_findings": [asdict(f) for f in new_findings],
