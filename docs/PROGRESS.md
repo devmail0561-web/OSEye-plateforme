@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.8
+**Version :** 1.9
 **Dernière mise à jour :** 2026-08-07
-**Branche active :** `main` (`bb19630`)
-**Phase courante :** Phase 2 — Full Collection `[x]` COMPLÈTE — 7/7 modules mergés
+**Branche active :** `main` (`latest`)
+**Phase courante :** Phase 3 — Détection `[ ]` À DÉMARRER
 
 ---
 
@@ -54,8 +54,11 @@
 | M16 | Watchdog CPU/RAM | `[x]` Mergé | 8 go | /proc/self/stat (HZ dynamique), throttle |
 | M17 | Policy + Commands clients gRPC | `[x]` Mergé | 3 go | ReceivePolicy + StreamCommands, channel sérialisé |
 | M18 | Normalizers Python Phase 2 | `[x]` Mergé | +19 py | fanotify, inotify, netlink, journald, syslog, udev |
+| M19 | Auditd collector (sans CGO) | `[x]` Mergé | 12 go | tail audit.log, parse SYSCALL, hex comm, dégradation gracieuse |
+| M20 | eBPF collector (cilium/ebpf) | `[x]` Mergé | 9 go | execve+openat+connect, stub bpf2go, dégradation gracieuse |
+| M21 | Tests de résilience E2E | `[x]` Mergé | 4 go | buffer drain, proto roundtrip, batcher flush |
 
-**7/7 modules mergés sur main.** Phase 2 Full Collection complète.
+**10/10 modules Phase 2 mergés sur main.** Phase 2 Full Collection **COMPLÈTE**.
 
 ---
 
@@ -64,7 +67,7 @@
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
 | Tests Python (unit + integration + scenarios) | **127/127** | 100% | ✅ |
-| Tests Go | **108 tests / 19 packages** | 100% | ✅ |
+| Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy --strict (normalizer, 17 fichiers) | **0 erreur** | 0 | ✅ |
 | golangci-lint (agent) | **0 erreur** | 0 | ✅ |
