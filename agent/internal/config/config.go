@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // Config holds the agent runtime configuration.
@@ -39,6 +37,11 @@ type Config struct {
 	// Collectors configuration
 	FanotifyPaths  []string
 	InotifyWatches []InotifyWatch
+
+	// Phase 2 collectors
+	JournaldPriority string
+	JournaldUnits    []string
+	SyslogAddr       string
 }
 
 // InotifyWatch represents an inotify watch configuration.
@@ -67,8 +70,28 @@ func Load() (*Config, error) {
 		InotifyWatches: parseInotifyWatches(
 			getenv("OSEYE_INOTIFY_WATCHES", `[{"path":"/tmp","recursive":false,"mask":4095}]`),
 		),
+		JournaldPriority: getenv("OSEYE_JOURNALD_PRIORITY", ""),
+		JournaldUnits: parseCSV(
+			getenv("OSEYE_JOURNALD_UNITS", ""),
+		),
+		SyslogAddr: getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
 	}
 	return cfg, nil
+}
+
+func parseCSV(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 func parseFanotifyPaths(pathsStr string) []string {
@@ -96,7 +119,7 @@ func parseInotifyWatches(watchesJSON string) []InotifyWatch {
 			slog.String("error", err.Error()),
 			slog.String("input", watchesJSON))
 		return []InotifyWatch{
-			{Path: "/tmp", Recursive: false, Mask: unix.IN_ALL_EVENTS},
+			{Path: "/tmp", Recursive: false, Mask: uint32(0xFFF)}, // linux IN_ALL_EVENTS
 		}
 	}
 	return watches

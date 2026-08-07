@@ -24,6 +24,7 @@ Les skills sont automatiquement disponibles dès que vous ouvrez Claude Code dep
 | `/oseye-task` | Avancer sur le plan d'action | Implémenter la prochaine tâche `PLAN_ACTION.md` |
 | `/oseye-debug` | Diagnostiquer un problème | Tests qui échouent, pipeline silencieux |
 | `/oseye-security` | Review de sécurité | Avant merge d'une PR sensible |
+| `/oseye-agent-step` | Avancer sur le plan agent Go (M14-M21) | Implémenter mapper, watchdog, policy, eBPF, auditd... |
 
 ---
 
@@ -172,6 +173,7 @@ Le skill analyse les logs, lance les tests de diagnostic et identifie la cause r
 | `docs/ARCHITECTURE.md` | Architecture complète — source de vérité |
 | `docs/PLAN_ACTION.md` | 188 tâches, phases, dépendances |
 | `docs/DEVELOPMENT_PLAN_PHASE2.md` | Plan Phase 2 (M12-M18) |
+| `docs/DEVELOPMENT_PLAN_AGENT.md` | Plan agent Go détaillé (M14-M21) — fichiers, fonctions, tests |
 | `CONTRIBUTING.md` | Workflow de contribution, PR, reviews |
 
 ---

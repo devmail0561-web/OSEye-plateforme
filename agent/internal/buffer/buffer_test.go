@@ -3,6 +3,10 @@ package buffer
 import (
 	"bytes"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
+
+	gen "github.com/oseye/agent/gen"
 )
 
 func openMemory(t *testing.T) *Buffer {
@@ -166,5 +170,69 @@ func TestPushEmptySlice(t *testing.T) {
 	n, _ := b.Len()
 	if n != 0 {
 		t.Errorf("Len() after Push(empty) = %d, want 0", n)
+	}
+}
+
+// TestPushPopProtoRoundtrip verifies that a UniversalEventPB survives a
+// buffer round-trip when stored as marshalled protobuf bytes (M15).
+func TestPushPopProtoRoundtrip(t *testing.T) {
+	b := openMemory(t)
+
+	ev := &gen.UniversalEventPB{
+		EventId:     []byte("0123456789abcdef"),
+		TimestampNs: 1_700_000_000_000_000_000,
+		Hostname:    "host-a",
+		AgentId:     []byte("f0000000000000000000000000000001"),
+		Category:    "process",
+		Type:        "exec",
+		Severity:    "medium",
+		Collector:   "procfs",
+		Os:          "linux",
+		Uid:         1000,
+		Gid:         1000,
+		Pid:         42,
+		Ppid:        1,
+		ProcessName: "bash",
+		Executable:  "/bin/bash",
+		Cmdline:     "-c ls",
+		Resource:    "/bin/ls",
+		Result:      "success",
+		SrcIp:       "10.0.0.1",
+		SrcPort:     1234,
+		DstIp:       "8.8.8.8",
+		DstPort:     53,
+		Protocol:    "tcp",
+		HashChain:   []byte("hash-chain-bytes"),
+		ExtraJson:   []byte(`{"pid":42}`),
+	}
+
+	raw, err := proto.Marshal(ev)
+	if err != nil {
+		t.Fatalf("proto.Marshal error = %v", err)
+	}
+	if err := b.Push([][]byte{raw}); err != nil {
+		t.Fatalf("Push() error = %v", err)
+	}
+
+	got, err := b.Pop(1)
+	if err != nil {
+		t.Fatalf("Pop() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Pop() returned %d items, want 1", len(got))
+	}
+
+	var decoded gen.UniversalEventPB
+	if err := proto.Unmarshal(got[0], &decoded); err != nil {
+		t.Fatalf("proto.Unmarshal error = %v", err)
+	}
+	if !proto.Equal(ev, &decoded) {
+		t.Errorf("round-trip mismatch:\n original: %v\n decoded: %v", ev, &decoded)
+	}
+	if !bytes.Equal(ev.HashChain, decoded.HashChain) {
+		t.Errorf("HashChain mismatch after round-trip")
+	}
+	if decoded.Pid != 42 || decoded.ProcessName != "bash" {
+		t.Errorf("decoded fields mismatch: pid=%d name=%q", decoded.Pid, decoded.ProcessName)
 	}
 }
