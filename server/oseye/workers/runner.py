@@ -10,6 +10,7 @@ started from ``oseye.main`` lifespan.
 from __future__ import annotations
 
 import asyncio
+import socket
 
 from oseye.bus.factory import create_bus
 from oseye.config import Settings
@@ -30,7 +31,7 @@ async def run_workers(settings: Settings) -> None:
     await backend.init()
     repo = SQLEventRepository(backend.session_factory)
 
-    normalizer = NormalizerEngine(bus=bus, hostname="localhost")
+    normalizer = NormalizerEngine(bus=bus, hostname=socket.gethostname())
     writer = StorageWriter(
         bus=bus,
         repo=repo,

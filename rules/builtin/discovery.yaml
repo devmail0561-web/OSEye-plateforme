@@ -11,11 +11,11 @@
          or event.process_name == "uname" or event.process_name == "hostname"
          or event.process_name == "uptime")
     and event.uid != 0
-  timeframe: 10
-  threshold: 3
+  timeframe: 30
+  threshold: 5
   actions: [ALERT]
   explanation: >
-    Plusieurs commandes d'énumération système en 10 secondes.
+    Plusieurs commandes d'énumération système en 30 secondes.
     Pattern typique post-exploitation pour cartographier l'environnement.
 
 - id: rule_network_discovery
@@ -50,8 +50,8 @@
     and event.process_name == "ps"
     and (event.cmdline contains "aux" or event.cmdline contains "-ef")
     and event.uid != 0
-  timeframe: 5
-  threshold: 5
+  timeframe: 30
+  threshold: 10
   actions: [ALERT]
   explanation: >
     Énumération répétée des processus en cours.

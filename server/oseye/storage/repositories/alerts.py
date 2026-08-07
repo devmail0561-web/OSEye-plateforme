@@ -151,7 +151,9 @@ class SQLAlertRepository:
 
             rows = (
                 await session.execute(
-                    stmt.offset(pagination.offset).limit(pagination.limit)
+                    stmt.order_by(AlertRow.created_at.desc())
+                    .offset(pagination.offset)
+                    .limit(pagination.limit)
                 )
             ).scalars().all()
             items = [_row_to_alert(r) for r in rows]

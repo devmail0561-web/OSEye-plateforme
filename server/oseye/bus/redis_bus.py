@@ -8,6 +8,12 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
+from oseye.core.observability import get_logger
+
+_logger = get_logger(__name__)
+
+_MAX_BACKOFF = 30.0  # seconds
+
 
 class RedisEventBus:
     """EventBus backed by Redis Streams.
@@ -53,6 +59,7 @@ class RedisEventBus:
         return self._read_pattern(client, pattern)
 
     async def _read_stream(self, client: Any, topic: str) -> AsyncGenerator[bytes, None]:
+        _backoff = 0.1
         while not self._closed:
             try:
                 results: list[Any] = await client.xreadgroup(
@@ -62,6 +69,7 @@ class RedisEventBus:
                     count=10,
                     block=100,
                 )
+                _backoff = 0.1  # reset on success
                 if not results:
                     continue
                 for _stream, messages in results:
@@ -72,8 +80,15 @@ class RedisEventBus:
                     await client.xack(topic, self._group, *msg_ids)
             except asyncio.CancelledError:
                 break
-            except Exception:
-                await asyncio.sleep(0.1)
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning(
+                    "redis_read_stream_error",
+                    topic=topic,
+                    error=str(exc),
+                    backoff=_backoff,
+                )
+                await asyncio.sleep(_backoff)
+                _backoff = min(_backoff * 2, _MAX_BACKOFF)
 
     async def _read_pattern(
         self, client: Any, pattern: str
@@ -132,7 +147,8 @@ class RedisEventBus:
                     await asyncio.sleep(0.1)
             except asyncio.CancelledError:
                 break
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("redis_read_pattern_error", pattern=pattern, error=str(exc))
                 await asyncio.sleep(0.1)
 
     async def close(self) -> None:

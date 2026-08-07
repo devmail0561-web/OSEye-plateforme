@@ -1,8 +1,8 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.1
+**Version :** 2.2
 **Dernière mise à jour :** 2026-08-07
-**Branche active :** `main` (`latest`)
+**Branche active :** `fix/audit-phase3` (en cours de merge → `main`)
 **Phase courante :** Phase 3 — Détection `[~]` EN COURS
 
 ---
@@ -78,10 +78,11 @@
 | Tests Python (unit + integration + scenarios) | **178/178** | 100% | ✅ |
 | Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
-| mypy --strict (rule_engine, workers, normalizer — 23 fichiers) | **0 erreur** | 0 | ✅ |
+| mypy (rule_engine, workers, api, main — 23 fichiers) | **0 erreur** | 0 | ✅ |
 | golangci-lint (agent) | **0 erreur** | 0 | ✅ |
+| go build ./... | **0 erreur** | 0 | ✅ |
+| go vet ./... | **0 erreur** | 0 | ✅ |
 | go test -race ./... | **0 race** | 0 | ✅ |
-| go vet | **0 erreur** | 0 | ✅ |
 
 ### Répartition tests Python
 
@@ -139,6 +140,65 @@ Audit complet réalisé sur les modules M14-M18 (3 agents parallèles : Go, Pyth
 
 ---
 
+## Audit code — Phase 3 (2026-08-07)
+
+Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, transport, policy, mapper).
+**32 findings identifiés → 32 corrigés** dans `fix/audit-phase3` (commits `a2290bd` + `b9be613`).
+
+### Findings résolus — Go (agent)
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| G1 | HIGH | `ebpf/loader.go` | `parseConnect` : guard `len(raw) < 44` insuffisant (struct 52 bytes) → panic |
+| G2 | HIGH | `ebpf/loader.go` | `parseOpenat` : guard `len(raw) < 284` insuffisant (struct 292 bytes) → panic |
+| G3 | HIGH | `ebpf/loader.go` | `ReadEvents` : double-close channel `out` si les deux goroutines se terminent |
+| G4 | HIGH | `ebpf/collector.go` | Race condition sur `c.loader` entre `Start()` et `Stop()` |
+| G5 | HIGH | `fanotify/collector.go` | Double-close `c.fd` si `Stop()` appelé 2× — undefined behavior kernel |
+| G6 | HIGH | `inotify/collector.go` | Même double-close fd que fanotify |
+| G7 | HIGH | `transport/grpc_client.go` | `SendBatch` : boucle retry infinie sans cap → agent bloqué définitivement |
+| G8 | MEDIUM | `policy/handler.go` | Directive `collectors_enabled` no-op silencieux — ignoré sans log |
+| G9 | MEDIUM | `config/config.go` | Absence de `Validate()` — config invalide détectée trop tard au runtime |
+| G10 | CRITICAL | `mapper/mapper.go` | `mapCategory` retourne `"process"` pour tous events eBPF y compris réseau |
+| G11 | CRITICAL | `mapper/mapper.go` | `mapFields` : champs eBPF `comm`/`filename`/`event_type` non extraits |
+
+### Findings résolus — Python (server)
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| P1 | CRITICAL | `rule_engine/evaluator.py` | Module `re` complet dans sandbox → accès `__globals__` → RCE |
+| P2 | CRITICAL | `api/routers/auth.py` | Stub d'auth acceptant tout → n'importe qui peut s'authentifier |
+| P3 | CRITICAL | `main.py` | Lifespan incomplet : `jwt_handler` et `event_repo` absents de `app.state` |
+| P4 | HIGH | `rule_engine/evaluator.py` | `_temporal_windows` sans verrou threading → race + memory leak sans purge |
+| P5 | HIGH | `api/ws/alerts.py` | WebSocket `/ws/alerts` sans authentification JWT |
+| P6 | HIGH | `api/auth/jwt.py` | `detail=f"Invalid token: {exc}"` → fuite d'information dans les 401 |
+| P7 | MEDIUM | `workers/storage_writer.py` | Double parse JSON (`json.loads` + `model_validate_json`) inutile |
+| P8 | MEDIUM | `bus/redis_bus.py` | `except Exception: pass` silencieux sans backoff exponentiel |
+| P9 | MEDIUM | `normalizer/adapters/linux/procfs.py` | `int(data.get(...))` non gardé → crash si champ manquant |
+| P10 | MEDIUM | `normalizer/adapters/linux/auditd.py` | Idem procfs pour pid/ppid/uid/gid |
+| P11 | MEDIUM | `normalizer/adapters/linux/ebpf.py` | `executable` depuis `"exe"` (absent) ; `src_ip`/`src_port` extraits (collecteur Go n'émet que dst) |
+| P12 | MEDIUM | `storage/repositories/alerts.py` | `list()` sans `ORDER BY` → ordre non déterministe |
+| P13 | MEDIUM | `api/routers/alerts.py` | `AlertPatch.assigned_to` sans contrainte longueur |
+| P14 | LOW | `rule_engine/engine.py` | Hot-reload ne scanne que `*.yaml`, ignore `*.yml` |
+| P15 | LOW | `workers/runner.py` | `hostname="localhost"` codé en dur |
+| P16 | LOW | `core/observability.py` | `ExceptionPrettyPrinter(file=sys.stderr)` non structuré ; OTEL `insecure=True` hardcodé |
+
+### Findings résolus — Règles YAML
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| R1 | CRITICAL | `credential_access.yaml` | `rule_ssh_bruteforce` : condition `event.result == "denied"` toujours false → règle morte |
+| R2 | HIGH | `lateral_movement.yaml` | `rule_port_scan` : condition `event.result == "refused"` toujours false → règle morte |
+| R3 | HIGH | `defense_evasion.yaml` | `rule_history_clear` : `category==process AND type==delete` impossible → règle morte |
+| R4 | MEDIUM | `credential_access.yaml` | `rule_ssh_private_key_access` : faux positifs ssh/ssh-agent/git |
+| R5 | MEDIUM | `lateral_movement.yaml` | `rule_ssh_lateral` : `dst_ip contains "172."` trop large (non RFC 1918) |
+| R6 | MEDIUM | `lateral_movement.yaml` | `rule_rsync_exfil` : sans timeframe/threshold → alerte sur chaque rsync |
+| R7 | MEDIUM | `discovery.yaml` | `rule_recon_enumeration` + `rule_process_discovery` : thresholds trop bas → faux positifs |
+| R8 | MEDIUM | `impact_c2.yaml` | `rule_outbound_c2_beaconing` : même problème `"172."` que R5 |
+| R9 | LOW | `privilege_escalation.yaml` | `rule_polkit_abuse` : MITRE `T1548` trop large → `T1548.003` |
+| R10 | LOW | `credential_access.yaml` | `rule_memory_dump_mimipenguin` : MITRE `T1003.001` incorrect → `T1003.007` |
+
+---
+
 ## Failles de sécurité
 
 | ID | Description | Statut |
@@ -151,6 +211,10 @@ Audit complet réalisé sur les modules M14-M18 (3 agents parallèles : Go, Pyth
 | SEC-PREV-002 | Rate limiting `/auth/token` 5/min via slowapi (M9) | ✅ Enforced |
 | SEC-RISK-001 | Fallback request.agent_id si CN absent — supprimé | ✅ Corrigé |
 | SEC-AUDIT-001 | Pas de limite longueur sur champs string des adapters — DoS potentiel | 🟡 Ouvert (LOW) |
+| SEC-AUDIT3-001 | RCE sandbox : module `re` complet dans l'évaluateur → accès `__globals__` | ✅ Corrigé (fix/audit-phase3) |
+| SEC-AUDIT3-002 | Auth stub : `POST /auth/token` acceptait tout login/password | ✅ Corrigé — bcrypt passlib |
+| SEC-AUDIT3-003 | WebSocket `/ws/alerts` sans auth JWT | ✅ Corrigé — token query param |
+| SEC-AUDIT3-004 | `jwt.py` : detail exception révélait le type d'erreur dans les 401 | ✅ Corrigé — opacifié |
 
 ---
 
@@ -176,6 +240,16 @@ Audit complet réalisé sur les modules M14-M18 (3 agents parallèles : Go, Pyth
 | BUG-016 | `int(None)` TypeError sur pid=null dans adapters Python | fix/audit-corrections |
 | BUG-017 | `timestamp_ns` = heure serveur — heure agent écrasée | fix/audit-corrections |
 | BUG-018 | Events perdus si SendBatch échoue pendant drainBuffer | fix/audit-corrections |
+| BUG-019 | eBPF mapper : tous les events réseau classés `"process"` au lieu de `"network"` | fix/audit-phase3 |
+| BUG-020 | `parseConnect` panic si payload < 52 bytes (guard à 44) | fix/audit-phase3 |
+| BUG-021 | `parseOpenat` panic si payload < 292 bytes (guard à 284) | fix/audit-phase3 |
+| BUG-022 | Double-close fd fanotify/inotify → undefined behavior | fix/audit-phase3 |
+| BUG-023 | `SendBatch` retry infini sans cap → agent bloqué | fix/audit-phase3 |
+| BUG-024 | `rule_ssh_bruteforce` condition morte (`event.result == "denied"`) | fix/audit-phase3 |
+| BUG-025 | `rule_port_scan` condition morte (`event.result == "refused"`) | fix/audit-phase3 |
+| BUG-026 | `rule_history_clear` condition impossible (`process AND type==delete`) | fix/audit-phase3 |
+| BUG-027 | `main.py` lifespan : `jwt_handler` / `event_repo` absents de `app.state` | fix/audit-phase3 |
+| BUG-028 | `_temporal_windows` memory leak (pas de purge TTL) + race threading | fix/audit-phase3 |
 
 ---
 
@@ -256,6 +330,11 @@ Audit complet réalisé sur les modules M14-M18 (3 agents parallèles : Go, Pyth
 
 | Hash | Message | Date |
 |------|---------|------|
+| `b9be613` | fix(audit-phase3): corrections Python, règles YAML et adapters | 2026-08-07 |
+| `a2290bd` | fix(audit-phase3): 32 corrections audit — RCE sandbox, auth, eBPF, regles mortes, races Go | 2026-08-07 |
+| `41ea617` | docs: PROGRESS v2.1 — M23 mergé, 178 tests, P3.09-P3.11 cochés | 2026-08-07 |
+| `3552819` | Merge M23/api-rules-ws-alerts → main | 2026-08-07 |
+| `9894ea5` | feat(M23): API rules + WS alerts + câblage RuleWorker en production | 2026-08-07 |
 | `bb19630` | Merge fix/audit-corrections → main | 2026-08-07 |
 | `4fdd10e` | fix: corrections audit — 18 findings résolus | 2026-08-07 |
 | `edc18ec` | Merge M18/server-normalizers-phase2 → main | 2026-08-07 |

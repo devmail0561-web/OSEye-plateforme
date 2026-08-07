@@ -5,6 +5,7 @@ package ebpf
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 
 	"github.com/oseye/agent/internal/collector"
@@ -17,6 +18,7 @@ var _ collector.Collector = (*EBPFCollector)(nil)
 // or CAP_BPF is absent, Start() logs a warning and returns nil so the agent
 // continues running with the remaining collectors.
 type EBPFCollector struct {
+	mu         sync.Mutex
 	loader     *EBPFLoader
 	stopCh     chan struct{}
 	running    atomic.Bool
@@ -44,10 +46,14 @@ func (c *EBPFCollector) Start(ctx context.Context, out chan<- collector.RawEvent
 		slog.Warn("ebpf: loader unavailable — collector disabled", "err", err)
 		return nil
 	}
+	c.mu.Lock()
 	c.loader = loader
+	c.mu.Unlock()
 	defer func() {
 		loader.Close()
+		c.mu.Lock()
 		c.loader = nil
+		c.mu.Unlock()
 	}()
 
 	c.running.Store(true)
@@ -101,8 +107,11 @@ func (c *EBPFCollector) Stop() error {
 	default:
 		close(c.stopCh)
 	}
-	if c.loader != nil {
-		c.loader.Close()
+	c.mu.Lock()
+	ldr := c.loader
+	c.mu.Unlock()
+	if ldr != nil {
+		ldr.Close()
 	}
 	return nil
 }

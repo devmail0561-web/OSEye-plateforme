@@ -14,6 +14,10 @@ from typing import Any
 import jwt
 from fastapi import HTTPException, status
 
+from oseye.core.observability import get_logger
+
+_logger = get_logger(__name__)
+
 
 class JWTHandler:
     """Creates and verifies JWT tokens for OSEye API authentication."""
@@ -67,8 +71,9 @@ class JWTHandler:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         except jwt.InvalidTokenError as exc:
+            _logger.warning("jwt_invalid", error=str(exc))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid token: {exc}",
+                detail="Authentication failed",
                 headers={"WWW-Authenticate": "Bearer"},
             )

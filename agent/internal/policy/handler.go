@@ -49,7 +49,7 @@ func (h *ProfileHandler) Apply(profile *gen.SurveillanceProfilePB) {
 			}
 			// The manager only supports a global throttle; disabling specific
 			// collectors is deferred to a per-collector policy (Phase 5).
-			_ = enabledSet
+			slog.Warn("policy collectors_enabled not implemented", "requested", enabledSet)
 		}
 	}
 

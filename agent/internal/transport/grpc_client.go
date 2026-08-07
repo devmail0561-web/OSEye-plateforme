@@ -21,6 +21,7 @@ const (
 	sendTimeout    = 10 * time.Second
 	backoffInitial = 1 * time.Second
 	backoffMax     = 30 * time.Second
+	maxRetries     = 15
 )
 
 // Signer is the signing interface used by GRPCClient. *signer.Signer satisfies
@@ -80,6 +81,10 @@ func (c *GRPCClient) SendBatch(ctx context.Context, events []*gen.UniversalEvent
 
 	delay := backoffInitial
 	for attempt := 1; ; attempt++ {
+		if attempt > maxRetries {
+			return fmt.Errorf("max retries exceeded: %d attempts", maxRetries)
+		}
+
 		sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
 		err := c.sendOnce(sendCtx, req)
 		cancel()
@@ -105,7 +110,6 @@ func (c *GRPCClient) SendBatch(ctx context.Context, events []*gen.UniversalEvent
 		if delay > backoffMax {
 			delay = backoffMax
 		}
-		_ = attempt // available for logging if needed
 	}
 }
 
