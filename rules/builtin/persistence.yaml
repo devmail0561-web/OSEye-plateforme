@@ -1,0 +1,90 @@
+- id: rule_crontab_modification
+  name: "Modification des crontabs système"
+  enabled: true
+  severity: medium
+  tags: [persistence, scheduled_task]
+  mitre: [T1053.003]
+  platforms: [linux]
+  condition: |
+    event.category == "file"
+    and event.type == "write"
+    and (event.resource contains "/etc/cron" or event.resource contains "/var/spool/cron")
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Modification d'un fichier crontab système ou utilisateur.
+    Technique de persistance courante pour maintenir un accès après redémarrage.
+
+- id: rule_systemd_service_creation
+  name: "Création d'un service systemd hors package manager"
+  enabled: true
+  severity: medium
+  tags: [persistence, systemd_service]
+  mitre: [T1543.002]
+  platforms: [linux]
+  condition: |
+    event.category == "file"
+    and event.type == "write"
+    and (event.resource contains "/etc/systemd/system/" or event.resource contains "/usr/lib/systemd/system/")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Création d'un fichier service systemd par un utilisateur non-root.
+    Indique une tentative de persistance via un service système.
+
+- id: rule_rc_local_modification
+  name: "Modification de /etc/rc.local"
+  enabled: true
+  severity: high
+  tags: [persistence, boot_autostart]
+  mitre: [T1037.004]
+  platforms: [linux]
+  condition: |
+    event.category == "file"
+    and event.type == "write"
+    and event.resource == "/etc/rc.local"
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Modification de /etc/rc.local — fichier exécuté au démarrage du système.
+    Vecteur de persistance persistante après reboot.
+
+- id: rule_authorized_keys_modified
+  name: "Modification de ~/.ssh/authorized_keys"
+  enabled: true
+  severity: high
+  tags: [persistence, ssh_authorized_keys]
+  mitre: [T1098.004]
+  platforms: [linux, darwin]
+  condition: |
+    event.category == "file"
+    and event.type == "write"
+    and event.resource contains "authorized_keys"
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Modification d'un fichier authorized_keys SSH.
+    Permet un accès SSH sans mot de passe — mécanisme de backdoor courant.
+
+- id: rule_ld_preload_abuse
+  name: "Manipulation de LD_PRELOAD pour injection de bibliothèque"
+  enabled: true
+  severity: high
+  tags: [persistence, defense_evasion, ld_preload]
+  mitre: [T1574.006]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.cmdline contains "LD_PRELOAD" or event.cmdline contains "LD_LIBRARY_PATH")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Utilisation de LD_PRELOAD pour injecter une bibliothèque partagée.
+    Permet le hooking de fonctions système et la persistance furtive.

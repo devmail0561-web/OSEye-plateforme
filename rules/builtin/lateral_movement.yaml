@@ -1,0 +1,95 @@
+- id: rule_ssh_lateral
+  name: "Connexion SSH sortante vers réseau interne (lateral movement)"
+  enabled: true
+  severity: medium
+  tags: [lateral_movement, ssh]
+  mitre: [T1021.004]
+  platforms: [linux]
+  condition: |
+    event.category == "network"
+    and event.protocol == "tcp"
+    and event.dst_port == 22
+    and event.type == "new"
+    and (event.dst_ip contains "10." or event.dst_ip contains "192.168."
+         or event.dst_ip contains "172.")
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Connexion SSH sortante vers une adresse IP interne.
+    Peut indiquer un mouvement latéral depuis une machine compromise vers d'autres cibles.
+
+- id: rule_port_scan
+  name: "Scan de ports (>20 connexions TCP/30s vers IPs différentes)"
+  enabled: true
+  severity: high
+  tags: [lateral_movement, discovery, port_scan]
+  mitre: [T1046]
+  platforms: [linux]
+  condition: |
+    event.category == "network"
+    and event.protocol == "tcp"
+    and event.result == "refused"
+  timeframe: 30
+  threshold: 20
+  actions: [ALERT]
+  explanation: >
+    Volume élevé de connexions TCP refusées en 30 secondes.
+    Pattern typique d'un scan de ports (nmap, masscan).
+
+- id: rule_rsync_exfil
+  name: "Transfert rsync/scp hors horaires business"
+  enabled: true
+  severity: medium
+  tags: [lateral_movement, data_transfer]
+  mitre: [T1021.004, T1048]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "rsync" or event.process_name == "scp")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Utilisation de rsync ou scp pour un transfert de données.
+    Surveiller en combinaison avec les destinations réseau pour détecter l'exfiltration.
+
+- id: rule_nfs_smb_mount_suspicious
+  name: "Montage NFS/SMB suspect"
+  enabled: true
+  severity: medium
+  tags: [lateral_movement, remote_services]
+  mitre: [T1021.002]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "mount" or event.cmdline contains "mount")
+    and (event.cmdline contains "cifs" or event.cmdline contains "nfs"
+         or event.cmdline contains "smbfs")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Montage de partage réseau NFS/SMB par un utilisateur non-root.
+    Peut indiquer une reconnaissance ou un accès latéral à des ressources partagées.
+
+- id: rule_rdp_tunneling
+  name: "Tunnel RDP via SSH (port forwarding)"
+  enabled: true
+  severity: high
+  tags: [lateral_movement, protocol_tunneling]
+  mitre: [T1572]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and event.process_name == "ssh"
+    and (event.cmdline contains "-L 3389" or event.cmdline contains "-R 3389"
+         or event.cmdline contains "-D")
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Création d'un tunnel SSH vers le port RDP (3389) ou en mode SOCKS (-D).
+    Technique de pivot réseau courante dans les intrusions avancées.

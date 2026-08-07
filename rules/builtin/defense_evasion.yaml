@@ -1,0 +1,95 @@
+- id: rule_log_deletion
+  name: "Suppression de fichiers de logs système"
+  enabled: true
+  severity: high
+  tags: [defense_evasion, indicator_removal]
+  mitre: [T1070.002]
+  platforms: [linux]
+  condition: |
+    event.category == "file"
+    and event.type == "delete"
+    and (event.resource contains "/var/log/" or event.resource contains "/var/log/auth"
+         or event.resource contains "/var/log/syslog" or event.resource contains "/var/log/messages")
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Suppression de fichiers de logs système. Technique d'effacement des traces
+    après une intrusion (Indicator Removal on Host).
+
+- id: rule_history_clear
+  name: "Effacement de l'historique shell"
+  enabled: true
+  severity: medium
+  tags: [defense_evasion, clear_command_history]
+  mitre: [T1070.003]
+  platforms: [linux, darwin]
+  condition: |
+    event.category == "process"
+    and (event.cmdline contains "history -c" or event.cmdline contains "HISTFILE=/dev/null"
+         or event.cmdline contains "unset HISTFILE" or event.cmdline contains "HISTSIZE=0"
+         or event.resource contains ".bash_history")
+    and event.type == "delete"
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Effacement de l'historique de commandes shell.
+    Technique courante pour masquer les commandes exécutées lors d'une intrusion.
+
+- id: rule_timestomp
+  name: "Manipulation des horodatages de fichiers (timestomping)"
+  enabled: true
+  severity: medium
+  tags: [defense_evasion, timestomp]
+  mitre: [T1070.006]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "touch" or event.cmdline contains "touch -t"
+         or event.cmdline contains "touch -d")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Modification des timestamps de fichiers via touch.
+    Permet de masquer les indicateurs de compromission en altérant les dates.
+
+- id: rule_disable_selinux_apparmor
+  name: "Désactivation de SELinux ou AppArmor"
+  enabled: true
+  severity: critical
+  tags: [defense_evasion, impair_defenses]
+  mitre: [T1562.001]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.cmdline contains "setenforce 0" or event.cmdline contains "aa-teardown"
+         or event.cmdline contains "systemctl disable apparmor"
+         or event.cmdline contains "systemctl stop apparmor"
+         or event.resource contains "/etc/selinux/config")
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Tentative de désactivation du module de sécurité Linux (SELinux/AppArmor).
+    Réduit significativement la posture de sécurité du système.
+
+- id: rule_rootkit_detection
+  name: "Tentative de chargement de module noyau non signé"
+  enabled: true
+  severity: critical
+  tags: [defense_evasion, rootkit]
+  mitre: [T1014]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "insmod" or event.process_name == "modprobe")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Chargement d'un module noyau par un utilisateur non-root.
+    Vecteur d'installation de rootkit ou de backdoor kernel.

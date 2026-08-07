@@ -1,0 +1,105 @@
+- id: rule_reverse_shell
+  name: "Tentative de reverse shell (bash/nc/python)"
+  enabled: true
+  severity: critical
+  tags: [c2, execution, reverse_shell]
+  mitre: [T1059.004]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (
+      (event.process_name == "bash" and (event.cmdline contains "/dev/tcp/" or event.cmdline contains ">&"))
+      or (event.process_name == "nc" and (event.cmdline contains "-e" or event.cmdline contains "-c"))
+      or (event.cmdline contains "python" and event.cmdline contains "socket" and event.cmdline contains "exec")
+      or (event.cmdline contains "perl" and event.cmdline contains "socket")
+    )
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Pattern de reverse shell détecté (bash /dev/tcp, netcat -e, python socket exec).
+    Indique une compromission active avec communication vers un C2 distant.
+
+- id: rule_crypto_mining
+  name: "Processus de minage de cryptomonnaie"
+  enabled: true
+  severity: high
+  tags: [impact, resource_hijacking, cryptomining]
+  mitre: [T1496]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "xmrig" or event.process_name == "minerd"
+         or event.executable contains "xmrig" or event.executable contains "stratum+tcp"
+         or event.cmdline contains "stratum+tcp" or event.cmdline contains "xmrig"
+         or event.cmdline contains "--mining")
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Détection d'un processus de minage de cryptomonnaie (xmrig, minerd).
+    Consomme les ressources CPU/GPU du système et indique une compromission.
+
+- id: rule_data_destruction
+  name: "Tentative de destruction massive de données"
+  enabled: true
+  severity: critical
+  tags: [impact, data_destruction]
+  mitre: [T1485]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (
+      (event.process_name == "rm" and (event.cmdline contains "-rf /" or event.cmdline contains "--no-preserve-root"))
+      or (event.process_name == "shred" and event.cmdline contains "-u")
+      or (event.cmdline contains "dd if=/dev/zero of=/dev/sd")
+      or (event.cmdline contains "mkfs" and event.uid != 0)
+    )
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Commande de destruction de données détectée (rm -rf /, shred, dd /dev/zero).
+    Peut indiquer une attaque ransomware, un wiper ou un sabotage.
+
+- id: rule_scheduled_download_exec
+  name: "Téléchargement et exécution de script distant"
+  enabled: true
+  severity: high
+  tags: [c2, execution, download_exec]
+  mitre: [T1059, T1105]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (
+      (event.process_name == "bash" and (event.cmdline contains "curl" or event.cmdline contains "wget") and event.cmdline contains "|")
+      or (event.cmdline contains "curl" and (event.cmdline contains "| bash" or event.cmdline contains "| sh"))
+      or (event.cmdline contains "wget" and (event.cmdline contains "| bash" or event.cmdline contains "| sh"))
+    )
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Pattern download-and-execute : téléchargement d'un script distant et exécution directe
+    via pipe (curl | bash). Vecteur courant de téléchargement de malware ou backdoor.
+
+- id: rule_outbound_c2_beaconing
+  name: "Beaconing C2 — connexions répétées vers même IP externe"
+  enabled: true
+  severity: high
+  tags: [c2, command_and_control]
+  mitre: [T1071.001]
+  platforms: [linux]
+  condition: |
+    event.category == "network"
+    and event.protocol == "tcp"
+    and event.type == "new"
+    and not (event.dst_ip contains "10." or event.dst_ip contains "192.168." or event.dst_ip contains "172.")
+    and (event.dst_port == 4444 or event.dst_port == 8080 or event.dst_port == 1337
+         or event.dst_port == 6666 or event.dst_port == 9001)
+  timeframe: 300
+  threshold: 5
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Connexions répétées vers la même IP externe sur des ports C2 courants
+    (4444 Metasploit, 1337, 6666, 9001 Tor). Pattern de beaconing C2.
