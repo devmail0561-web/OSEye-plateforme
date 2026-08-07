@@ -206,9 +206,9 @@ Ces fichiers doivent être finalisés et reviewés **avant d'écrire le moindre 
 | Impact / C2 | reverse_shell, crypto_mining, data_destruction, scheduled_download_exec, outbound_c2_beaconing |
 
 - [x] **P3.08** — Filtre `event.platform` dans l'évaluateur : règles cross-OS fonctionnelles ✓ M22
-- [ ] **P3.09** — `api/routers/alerts.py` : `GET /alerts`, `GET /alerts/{id}`, `PATCH`, `POST .../acknowledge`, `POST .../false-positive`, `GET /alerts/stats`
-- [ ] **P3.10** — `api/routers/rules.py` : CRUD complet + `POST /rules/validate` + `POST /rules/reload`
-- [ ] **P3.11** — `api/ws/manager.py` : broadcast sur `WS /ws/alerts`
+- [x] **P3.09** — `api/routers/alerts.py` : `GET /alerts`, `GET /alerts/{id}`, `PATCH`, `POST .../acknowledge`, `POST .../false-positive`, `GET /alerts/stats` ✓ M23
+- [x] **P3.10** — `api/routers/rules.py` : `GET /rules`, `GET /rules/{id}`, `POST /rules/validate`, `POST /rules/reload` ✓ M23
+- [x] **P3.11** — `api/ws/alerts.py` : WebSocket `WS /ws/alerts` — broadcast live alert events ✓ M23
 - [ ] **P3.12** — `api/auth/api_keys.py` : génération / révocation clés API, header `X-API-Key`
 - [ ] **P3.13** — RBAC enforced sur tous les endpoints existants
 - [ ] **P3.14** — Boucle feedback faux positifs → `rules.false_positive_count` incrémenté + log `rule_versions`

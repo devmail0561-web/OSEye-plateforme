@@ -1,6 +1,6 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.0
+**Version :** 2.1
 **Dernière mise à jour :** 2026-08-07
 **Branche active :** `main` (`latest`)
 **Phase courante :** Phase 3 — Détection `[~]` EN COURS
@@ -65,9 +65,9 @@
 | # | Module | Branche | Statut | Tests |
 |---|--------|---------|--------|-------|
 | M22 | Rule Engine — parser, evaluator, engine, worker, 30 règles YAML | `M22/rule-engine` | `[x]` Mergé | 34 py |
-| M23 | API `/rules` + alert router amélioré | — | `[ ]` À faire | — |
+| M23 | API `/rules` + `/alerts` étendu + WS `/ws/alerts` + câblage main | `M23/api-rules-ws-alerts` | `[x]` Mergé | 17 py |
 
-**1/? modules Phase 3 mergés sur main.**
+**2/? modules Phase 3 mergés sur main.**
 
 ---
 
@@ -75,7 +75,7 @@
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **161/161** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **178/178** | 100% | ✅ |
 | Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy --strict (rule_engine, workers, normalizer — 23 fichiers) | **0 erreur** | 0 | ✅ |
@@ -87,7 +87,7 @@
 
 | Répertoire | Tests | Ce qui est testé |
 |------------|-------|-----------------|
-| `tests/unit/` | 144 | Composants isolés (bus, schema, storage, API, ingest, normalizer×2, workers, rule_engine) |
+| `tests/unit/` | 161 | Composants isolés (bus, schema, storage, API×2, ingest, normalizer×2, workers, rule_engine) |
 | `tests/integration/` | 13 | Interaction entre modules (normalizer→bus, storage_writer→DB, gRPC mTLS réel) |
 | `tests/scenarios/` | 4 | Scénarios bout-en-bout (agent→gRPC→bus→DB→API) |
 
