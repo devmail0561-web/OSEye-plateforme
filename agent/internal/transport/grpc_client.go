@@ -15,7 +15,6 @@ import (
 	gen "github.com/oseye/agent/gen"
 	"github.com/oseye/agent/internal/chain"
 	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/signer"
 )
 
 const (
@@ -24,18 +23,25 @@ const (
 	backoffMax     = 30 * time.Second
 )
 
+// Signer is the signing interface used by GRPCClient. *signer.Signer satisfies
+// it, as does any test stub that provides Sign and PublicKey.
+type Signer interface {
+	Sign(data []byte) ([]byte, error)
+	PublicKey() []byte
+}
+
 // GRPCClient wraps a gRPC connection to the OSEye server and exposes
 // batch-sending with mTLS and Ed25519 batch signatures.
 type GRPCClient struct {
 	conn   *grpc.ClientConn
 	client gen.AgentServiceClient
 	chain  *chain.Chain
-	signer *signer.Signer
+	signer Signer
 }
 
 // New creates a gRPC client with mTLS credentials loaded from cfg.
 // It does NOT dial immediately — the connection is established lazily.
-func New(cfg *config.Config, ch *chain.Chain, s *signer.Signer) (*GRPCClient, error) {
+func New(cfg *config.Config, ch *chain.Chain, s Signer) (*GRPCClient, error) {
 	tlsCreds, err := buildTLSCredentials(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("transport: build TLS credentials: %w", err)
@@ -125,6 +131,22 @@ func (c *GRPCClient) sendOnce(ctx context.Context, req *gen.IngestRequest) error
 // (ReceivePolicy, StreamCommands).
 func (c *GRPCClient) ServiceClient() gen.AgentServiceClient { return c.client }
 
+// BatchSender is the minimal interface used by drainBuffer and resilience tests.
+type BatchSender interface {
+	SendBatch(ctx context.Context, events []*gen.UniversalEventPB) error
+}
+
+// NewClientFromConn creates a GRPCClient from an already-dialled connection.
+// Intended for tests that use bufconn or similar in-memory transports.
+func NewClientFromConn(conn *grpc.ClientConn, ch *chain.Chain, s Signer) *GRPCClient {
+	return &GRPCClient{
+		conn:   conn,
+		client: gen.NewAgentServiceClient(conn),
+		chain:  ch,
+		signer: s,
+	}
+}
+
 // Close tears down the underlying gRPC connection.
 func (c *GRPCClient) Close() error {
 	if c.conn != nil {
@@ -135,7 +157,7 @@ func (c *GRPCClient) Close() error {
 
 // batchSignature computes BLAKE3(hash_chain[0] || ... || hash_chain[N-1])
 // over the hash_chain field of each event, then signs that digest with Ed25519.
-func batchSignature(ch *chain.Chain, s *signer.Signer, events []*gen.UniversalEventPB) ([]byte, error) {
+func batchSignature(ch *chain.Chain, s Signer, events []*gen.UniversalEventPB) ([]byte, error) {
 	h := blake3.New()
 	for _, ev := range events {
 		_, _ = h.Write(ev.GetHashChain())
