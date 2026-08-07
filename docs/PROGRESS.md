@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.2
+**Version :** 2.3
 **Dernière mise à jour :** 2026-08-07
-**Branche active :** `fix/audit-phase3` (en cours de merge → `main`)
-**Phase courante :** Phase 3 — Détection `[~]` EN COURS
+**Branche active :** `main` (`latest`)
+**Phase courante :** Phase 4 — Intelligence `[ ]` À DÉMARRER
 
 ---
 
@@ -60,14 +60,16 @@
 
 **10/10 modules Phase 2 mergés sur main.** Phase 2 Full Collection **COMPLÈTE**.
 
-### Phase 3 — Détection `[~]` EN COURS
+### Phase 3 — Détection `[x]` COMPLÈTE
 
 | # | Module | Branche | Statut | Tests |
 |---|--------|---------|--------|-------|
 | M22 | Rule Engine — parser, evaluator, engine, worker, 30 règles YAML | `M22/rule-engine` | `[x]` Mergé | 34 py |
 | M23 | API `/rules` + `/alerts` étendu + WS `/ws/alerts` + câblage main | `M23/api-rules-ws-alerts` | `[x]` Mergé | 17 py |
+| — | Audit Phase 3 — 32 corrections (RCE, auth, eBPF, règles mortes, races Go) | `fix/audit-phase3` | `[x]` Mergé | 178 py |
+| M24 | API Keys (P3.12) + RBAC enforced (P3.13) + rule_versions (P3.14) | `M24/phase3-completion` | `[x]` Mergé | 18 py |
 
-**2/? modules Phase 3 mergés sur main.**
+**Phase 3 Détection COMPLÈTE — 14/14 tâches (P3.01–P3.15).**
 
 ---
 
@@ -75,7 +77,7 @@
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **178/178** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **196/196** | 100% | ✅ |
 | Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy (rule_engine, workers, api, main — 23 fichiers) | **0 erreur** | 0 | ✅ |
@@ -88,7 +90,7 @@
 
 | Répertoire | Tests | Ce qui est testé |
 |------------|-------|-----------------|
-| `tests/unit/` | 161 | Composants isolés (bus, schema, storage, API×2, ingest, normalizer×2, workers, rule_engine) |
+| `tests/unit/` | 179 | Composants isolés (bus, schema, storage, API×3, ingest, normalizer×2, workers, rule_engine) |
 | `tests/integration/` | 13 | Interaction entre modules (normalizer→bus, storage_writer→DB, gRPC mTLS réel) |
 | `tests/scenarios/` | 4 | Scénarios bout-en-bout (agent→gRPC→bus→DB→API) |
 
@@ -330,6 +332,7 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 
 | Hash | Message | Date |
 |------|---------|------|
+| `28c9185` | feat(M24): P3.12 API Keys + P3.13 RBAC + P3.14 rule_versions — Phase 3 COMPLÈTE | 2026-08-07 |
 | `b9be613` | fix(audit-phase3): corrections Python, règles YAML et adapters | 2026-08-07 |
 | `a2290bd` | fix(audit-phase3): 32 corrections audit — RCE sandbox, auth, eBPF, regles mortes, races Go | 2026-08-07 |
 | `41ea617` | docs: PROGRESS v2.1 — M23 mergé, 178 tests, P3.09-P3.11 cochés | 2026-08-07 |
