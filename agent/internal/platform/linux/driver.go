@@ -10,6 +10,7 @@ import (
 	"github.com/oseye/agent/internal/config"
 	"github.com/oseye/agent/internal/platform"
 	"github.com/oseye/agent/internal/platform/linux/auditd"
+	"github.com/oseye/agent/internal/platform/linux/ebpf"
 	"github.com/oseye/agent/internal/platform/linux/fanotify"
 	"github.com/oseye/agent/internal/platform/linux/inotify"
 	"github.com/oseye/agent/internal/platform/linux/journald"
@@ -29,8 +30,8 @@ func (d *LinuxDriver) Name() string { return "linux" }
 func (d *LinuxDriver) Collectors(cfg *config.Config) ([]collector.Collector, error) {
 	logger := slog.Default()
 
-	colls := make([]collector.Collector, 0, 8)
-	colls = append(colls, procfs.New(), auditd.New())
+	colls := make([]collector.Collector, 0, 9)
+	colls = append(colls, procfs.New(), auditd.New(), ebpf.New())
 
 	if f, err := fanotify.NewFanotifyCollector(cfg.FanotifyPaths, logger); err == nil {
 		colls = append(colls, f)

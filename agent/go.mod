@@ -12,7 +12,10 @@ require (
 	modernc.org/sqlite v1.34.5
 )
 
+require golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 // indirect
+
 require (
+	github.com/cilium/ebpf v0.16.0
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
