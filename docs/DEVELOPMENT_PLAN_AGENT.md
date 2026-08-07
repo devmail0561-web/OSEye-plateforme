@@ -1,25 +1,30 @@
 # OSEye — Plan de développement Agent Go (Phases 2-3)
 
-**Version :** 1.0  
+**Version :** 1.1  
 **Date :** 2026-08-07  
-**Basé sur l'audit code :** `041490c` (main)  
+**Basé sur l'audit code :** `bb19630` (main)  
 **Périmètre :** Agent Go (`agent/`) + adapters Python couplés (`server/oseye/normalizer/`)
 
 ---
 
 ## Récapitulatif de l'existant
 
-### Ce qui est implémenté et testé
+### Ce qui est implémenté et testé (2026-08-07)
 
 | Package | État | Tests |
 |---------|------|-------|
 | `internal/buffer` | ✅ Complet (CGO + pure-Go) | buffer_test.go + bench |
 | `internal/chain` | ✅ Complet | chain_test.go + bench |
 | `internal/signer` | ✅ Complet | signer_test.go + bench |
-| `internal/collector` | ✅ Interface + Manager | manager_test.go |
+| `internal/collector` | ✅ Interface + Manager + SetThrottle | manager_test.go |
 | `internal/config` | ✅ Complet | config_test.go |
 | `internal/transport/batcher` | ✅ Complet | batcher_test.go |
-| `internal/transport/grpc_client` | ✅ Complet | grpc_client_test.go (bufconn) |
+| `internal/transport/grpc_client` | ✅ Complet + ServiceClient() | grpc_client_test.go (bufconn) |
+| `internal/mapper` | ✅ Complet (M14 + audit) | mapper_test.go — 32 champs, split addr, bounds |
+| `internal/watchdog` | ✅ Complet (M16 + audit) | watchdog_test.go — HZ dynamique, zero-limits guard |
+| `internal/policy` | ✅ Complet (M17 + audit) | handler_test.go — channel sérialisé, reconnexion EOF |
+| `internal/commands` | ✅ Complet (M17) | client_test.go |
+| `platform/linux/driver` | ✅ 8 collecteurs câblés (M14) | — |
 | `platform/linux/procfs` | ✅ Complet | collector_test.go |
 | `platform/linux/fanotify` | ✅ Complet (M12) | collector_test.go |
 | `platform/linux/inotify` | ✅ Complet (M12) | collector_test.go |
@@ -27,20 +32,28 @@
 | `platform/linux/journald` | ✅ Complet (M13) | collector_test.go |
 | `platform/linux/syslog` | ✅ Complet (M13) | collector_test.go |
 | `platform/linux/udev` | ✅ Complet (M13) | collector_test.go |
+| `normalizer/adapters/linux/*` | ✅ 6 adapters Phase 2 (M18 + audit) | test_normalizer.py |
+| `normalizer/engine.py` | ✅ try/except + uuid guard (audit) | test_normalizer.py |
+| `normalizer/adapters/linux/_utils.py` | ✅ safe_int + agent_ts (audit) | test_normalizer.py |
 
-### Lacunes critiques identifiées (priorité décroissante)
+### Lacunes résolues (GAP)
+
+| ID | Fichier | Lacune | Résolu dans |
+|----|---------|--------|-------------|
+| GAP-01 | `driver.go` | 6 collecteurs non câblés | M14 |
+| GAP-02 | `main.go` | 4/32 champs UniversalEventPB seulement | M14 |
+| GAP-03 | `main.go` | AgentId/EventId non populés | M14 + audit (H1) |
+| GAP-04 | `main.go` | Buffer JSON brut, drain incomplet | M15 |
+| GAP-05 | `watchdog/` | Package vide | M16 |
+| GAP-06 | — | ReceivePolicy/StreamCommands jamais appelés | M17 |
+| GAP-09 | `config.go` | Import unix dans fichier cross-platform | corrigé M14 |
+
+### Lacunes restantes
 
 | ID | Fichier | Lacune |
 |----|---------|--------|
-| GAP-01 | `platform/linux/driver.go` | `Collectors()` ne retourne que `procfs` + `auditd` stub — 6 collecteurs implémentés non câblés |
-| GAP-02 | `cmd/oseye-agent/main.go` | `sendBatch()` ne remplit que 4/32 champs de `UniversalEventPB` (TimestampNs, Collector, OS, HashChain) |
-| GAP-03 | `cmd/oseye-agent/main.go` | `AgentId` et `EventId` jamais populés (`uuid` présent dans go.sum mais non importé) |
-| GAP-04 | `cmd/oseye-agent/main.go` | Buffer stocke le JSON brut ; `drainBuffer()` reconstruit des events incomplets (seul `HashChain` conservé) |
-| GAP-05 | `internal/watchdog/` | Package vide — `MaxCPUPct` et `MaxMemMB` configurés mais non appliqués |
-| GAP-06 | (aucun fichier) | `ReceivePolicy` et `StreamCommands` définis en proto, stubs gRPC présents, jamais appelés |
-| GAP-07 | `platform/linux/auditd/collector.go` | Stub explicite — bloque `ctx.Done()` uniquement, zéro événement |
-| GAP-08 | `platform/linux/ebpf/` | Répertoire vide — collecteur eBPF annoncé dans `Capabilities()` mais absent |
-| GAP-09 | `internal/config/config.go` | Import `golang.org/x/sys/unix` pour `IN_ALL_EVENTS` — dépendance Linux dans un fichier cross-platform |
+| GAP-07 | `platform/linux/auditd/collector.go` | Stub — zéro événement (M19) |
+| GAP-08 | `platform/linux/ebpf/` | Collecteur eBPF absent (M20) |
 
 ---
 
@@ -51,13 +64,13 @@
 ```
 M12 ✅ ──┐
 M13 ✅ ──┤
-         └──► M14 (câblage + mapper) ──► M15 (buffer proto)
-                                     ──► M16 (watchdog)
-                                     ──► M17 (policy+commands)
-                                     ──► M19 (auditd complet)
-                                     ──► M20 (eBPF)
-                     M14 ──► M18 (normalizers Python)
-         M15 + M16 + M17 + M18 + M19 + M20 ──► M21 (tests résilience)
+         └──► M14 ✅ ──► M15 ✅ (buffer proto)
+                     ──► M16 ✅ (watchdog)
+                     ──► M17 ✅ (policy+commands)
+                     ──► M19 (auditd complet)
+                     ──► M20 (eBPF)
+              M14 ──► M18 ✅ (normalizers Python)
+         M15 ✅ + M16 ✅ + M17 ✅ + M18 ✅ + M19 + M20 ──► M21 (tests résilience)
 ```
 
 **Parallélisable :** M15, M16, M17, M18, M19, M20 peuvent démarrer simultanément après M14.
