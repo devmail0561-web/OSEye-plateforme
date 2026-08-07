@@ -5,6 +5,10 @@ package mapper
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"net"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -20,7 +24,7 @@ type EventMapper struct {
 }
 
 // New returns an EventMapper ready for use.
-// hostname typically comes from os.Hostname(); agentID is the raw binary UUID.
+// hostname typically comes from os.Hostname(); agentID is the raw 16-byte UUID.
 func New(hostname string, agentID []byte) *EventMapper {
 	return &EventMapper{hostname: hostname, agentID: agentID}
 }
@@ -92,14 +96,20 @@ func (m *EventMapper) mapFields(payload map[string]interface{}, source string, e
 		ev.Type = strField(payload, "event_type")
 		ev.Pid = intField(payload, "pid")
 	case "netlink":
-		ev.SrcIp = strField(payload, "local_addr")
-		ev.DstIp = strField(payload, "remote_addr")
+		// Split "ip:port" strings into separate proto fields (C3 fix).
+		srcIP, srcPort := splitAddr(strField(payload, "local_addr"))
+		dstIP, dstPort := splitAddr(strField(payload, "remote_addr"))
+		ev.SrcIp = srcIP
+		ev.SrcPort = srcPort
+		ev.DstIp = dstIP
+		ev.DstPort = dstPort
 		ev.Protocol = strField(payload, "proto")
 		ev.Type = strField(payload, "event")
 	case "journald", "syslog":
 		ev.Resource = firstField(payload, "unit", "program")
 		ev.Severity = mapLogSeverity(firstField(payload, "priority", "severity"))
-		ev.ProcessName = strField(payload, "comm")
+		// Fallback to "identifier" when "comm" is absent (journald services without a PID).
+		ev.ProcessName = firstField(payload, "comm", "identifier")
 		ev.Pid = intField(payload, "pid")
 	case "udev":
 		ev.Resource = strField(payload, "devpath")
@@ -119,7 +129,8 @@ func (m *EventMapper) mapFields(payload map[string]interface{}, source string, e
 // name into the UniversalEvent severity vocabulary (info|low|medium|high|critical).
 func mapLogSeverity(v string) string {
 	switch v {
-	case "0", "1", "2", "emerg", "alert", "crit", "critical":
+	// H7 fix: add "emergency" alongside "emerg"
+	case "0", "1", "2", "emerg", "emergency", "alert", "crit", "critical":
 		return "critical"
 	case "3", "err", "error":
 		return "high"
@@ -128,6 +139,24 @@ func mapLogSeverity(v string) string {
 	default:
 		return "info"
 	}
+}
+
+// splitAddr splits an "ip:port" or "[ipv6]:port" string into (ip, port).
+// Returns ("", 0) on empty or unparseable input.
+func splitAddr(addr string) (string, int32) {
+	if addr == "" {
+		return "", 0
+	}
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		// No port present — return the addr as IP with port 0.
+		return addr, 0
+	}
+	port, err := strconv.ParseInt(portStr, 10, 32)
+	if err != nil {
+		return host, 0
+	}
+	return host, int32(port)
 }
 
 // strField returns m[key] as a string, or "" when absent or not a string.
@@ -154,7 +183,8 @@ func firstField(m map[string]interface{}, keys ...string) string {
 }
 
 // intField returns m[key] as an int32, or 0 when absent or non-numeric.
-// JSON unmarshal naturally produces float64 for numbers.
+// Handles float64 (JSON default), int variants, and string-encoded integers
+// (journald emits _PID as a JSON string). H5/H6 fix: bounds check + string case.
 func intField(m map[string]interface{}, key string) int32 {
 	v, ok := m[key]
 	if !ok {
@@ -162,12 +192,24 @@ func intField(m map[string]interface{}, key string) int32 {
 	}
 	switch n := v.(type) {
 	case float64:
+		if n > math.MaxInt32 || n < math.MinInt32 {
+			return 0
+		}
 		return int32(n)
+	case string:
+		// journald emits numeric fields as JSON strings (e.g. "_PID": "1234")
+		if parsed, err := strconv.ParseInt(strings.TrimSpace(n), 10, 32); err == nil {
+			return int32(parsed)
+		}
+		return 0
 	case int:
 		return int32(n)
 	case int32:
 		return n
 	case int64:
+		if n > math.MaxInt32 || n < math.MinInt32 {
+			return 0
+		}
 		return int32(n)
 	default:
 		return 0

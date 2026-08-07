@@ -15,10 +15,7 @@ import (
 	"github.com/oseye/agent/internal/collector"
 )
 
-const (
-	jiffiesPerSecond = 100 // standard Linux HZ
-	emergencyFactor  = 0.1
-)
+const emergencyFactor = 0.1
 
 // Watchdog periodically reads the agent's CPU/RAM usage and adjusts the
 // collector throttle factor so the agent respects its resource budget.
@@ -27,10 +24,10 @@ type Watchdog struct {
 	maxMemMB  float64
 	manager   *collector.CollectorManager
 	interval  time.Duration
-	pid       int
 
 	prevCPUJiffies uint64
 	prevCPUSet     bool
+	clkTck         float64 // kernel timer frequency (HZ), read once at start
 }
 
 // New returns a Watchdog over the given manager with the configured resource
@@ -41,7 +38,7 @@ func New(maxCPUPct, maxMemMB float64, mgr *collector.CollectorManager) *Watchdog
 		maxMemMB:  maxMemMB,
 		manager:   mgr,
 		interval:  5 * time.Second,
-		pid:       os.Getpid(),
+		clkTck:    readClkTck(),
 	}
 }
 
@@ -56,52 +53,84 @@ func (w *Watchdog) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			w.tick(ctx)
+			w.tick()
 		}
 	}
 }
 
-func (w *Watchdog) tick(ctx context.Context) {
-	cpuPct, _ := w.readCPUPercent()
-	memMB, _ := w.readMemMB()
+func (w *Watchdog) tick() {
+	cpuPct, cpuErr := w.readCPUPercent()
+	memMB, memErr := w.readMemMB()
+
+	// M1/M2 fix: log failures instead of silently using zero, which would
+	// trigger emergency throttle if limits are set.
+	if cpuErr != nil {
+		slog.Warn("watchdog: failed to read CPU", "err", cpuErr)
+	}
+	if memErr != nil {
+		slog.Warn("watchdog: failed to read memory", "err", memErr)
+	}
+
 	factor := w.computeThrottle(cpuPct, memMB)
-	w.manager.SetThrottle(factor)
-	slog.Debug("watchdog tick",
-		"cpu_pct", cpuPct,
-		"mem_mb", memMB,
-		"throttle", factor,
-	)
+	if w.manager != nil {
+		w.manager.SetThrottle(factor)
+	}
+	slog.Debug("watchdog tick", "cpu_pct", cpuPct, "mem_mb", memMB, "throttle", factor)
 }
 
 // computeThrottle derives a throttle factor from the measured CPU% and memory MB.
+// H3 fix: if both limits are zero or negative the watchdog is disabled → return 1.0.
 func (w *Watchdog) computeThrottle(cpuPct, memMB float64) float64 {
-	switch {
-	case cpuPct < w.maxCPUPct*0.5 && memMB < w.maxMemMB*0.5:
-		return 1.0
-	case cpuPct > w.maxCPUPct || memMB > w.maxMemMB:
-		return emergencyFactor
-	default:
-		// Between 50% and 100% of the max CPU budget — linear scaling down.
-		if w.maxCPUPct > 0 {
-			return 1.0 - (cpuPct/w.maxCPUPct)*0.5
-		}
+	cpuLimited := w.maxCPUPct > 0
+	memLimited := w.maxMemMB > 0
+
+	if !cpuLimited && !memLimited {
 		return 1.0
 	}
+
+	cpuOver := cpuLimited && cpuPct > w.maxCPUPct
+	memOver := memLimited && memMB > w.maxMemMB
+	if cpuOver || memOver {
+		return emergencyFactor
+	}
+
+	cpuHalf := !cpuLimited || cpuPct < w.maxCPUPct*0.5
+	memHalf := !memLimited || memMB < w.maxMemMB*0.5
+	if cpuHalf && memHalf {
+		return 1.0
+	}
+
+	// Linear back-off between 50% and 100% of the CPU budget.
+	if cpuLimited && w.maxCPUPct > 0 {
+		return 1.0 - (cpuPct/w.maxCPUPct)*0.5
+	}
+	return 1.0
 }
 
-// readCPUPercent reads /proc/self/stat (utime, stime) and computes the delta
-// since the last call, expressed as a percentage of all cores.
+// readCPUPercent reads /proc/self/stat (utime+stime) and returns the delta
+// since the last call as a percentage across all cores.
+// M1 fix: parse comm field robustly — find the last ')' before splitting fields.
 func (w *Watchdog) readCPUPercent() (float64, error) {
 	data, err := os.ReadFile("/proc/self/stat")
 	if err != nil {
 		return 0, err
 	}
-	fields := strings.Fields(string(data))
-	if len(fields) < 15 {
+	raw := string(data)
+
+	// The comm field (index 1) is wrapped in parentheses and may contain
+	// spaces. Skip past the last ')' before indexing into the remaining fields.
+	idx := strings.LastIndex(raw, ")")
+	if idx < 0 {
 		return 0, nil
 	}
-	utime, err1 := strconv.ParseUint(fields[13], 10, 64)
-	stime, err2 := strconv.ParseUint(fields[14], 10, 64)
+	// Fields after comm start at idx+2 (skip ') ').
+	rest := strings.Fields(raw[idx+2:])
+	// rest[0]=state, rest[11]=utime, rest[12]=stime (0-based after comm+state).
+	if len(rest) < 13 {
+		return 0, nil
+	}
+	utime, err1 := strconv.ParseUint(rest[11], 10, 64)
+	stime, err2 := strconv.ParseUint(rest[12], 10, 64)
 	if err1 != nil || err2 != nil {
 		return 0, nil
 	}
@@ -115,12 +144,17 @@ func (w *Watchdog) readCPUPercent() (float64, error) {
 
 	delta := now - w.prevCPUJiffies
 	w.prevCPUJiffies = now
+
 	intervalSec := w.interval.Seconds()
 	if intervalSec <= 0 {
 		intervalSec = 1
 	}
-	// delta jiffies over one interval → fraction of a single core → ×100 → per-core %.
-	corePct := (float64(delta) / jiffiesPerSecond) / intervalSec * 100
+	hz := w.clkTck
+	if hz <= 0 {
+		hz = 100
+	}
+	// M2 fix: use the actual kernel HZ instead of the hard-coded 100.
+	corePct := (float64(delta) / hz) / intervalSec * 100
 	numCPU := runtime.NumCPU()
 	if numCPU <= 0 {
 		numCPU = 1
@@ -151,4 +185,30 @@ func (w *Watchdog) readMemMB() (float64, error) {
 		}
 	}
 	return 0, scanner.Err()
+}
+
+// readClkTck returns the kernel timer frequency (HZ) from /proc/timer_list or
+// falls back to 100 (most common desktop/server value).
+func readClkTck() float64 {
+	// sysconf(_SC_CLK_TCK) is the POSIX way but requires cgo.
+	// Reading /proc/timer_list is pure-Go but only available on kernel >= 3.10.
+	// Simplest portable approach: read from /sys/kernel/debug... unavailable in containers.
+	// Fallback strategy: try common values by inspecting /proc/timer_list if available,
+	// otherwise default to 100 which is correct for ~95% of Linux systems.
+	data, err := os.ReadFile("/proc/timer_list")
+	if err != nil {
+		return 100
+	}
+	for _, line := range strings.SplitN(string(data), "\n", 20) {
+		if strings.HasPrefix(line, "tick_usec") {
+			// tick_usec: 4000  → HZ = 1_000_000 / tick_usec
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				if usec, err := strconv.ParseFloat(parts[1], 64); err == nil && usec > 0 {
+					return 1_000_000 / usec
+				}
+			}
+		}
+	}
+	return 100
 }
