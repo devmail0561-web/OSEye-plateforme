@@ -11,7 +11,13 @@ from oseye.bus.memory_bus import InMemoryEventBus
 from oseye.core.schema import UniversalEvent
 from oseye.normalizer.adapters.linux.auditd import AuditdAdapter
 from oseye.normalizer.adapters.linux.ebpf import EBPFAdapter
+from oseye.normalizer.adapters.linux.fanotify import FanotifyAdapter
+from oseye.normalizer.adapters.linux.inotify import InotifyAdapter
+from oseye.normalizer.adapters.linux.journald import JournaldAdapter
+from oseye.normalizer.adapters.linux.netlink import NetlinkAdapter
 from oseye.normalizer.adapters.linux.procfs import ProcfsAdapter
+from oseye.normalizer.adapters.linux.syslog import SyslogAdapter
+from oseye.normalizer.adapters.linux.udev import UdevAdapter
 from oseye.normalizer.engine import NormalizerEngine
 from oseye.normalizer.secret_masker import mask
 
@@ -286,3 +292,238 @@ async def test_engine_register_custom_adapter() -> None:
 
     assert event is not None
     assert event.collector == "procfs"
+
+
+# ---------------------------------------------------------------------------
+# FanotifyAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_fanotify_normalize_open() -> None:
+    adapter = FanotifyAdapter()
+    event = adapter.normalize(
+        _raw({"event_type": "open", "path": "/etc/passwd", "pid": 42}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.category == "file"
+    assert event.type == "open"
+    assert event.severity == "info"
+    assert event.resource == "/etc/passwd"
+    assert event.pid == 42
+    assert event.collector == "fanotify"
+
+
+def test_fanotify_normalize_modify_is_medium() -> None:
+    adapter = FanotifyAdapter()
+    event = adapter.normalize(
+        _raw({"event_type": "modify", "path": "/etc/shadow"}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.severity == "medium"
+
+
+def test_fanotify_normalize_missing_fields() -> None:
+    adapter = FanotifyAdapter()
+    event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
+    assert event.category == "file"
+    assert event.resource == ""
+    assert event.type == ""
+
+
+# ---------------------------------------------------------------------------
+# InotifyAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_inotify_normalize_full_path() -> None:
+    adapter = InotifyAdapter()
+    event = adapter.normalize(
+        _raw({"event_type": "create", "full_path": "/tmp/evil.sh", "base_path": "/tmp"}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.category == "file"
+    assert event.type == "create"
+    assert event.resource == "/tmp/evil.sh"
+    assert event.collector == "inotify"
+
+
+def test_inotify_normalize_delete_severity() -> None:
+    adapter = InotifyAdapter()
+    for ev_type in ("create", "delete", "moved_from", "moved_to"):
+        event = adapter.normalize(_raw({"event_type": ev_type}), _HOSTNAME, _AGENT_ID)
+        assert event.severity in ("warning", "medium"), f"{ev_type} should not be info"
+
+
+def test_inotify_normalize_missing_fields() -> None:
+    adapter = InotifyAdapter()
+    event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
+    assert event.category == "file"
+    assert event.resource == ""
+
+
+# ---------------------------------------------------------------------------
+# NetlinkAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_netlink_normalize_new_connection() -> None:
+    adapter = NetlinkAdapter()
+    event = adapter.normalize(
+        _raw({"event": "new", "local_addr": "10.0.0.1:1234", "remote_addr": "8.8.8.8:53", "proto": "udp"}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.category == "network"
+    assert event.type == "new"
+    assert event.src_ip == "10.0.0.1"
+    assert event.src_port == 1234
+    assert event.dst_ip == "8.8.8.8"
+    assert event.dst_port == 53
+    assert event.protocol == "udp"
+    assert event.collector == "netlink"
+
+
+def test_netlink_normalize_closed_connection() -> None:
+    adapter = NetlinkAdapter()
+    event = adapter.normalize(
+        _raw({"event": "closed", "local_addr": "10.0.0.1:5000", "remote_addr": "1.2.3.4:80", "proto": "tcp"}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.type == "closed"
+
+
+def test_netlink_normalize_missing_fields() -> None:
+    adapter = NetlinkAdapter()
+    event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
+    assert event.category == "network"
+    assert event.src_ip == ""
+    assert event.dst_ip == ""
+
+
+# ---------------------------------------------------------------------------
+# JournaldAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_journald_normalize_full() -> None:
+    adapter = JournaldAdapter()
+    event = adapter.normalize(
+        _raw({"priority": "3", "unit": "sshd.service", "comm": "sshd", "pid": 1234}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.category == "log"
+    assert event.type == "journal_entry"
+    assert event.severity == "high"
+    assert event.resource == "sshd.service"
+    assert event.process_name == "sshd"
+    assert event.pid == 1234
+    assert event.collector == "journald"
+
+
+def test_journald_normalize_priority_mapping() -> None:
+    adapter = JournaldAdapter()
+    for prio, expected in (("0", "critical"), ("4", "medium"), ("7", "info")):
+        event = adapter.normalize(_raw({"priority": prio}), _HOSTNAME, _AGENT_ID)
+        assert event.severity == expected, f"priority {prio!r} → {event.severity!r}, want {expected!r}"
+
+
+def test_journald_normalize_missing_fields() -> None:
+    adapter = JournaldAdapter()
+    event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
+    assert event.category == "log"
+    assert event.severity == "info"
+
+
+# ---------------------------------------------------------------------------
+# SyslogAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_syslog_normalize_full() -> None:
+    adapter = SyslogAdapter()
+    event = adapter.normalize(
+        _raw({"severity": "warning", "program": "kernel", "hostname": "box1"}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.category == "log"
+    assert event.type == "syslog_entry"
+    assert event.severity == "medium"
+    assert event.resource == "kernel"
+    assert event.collector == "syslog"
+
+
+def test_syslog_normalize_critical_severities() -> None:
+    adapter = SyslogAdapter()
+    for sev in ("emerg", "alert", "crit", "critical"):
+        event = adapter.normalize(_raw({"severity": sev}), _HOSTNAME, _AGENT_ID)
+        assert event.severity == "critical", f"sev {sev!r} should be critical"
+
+
+def test_syslog_normalize_missing_fields() -> None:
+    adapter = SyslogAdapter()
+    event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
+    assert event.category == "log"
+    assert event.severity == "info"
+
+
+# ---------------------------------------------------------------------------
+# UdevAdapter
+# ---------------------------------------------------------------------------
+
+
+def test_udev_normalize_add() -> None:
+    adapter = UdevAdapter()
+    event = adapter.normalize(
+        _raw({"action": "add", "devpath": "/devices/pci0000:00/0000:00:14.0/usb1/1-1"}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.category == "device"
+    assert event.type == "add"
+    assert event.severity == "info"
+    assert event.resource == "/devices/pci0000:00/0000:00:14.0/usb1/1-1"
+    assert event.collector == "udev"
+
+
+def test_udev_normalize_remove() -> None:
+    adapter = UdevAdapter()
+    event = adapter.normalize(_raw({"action": "remove", "devpath": "/devices/usb1/1-1"}), _HOSTNAME, _AGENT_ID)
+    assert event.type == "remove"
+
+
+def test_udev_normalize_missing_fields() -> None:
+    adapter = UdevAdapter()
+    event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
+    assert event.category == "device"
+    assert event.resource == ""
+    assert event.type == ""
+
+
+# ---------------------------------------------------------------------------
+# NormalizerEngine — Phase 2 adapters registration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_engine_dispatches_phase2_collectors() -> None:
+    """All Phase 2 collectors must be registered in the engine by default."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    for source, payload in (
+        ("fanotify", _raw({"event_type": "open", "path": "/etc/hosts"})),
+        ("inotify", _raw({"event_type": "create", "full_path": "/tmp/x"})),
+        ("netlink", _raw({"event": "new", "local_addr": "1.2.3.4:1000", "remote_addr": "5.6.7.8:80", "proto": "tcp"})),
+        ("journald", _raw({"priority": "5", "unit": "cron.service"})),
+        ("syslog", _raw({"severity": "info", "program": "crond"})),
+        ("udev", _raw({"action": "add", "devpath": "/devices/usb"})),
+    ):
+        event = await engine.process(payload, source=source, os_name="linux", agent_id=_AGENT_ID)
+        assert event is not None, f"engine returned None for source={source!r}"
+        assert event.collector == source

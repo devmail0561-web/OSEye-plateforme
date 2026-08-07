@@ -48,6 +48,11 @@
 | # | Module | Statut | Tests | Notes |
 |---|--------|--------|-------|-------|
 | M12 | Collectors fanotify + inotify (Go) | `[x]` Mergé | 11 go | P2.01 + P2.02 complétés |
+| M13 | Collectors netlink, journald, udev, syslog (Go) | `[x]` Mergé | 13 go | + 13 corrections audit |
+| M14 | Câblage 8 collecteurs + mapper EventMapper | `[x]` Mergé | 14 go | GAP-01/02/03 résolus — proto 32 champs |
+| M15 | Stockage proto bytes dans buffer | `[x]` Intégré M14 | 3 go | drainBuffer reconstruit via proto.Unmarshal |
+| M16 | Watchdog CPU/RAM | `[x]` Mergé | 4 go | /proc/self/stat + /proc/self/status, throttle manager |
+| M17 | Policy + Commands clients gRPC | `[x]` Mergé | 3 go | ReceivePolicy + StreamCommands + backoff exp. |
 
 ---
 
@@ -56,7 +61,7 @@
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
 | Tests Python (unit + integration + scenarios) | **97/97** | 100% | ✅ |
-| Tests Go | **41 tests / 7 packages** | 100% | ✅ |
+| Tests Go | **79 tests / 19 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy --strict (64 fichiers) | **0 erreur** | 0 | ✅ |
 | go vet | **0 erreur** | 0 | ✅ |

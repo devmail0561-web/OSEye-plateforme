@@ -10,7 +10,13 @@ from oseye.bus.interface import EventBus
 from oseye.core.schema import UniversalEvent
 from oseye.normalizer.adapters.linux.auditd import AuditdAdapter
 from oseye.normalizer.adapters.linux.ebpf import EBPFAdapter
+from oseye.normalizer.adapters.linux.fanotify import FanotifyAdapter
+from oseye.normalizer.adapters.linux.inotify import InotifyAdapter
+from oseye.normalizer.adapters.linux.journald import JournaldAdapter
+from oseye.normalizer.adapters.linux.netlink import NetlinkAdapter
 from oseye.normalizer.adapters.linux.procfs import ProcfsAdapter
+from oseye.normalizer.adapters.linux.syslog import SyslogAdapter
+from oseye.normalizer.adapters.linux.udev import UdevAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,12 @@ class NormalizerEngine:
         self.register_adapter("linux", "procfs", ProcfsAdapter())
         self.register_adapter("linux", "auditd", AuditdAdapter())
         self.register_adapter("linux", "ebpf", EBPFAdapter())
+        self.register_adapter("linux", "fanotify", FanotifyAdapter())
+        self.register_adapter("linux", "inotify", InotifyAdapter())
+        self.register_adapter("linux", "netlink", NetlinkAdapter())
+        self.register_adapter("linux", "journald", JournaldAdapter())
+        self.register_adapter("linux", "syslog", SyslogAdapter())
+        self.register_adapter("linux", "udev", UdevAdapter())
 
     def register_adapter(self, os_name: str, source: str, adapter: object) -> None:
         """Enregistre *adapter* pour la paire (*os_name*, *source*)."""
