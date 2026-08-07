@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +15,8 @@ from oseye.api.auth.rbac import require_analyst
 from oseye.core.schema import Alert
 
 router = APIRouter(prefix="/api/v1", tags=["alerts"])
+
+_VALID_STATUSES = {"open", "acknowledged", "investigating", "resolved", "false_positive"}
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +47,7 @@ def _get_alert_repo(request: Request) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Routes — fixed routes BEFORE parameterised ones to avoid ambiguity
 # ---------------------------------------------------------------------------
 
 
@@ -83,6 +86,20 @@ async def list_alerts(
     }
 
 
+@router.get("/alerts/stats")
+async def alerts_stats(
+    request: Request,
+    _auth: dict[str, Any] = Depends(require_analyst),
+) -> dict[str, Any]:
+    """Return alert counts grouped by severity and status."""
+    repo = _get_alert_repo(request)
+    stats: dict[str, Any] = {}
+    for sev in ("low", "medium", "high", "critical"):
+        stats[sev] = await repo.count({"severity": sev})
+    open_count = await repo.count({"status": "open"})
+    return {"by_severity": stats, "open": open_count}
+
+
 @router.get("/alerts/{alert_id}")
 async def get_alert(
     alert_id: UUID,
@@ -111,10 +128,60 @@ async def patch_alert(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
 
     if patch.status is not None:
+        if patch.status not in _VALID_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid status: {patch.status}",
+            )
         alert.status = patch.status  # type: ignore[assignment]
     if patch.assigned_to is not None:
         alert.assigned_to = patch.assigned_to
 
+    alert.updated_at = datetime.now(tz=UTC)
+    await repo.update(alert)
+    return alert
+
+
+@router.post("/alerts/{alert_id}/acknowledge", status_code=status.HTTP_200_OK)
+async def acknowledge_alert(
+    alert_id: UUID,
+    request: Request,
+    auth: dict[str, Any] = Depends(require_analyst),
+) -> Alert:
+    """Set alert status to 'acknowledged'."""
+    repo = _get_alert_repo(request)
+    alert: Alert | None = await repo.get(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    alert.status = "acknowledged"
+    alert.assigned_to = alert.assigned_to or auth.get("sub", "")
+    alert.updated_at = datetime.now(tz=UTC)
+    await repo.update(alert)
+
+    ws_manager = getattr(request.app.state, "ws_alert_manager", None)
+    if ws_manager is not None:
+        await ws_manager.broadcast(
+            json.dumps(
+                {"event": "alert_updated", "alert_id": str(alert_id), "status": "acknowledged"}
+            ).encode()
+        )
+
+    return alert
+
+
+@router.post("/alerts/{alert_id}/false-positive", status_code=status.HTTP_200_OK)
+async def mark_false_positive(
+    alert_id: UUID,
+    request: Request,
+    _auth: dict[str, Any] = Depends(require_analyst),
+) -> Alert:
+    """Mark alert as false positive and increment rule's fp counter."""
+    repo = _get_alert_repo(request)
+    alert: Alert | None = await repo.get(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    alert.status = "false_positive"
+    alert.false_positive_count += 1
     alert.updated_at = datetime.now(tz=UTC)
     await repo.update(alert)
     return alert

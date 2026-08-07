@@ -11,6 +11,7 @@ import socket
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import lru_cache
+from pathlib import Path
 
 import uvicorn
 
@@ -20,9 +21,14 @@ from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.ingest.server import create_grpc_server
 from oseye.normalizer.engine import NormalizerEngine
+from oseye.rule_engine import RuleEngine
 from oseye.storage.backends.sqlite import SQLiteBackend
+from oseye.storage.repositories.alerts import SQLAlertRepository
 from oseye.storage.repositories.events import SQLEventRepository
+from oseye.workers.rule_worker import RuleWorker
 from oseye.workers.storage_writer import StorageWriter
+
+_RULES_ROOT = Path(__file__).parent.parent.parent / "rules"
 
 _logger = get_logger(__name__)
 
@@ -41,6 +47,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         backend = SQLiteBackend(settings.db_url)
         await backend.init()
         repo = SQLEventRepository(backend.session_factory)
+        alert_repo = SQLAlertRepository(backend.session_factory)
 
         normalizer = NormalizerEngine(bus=bus, hostname=socket.gethostname())
         writer = StorageWriter(
@@ -48,6 +55,13 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             repo=repo,
             flush_interval_ms=settings.batch_flush_interval_ms,
             batch_max_size=settings.batch_max_size,
+        )
+        rule_engine = RuleEngine(rules_root=_RULES_ROOT, hot_reload=True)
+        rule_worker = RuleWorker(
+            bus=bus,
+            alert_repo=alert_repo,
+            rules_root=_RULES_ROOT,
+            hot_reload=False,  # engine already hot-reloads
         )
         stop = asyncio.Event()
 
@@ -72,8 +86,13 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         tasks = [
             asyncio.create_task(_normalizer_loop(), name="normalizer"),
             asyncio.create_task(writer.run(stop_event=stop), name="storage_writer"),
+            asyncio.create_task(rule_worker.run(stop_event=stop), name="rule_worker"),
         ]
         _logger.info("workers_started", count=len(tasks))
+
+        # Expose shared state to API routers
+        app.state.alert_repo = alert_repo  # type: ignore[attr-defined]
+        app.state.rule_engine = rule_engine  # type: ignore[attr-defined]
 
         yield  # server runs here
 
