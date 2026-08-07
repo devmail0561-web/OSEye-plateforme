@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 1.9
+**Version :** 2.0
 **Dernière mise à jour :** 2026-08-07
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 3 — Détection `[ ]` À DÉMARRER
+**Phase courante :** Phase 3 — Détection `[~]` EN COURS
 
 ---
 
@@ -60,16 +60,25 @@
 
 **10/10 modules Phase 2 mergés sur main.** Phase 2 Full Collection **COMPLÈTE**.
 
+### Phase 3 — Détection `[~]` EN COURS
+
+| # | Module | Branche | Statut | Tests |
+|---|--------|---------|--------|-------|
+| M22 | Rule Engine — parser, evaluator, engine, worker, 30 règles YAML | `M22/rule-engine` | `[x]` Mergé | 34 py |
+| M23 | API `/rules` + alert router amélioré | — | `[ ]` À faire | — |
+
+**1/? modules Phase 3 mergés sur main.**
+
 ---
 
 ## Qualité du code — tableau de bord
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **127/127** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **161/161** | 100% | ✅ |
 | Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
-| mypy --strict (normalizer, 17 fichiers) | **0 erreur** | 0 | ✅ |
+| mypy --strict (rule_engine, workers, normalizer — 23 fichiers) | **0 erreur** | 0 | ✅ |
 | golangci-lint (agent) | **0 erreur** | 0 | ✅ |
 | go test -race ./... | **0 race** | 0 | ✅ |
 | go vet | **0 erreur** | 0 | ✅ |
@@ -78,7 +87,7 @@
 
 | Répertoire | Tests | Ce qui est testé |
 |------------|-------|-----------------|
-| `tests/unit/` | 110 | Composants isolés (bus, schema, storage, API, ingest, normalizer×2, workers) |
+| `tests/unit/` | 144 | Composants isolés (bus, schema, storage, API, ingest, normalizer×2, workers, rule_engine) |
 | `tests/integration/` | 13 | Interaction entre modules (normalizer→bus, storage_writer→DB, gRPC mTLS réel) |
 | `tests/scenarios/` | 4 | Scénarios bout-en-bout (agent→gRPC→bus→DB→API) |
 

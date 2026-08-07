@@ -1,9 +1,9 @@
-# OSEye — Plan de développement Agent Go (Phases 2-3)
+# OSEye — Plan de développement Agent Go + Serveur Python (Phases 2-3)
 
-**Version :** 1.1  
+**Version :** 1.2  
 **Date :** 2026-08-07  
-**Basé sur l'audit code :** `bb19630` (main)  
-**Périmètre :** Agent Go (`agent/`) + adapters Python couplés (`server/oseye/normalizer/`)
+**Basé sur :** commit `314f1f1` (M22 mergé)  
+**Périmètre :** Agent Go (`agent/`) + Server Python (`server/oseye/`) + Règles de détection (`rules/`)
 
 ---
 
@@ -50,16 +50,13 @@
 
 ### Lacunes restantes
 
-| ID | Fichier | Lacune |
-|----|---------|--------|
-| GAP-07 | `platform/linux/auditd/collector.go` | Stub — zéro événement (M19) |
-| GAP-08 | `platform/linux/ebpf/` | Collecteur eBPF absent (M20) |
+*(toutes les lacunes Phases 1-2 sont résolues — aucune lacune ouverte)*
 
 ---
 
 ## Modules de développement
 
-### Graphe de dépendances
+### Graphe de dépendances (mis à jour)
 
 ```
 M12 ✅ ──┐
@@ -67,13 +64,15 @@ M13 ✅ ──┤
          └──► M14 ✅ ──► M15 ✅ (buffer proto)
                      ──► M16 ✅ (watchdog)
                      ──► M17 ✅ (policy+commands)
-                     ──► M19 (auditd complet)
-                     ──► M20 (eBPF)
+                     ──► M19 ✅ (auditd complet)
+                     ──► M20 ✅ (eBPF)
               M14 ──► M18 ✅ (normalizers Python)
-         M15 ✅ + M16 ✅ + M17 ✅ + M18 ✅ + M19 + M20 ──► M21 (tests résilience)
+         M15 ✅ + M16 ✅ + M17 ✅ + M18 ✅ + M19 ✅ + M20 ✅ ──► M21 ✅ (tests résilience)
+
+Phase 2 ✅ ──► M22 ✅ (Rule Engine + 30 règles) ──► M23 (API rules + WS alerts)
 ```
 
-**Parallélisable :** M15, M16, M17, M18, M19, M20 peuvent démarrer simultanément après M14.
+**Phase 3 en cours :** M22 livré, M23 à démarrer.
 
 ---
 
@@ -865,3 +864,46 @@ Semaine 3 : M19 (auditd) — indépendant des semaines 1-2
 Semaine 4 : M20 (eBPF) — le plus complexe
 Semaine 5 : M21 (tests résilience) — requiert M14-M20
 ```
+
+---
+
+## M22 — Rule Engine Phase 3 `[x]` — mergé 2026-08-07
+
+**Branche :** `M22/rule-engine`  
+**Commit :** `314f1f1`  
+**Dépend de :** Phase 2 complète
+
+### Fichiers livrés
+
+| Fichier | Description |
+|---------|-------------|
+| `server/oseye/rule_engine/models.py` | `RuleDefinition`, `RuleMatch` (dataclasses) |
+| `server/oseye/rule_engine/parser.py` | Chargement YAML builtin+custom, override custom sur builtin, validation stricte |
+| `server/oseye/rule_engine/evaluator.py` | Sandbox AST, `contains`, `re.match`, `count_events()` sliding window |
+| `server/oseye/rule_engine/engine.py` | `RuleEngine` thread-safe, hot-reload polling, `evaluate()` → `list[RuleMatch]` |
+| `server/oseye/workers/rule_worker.py` | Consomme `events:normalized`, publie `analysis:rules:{host}`, crée `Alert` en DB |
+| `rules/builtin/credential_access.yaml` | 5 règles : shadow_read, passwd_write, ssh_key_theft, memory_dump, ssh_bruteforce |
+| `rules/builtin/privilege_escalation.yaml` | 5 règles : suid, sudo_abuse, setcap, ptrace, polkit |
+| `rules/builtin/persistence.yaml` | 5 règles : crontab, systemd_service, rc_local, authorized_keys, ld_preload |
+| `rules/builtin/defense_evasion.yaml` | 5 règles : log_deletion, history_clear, timestomp, selinux_disable, rootkit |
+| `rules/builtin/lateral_movement.yaml` | 5 règles : ssh_lateral, port_scan, rsync_exfil, nfs_smb_mount, rdp_tunneling |
+| `rules/builtin/discovery.yaml` | 5 règles : recon_enum, network_discovery, process_discovery, sensitive_files, sudo_l |
+| `rules/builtin/impact_c2.yaml` | 5 règles : reverse_shell, cryptomining, data_destruction, download_exec, c2_beaconing |
+| `server/tests/unit/test_rule_engine.py` | 34 tests : parser, evaluator, temporal, engine, hot-reload, worker |
+
+**Tests :** 34 py — 161 total (0 régression) · ruff 0 · mypy strict 0
+
+---
+
+## M23 — API Rules + WebSocket Alerts `[ ]` — à démarrer
+
+**Branche :** `M23/api-rules-ws-alerts`  
+**Dépend de :** M22
+
+### Tâches (P3.09 à P3.11)
+
+- [ ] `api/routers/rules.py` : `GET /rules`, `GET /rules/{id}`, `POST /rules/validate`, `POST /rules/reload`
+- [ ] `api/routers/alerts.py` : enrichir l'existant — `POST /alerts/{id}/acknowledge`, `POST /alerts/{id}/false-positive`, `GET /alerts/stats`
+- [ ] `api/ws/manager.py` : broadcast `WS /ws/alerts` quand une alerte est créée par le RuleWorker
+- [ ] Câbler `RuleWorker` dans `main.py` server (démarrage au boot)
+- [ ] Tests : ≥ 15 tests pour les nouveaux endpoints + WS

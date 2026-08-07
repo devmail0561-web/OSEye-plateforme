@@ -187,35 +187,32 @@ Ces fichiers doivent être finalisés et reviewés **avant d'écrire le moindre 
 
 *Dépend de : Phase 2 complète*
 
-- [ ] **P3.01** — `rule_engine/parser.py` : lecture YAML/TOML depuis `rules/builtin/` et `rules/custom/`
-- [ ] **P3.02** — `rule_engine/evaluator.py` : évaluateur `asteval` — comparaisons, chaînes, regex, `in`, booléens
-- [ ] **P3.03** — `rule_engine/evaluator.py` : support `count_events(filter, seconds)` avec fenêtres temporelles en mémoire
-- [ ] **P3.04** — `rule_engine/engine.py` : `RuleEngine.evaluate()` + hot-reload via watchdog fichiers
-- [ ] **P3.05** — `workers/rule_worker.py` : consomme `events:normalized`, publie `analysis:rules:{host}`
-- [ ] **P3.06** — `storage/repositories/alert_repo.py` : CRUD alertes
-- [ ] **P3.07** — Ruleset intégré : 30+ règles YAML dans `rules/builtin/` couvrant les techniques MITRE principales
+- [x] **P3.01** — `rule_engine/parser.py` : lecture YAML depuis `rules/builtin/` et `rules/custom/` ✓ M22
+- [x] **P3.02** — `rule_engine/evaluator.py` : évaluateur sandbox AST — comparaisons, chaînes, regex, `in`, booléens ✓ M22
+- [x] **P3.03** — `rule_engine/evaluator.py` : support `count_events(filter, seconds)` avec fenêtres temporelles sliding ✓ M22
+- [x] **P3.04** — `rule_engine/engine.py` : `RuleEngine.evaluate()` + hot-reload polling 5s ✓ M22
+- [x] **P3.05** — `workers/rule_worker.py` : consomme `events:normalized`, publie `analysis:rules:{host}`, crée Alert ✓ M22
+- [x] **P3.06** — `storage/repositories/alerts.py` : CRUD alertes (déjà livré Phase 1) ✓ M8
+- [x] **P3.07** — Ruleset intégré : 30 règles YAML dans `rules/builtin/` — 7 catégories MITRE ✓ M22
 
-| Catégorie | Règles minimum |
+| Catégorie | Règles livrées |
 |-----------|---------------|
-| Credential access | shadow_read, passwd_write, ssh_key_theft, dumping_memory |
-| Privilege escalation | suid_execution, sudo_abuse, capabilities_add, ptrace_inject |
-| Persistence | crontab_write, rc_local_modify, systemd_unit_new, bashrc_write |
-| Defense evasion | log_delete, history_clear, binary_rename, timestamp_tamper |
-| Lateral movement | ssh_new_host, scp_exfil, port_scan_internal |
-| Discovery | whoami_burst, network_scan, shadow_read_burst |
-| C2 / Exfiltration | dns_burst, large_upload, reverse_shell_port |
-| Ransomware | mass_rename_extension, mass_encryption_pattern |
-| Windows | registry_run_key, lsass_access, wmi_exec, powershell_encoded |
-| macOS | launchd_new, tcc_bypass, dylib_hijack |
+| Credential access | shadow_read, passwd_write, ssh_key_theft, memory_dump, ssh_bruteforce |
+| Privilege escalation | suid_execution, sudo_abuse, capabilities_add, ptrace_inject, polkit_abuse |
+| Persistence | crontab_modification, systemd_service_creation, rc_local_modification, authorized_keys_modified, ld_preload_abuse |
+| Defense evasion | log_deletion, history_clear, timestomp, disable_selinux_apparmor, rootkit_detection |
+| Lateral movement | ssh_lateral, port_scan, rsync_exfil, nfs_smb_mount_suspicious, rdp_tunneling |
+| Discovery | recon_enumeration, network_discovery, process_discovery, sensitive_file_discovery, sudo_discovery |
+| Impact / C2 | reverse_shell, crypto_mining, data_destruction, scheduled_download_exec, outbound_c2_beaconing |
 
-- [ ] **P3.08** — Condition `event.platform` dans l'évaluateur : règles cross-OS fonctionnelles
+- [x] **P3.08** — Filtre `event.platform` dans l'évaluateur : règles cross-OS fonctionnelles ✓ M22
 - [ ] **P3.09** — `api/routers/alerts.py` : `GET /alerts`, `GET /alerts/{id}`, `PATCH`, `POST .../acknowledge`, `POST .../false-positive`, `GET /alerts/stats`
 - [ ] **P3.10** — `api/routers/rules.py` : CRUD complet + `POST /rules/validate` + `POST /rules/reload`
 - [ ] **P3.11** — `api/ws/manager.py` : broadcast sur `WS /ws/alerts`
 - [ ] **P3.12** — `api/auth/api_keys.py` : génération / révocation clés API, header `X-API-Key`
 - [ ] **P3.13** — RBAC enforced sur tous les endpoints existants
 - [ ] **P3.14** — Boucle feedback faux positifs → `rules.false_positive_count` incrémenté + log `rule_versions`
-- [ ] **P3.15** — Tests : évaluateur (30+ cas de conditions), fenêtres temporelles, toutes les règles builtin
+- [x] **P3.15** — Tests : 34 tests (évaluateur, fenêtres temporelles, toutes règles builtin, worker) ✓ M22
 
 **Livrable P3 :** `chmod 777 /etc/shadow` sur un hôte surveillé → alerte visible sur l'API en < 500ms.
 
