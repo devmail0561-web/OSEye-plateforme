@@ -121,6 +121,10 @@ func (c *GRPCClient) sendOnce(ctx context.Context, req *gen.IngestRequest) error
 	return nil
 }
 
+// ServiceClient returns the underlying AgentServiceClient for streaming RPCs
+// (ReceivePolicy, StreamCommands).
+func (c *GRPCClient) ServiceClient() gen.AgentServiceClient { return c.client }
+
 // Close tears down the underlying gRPC connection.
 func (c *GRPCClient) Close() error {
 	if c.conn != nil {

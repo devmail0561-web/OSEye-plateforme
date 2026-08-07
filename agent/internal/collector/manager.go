@@ -86,3 +86,17 @@ func (m *CollectorManager) Healths() map[string]CollectorHealth {
 	}
 	return out
 }
+
+// SetThrottle propagates a throttle factor to every managed collector.
+// The factor is clamped to [0.0, 1.0].
+func (m *CollectorManager) SetThrottle(factor float64) {
+	if factor < 0 {
+		factor = 0
+	}
+	if factor > 1 {
+		factor = 1
+	}
+	for _, c := range m.collectors {
+		c.SetThrottle(factor)
+	}
+}

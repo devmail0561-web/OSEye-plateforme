@@ -2,22 +2,28 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
+
 	gen "github.com/oseye/agent/gen"
 	"github.com/oseye/agent/internal/buffer"
 	"github.com/oseye/agent/internal/chain"
 	"github.com/oseye/agent/internal/collector"
+	"github.com/oseye/agent/internal/commands"
 	"github.com/oseye/agent/internal/config"
+	"github.com/oseye/agent/internal/mapper"
 	"github.com/oseye/agent/internal/platform"
 	_ "github.com/oseye/agent/internal/platform/linux" // register LinuxDriver via init()
+	"github.com/oseye/agent/internal/policy"
 	"github.com/oseye/agent/internal/signer"
 	"github.com/oseye/agent/internal/transport"
+	"github.com/oseye/agent/internal/watchdog"
 )
 
 const (
@@ -33,6 +39,15 @@ func main() {
 		log.Error("config load failed", "err", err)
 		os.Exit(1)
 	}
+
+	// ── Agent identity ────────────────────────────────────────────────────────
+	hostname, _ := os.Hostname()
+	agentIDStr := cfg.AgentID
+	if agentIDStr == "" {
+		agentIDStr = uuid.New().String()
+	}
+	agentIDBytes := []byte(agentIDStr)
+	mp := mapper.New(hostname, agentIDBytes)
 
 	// ── Platform resolution ──────────────────────────────────────────────────
 	driver, err := platform.Resolve()
@@ -101,11 +116,24 @@ func main() {
 	}
 	log.Info("collectors started", "count", len(collectors))
 
+	// ── Resource watchdog ─────────────────────────────────────────────────────
+	wd := watchdog.New(cfg.MaxCPUPct, float64(cfg.MaxMemMB), mgr)
+	go wd.Run(ctx)
+
+	// ── Policy + command streams ──────────────────────────────────────────────
+	if client != nil {
+		profileHandler := policy.NewHandler(mgr)
+		policyClient := policy.NewClient(client.ServiceClient(), agentIDBytes, profileHandler.Apply)
+		cmdClient := commands.NewClient(client.ServiceClient(), agentIDBytes, mgr)
+		go policyClient.Run(ctx)
+		go cmdClient.Run(ctx)
+	}
+
 	// ── Batcher + send loop ───────────────────────────────────────────────────
 	batcher := transport.NewBatcher(cfg.BatchSize, cfg.BatchTimeout)
 	go func() {
 		err := batcher.Run(ctx, mgr.Events(), func(batch []collector.RawEvent) error {
-			return sendBatch(ctx, log, cfg, client, buf, ch, s, batch)
+			return sendBatch(ctx, log, cfg, client, buf, ch, s, mp, batch)
 		})
 		if err != nil && err != context.Canceled {
 			log.Error("batcher exited with error", "err", err)
@@ -137,33 +165,31 @@ func sendBatch(
 	buf *buffer.Buffer,
 	ch *chain.Chain,
 	s *signer.Signer,
+	mp *mapper.EventMapper,
 	batch []collector.RawEvent,
 ) error {
 	pbEvents := make([]*gen.UniversalEventPB, 0, len(batch))
-	rawPayloads := make([][]byte, 0, len(batch))
-
-	hostname, _ := os.Hostname()
+	protoPayloads := make([][]byte, 0, len(batch))
 
 	for _, ev := range batch {
 		raw := ev.Raw
 		if raw == nil {
-			var err error
-			raw, err = json.Marshal(ev)
-			if err != nil {
-				log.Warn("event marshal failed", "err", err)
-				continue
-			}
+			log.Warn("event has no raw payload, skipping", "source", ev.Source)
+			continue
 		}
 		hashChain := ch.Append(raw)
-		pb := &gen.UniversalEventPB{
-			TimestampNs: ev.Timestamp,
-			Hostname:    hostname,
-			Collector:   ev.Source,
-			Os:          ev.OS,
-			HashChain:   hashChain,
+		pb, err := mp.Map(ev, hashChain)
+		if err != nil {
+			log.Warn("event mapping failed, skipping", "err", err, "source", ev.Source)
+			continue
+		}
+		protoBytes, err := proto.Marshal(pb)
+		if err != nil {
+			log.Warn("proto marshal failed, skipping", "err", err, "source", ev.Source)
+			continue
 		}
 		pbEvents = append(pbEvents, pb)
-		rawPayloads = append(rawPayloads, raw)
+		protoPayloads = append(protoPayloads, protoBytes)
 	}
 
 	if len(pbEvents) == 0 {
@@ -171,7 +197,7 @@ func sendBatch(
 	}
 
 	// Always buffer first — ensures no event loss on transport failure.
-	if err := buf.Push(rawPayloads); err != nil {
+	if err := buf.Push(protoPayloads); err != nil {
 		log.Warn("buffer push failed", "err", err)
 	}
 
@@ -187,7 +213,7 @@ func sendBatch(
 	}
 
 	// Sent successfully — dequeue from buffer.
-	if _, err := buf.Pop(len(rawPayloads)); err != nil {
+	if _, err := buf.Pop(len(protoPayloads)); err != nil {
 		log.Warn("buffer pop failed after successful send", "err", err)
 	}
 
@@ -209,19 +235,24 @@ func drainBuffer(ctx context.Context, log *slog.Logger, client *transport.GRPCCl
 			return
 		}
 
-		drainChain := chain.New()
 		pbEvents := make([]*gen.UniversalEventPB, 0, len(payloads))
 		for _, p := range payloads {
-			hashChain := drainChain.Append(p)
-			pbEvents = append(pbEvents, &gen.UniversalEventPB{
-				HashChain: hashChain,
-			})
+			var pb gen.UniversalEventPB
+			if err := proto.Unmarshal(p, &pb); err != nil {
+				log.Warn("proto unmarshal failed during drain, skipping", "err", err)
+				continue
+			}
+			pbEvents = append(pbEvents, &pb)
+		}
+
+		if len(pbEvents) == 0 {
+			continue
 		}
 
 		if err := client.SendBatch(ctx, pbEvents); err != nil {
 			log.Warn("drain send failed", "err", err)
 			return
 		}
-		log.Info("drained buffered events", "count", len(payloads))
+		log.Info("drained buffered events", "count", len(pbEvents))
 	}
 }
