@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import time
 import uuid
 from typing import Any, Literal
 
 from oseye.core.schema import UniversalEvent
+from oseye.normalizer.adapters.linux._utils import agent_ts
 
 _Severity = Literal["info", "low", "medium", "high", "critical"]
 
@@ -24,19 +24,18 @@ def _map_severity(s: str) -> _Severity:
 
 
 class SyslogAdapter:
-    """Convertit un payload JSON syslog → UniversalEvent."""
+    """Convertit un payload JSON syslog -> UniversalEvent."""
 
     def normalize(self, raw_bytes: bytes, hostname: str, agent_id: str) -> UniversalEvent:
-        """Parse *raw_bytes* and return a normalised :class:`UniversalEvent`.
+        """Parse raw_bytes and return a normalised UniversalEvent.
 
-        * ``category`` = ``"log"``, ``type`` = ``"syslog_entry"``
-        * ``resource`` = ``program``
+        timestamp_ns uses the agent-side value when present (H10 fix).
         """
         data: dict[str, Any] = json.loads(raw_bytes)
 
         return UniversalEvent(
             event_id=uuid.uuid4(),
-            timestamp_ns=time.time_ns(),
+            timestamp_ns=agent_ts(data),
             hostname=hostname,
             agent_id=uuid.UUID(agent_id),
             category="log",

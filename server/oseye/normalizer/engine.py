@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -59,7 +60,8 @@ class NormalizerEngine:
         """Normalise *raw_payload* et le publie sur ``events:normalized``.
 
         Returns the normalised :class:`UniversalEvent`, or ``None`` when no
-        adapter is registered for the given (*os_name*, *source*) pair.
+        adapter is registered for the given (*os_name*, *source*) pair or when
+        any error occurs during normalisation.
         """
         key = (os_name.lower(), source.lower())
         adapter = self._adapters.get(key)
@@ -72,7 +74,33 @@ class NormalizerEngine:
             )
             return None
 
-        event: UniversalEvent = adapter(raw_payload, self._hostname, agent_id)
+        # H8/F10 fix: validate agent_id as UUID once here, before dispatching.
+        try:
+            parsed_agent_id = str(uuid.UUID(agent_id))
+        except (ValueError, AttributeError):
+            logger.error(
+                "Invalid agent_id %r for source=%r — payload discarded",
+                agent_id,
+                source,
+            )
+            return None
 
-        await self._bus.publish("events:normalized", event.model_dump_json().encode())
+        # C1/F12 fix: catch all adapter exceptions so one bad payload cannot
+        # crash the normalizer coroutine or drop subsequent valid events.
+        try:
+            event: UniversalEvent = adapter(raw_payload, self._hostname, parsed_agent_id)
+        except Exception:
+            logger.exception(
+                "Adapter error for os=%r source=%r — payload discarded",
+                os_name,
+                source,
+            )
+            return None
+
+        try:
+            await self._bus.publish("events:normalized", event.model_dump_json().encode())
+        except Exception:
+            logger.exception("Bus publish failed for event_id=%s", event.event_id)
+            # Return the event even if publish failed — normalisation succeeded.
+
         return event

@@ -1,3 +1,5 @@
+//go:build linux
+
 package mapper
 
 import (
@@ -101,6 +103,7 @@ func TestMapFanotifyFields(t *testing.T) {
 }
 
 func TestMapNetlinkFields(t *testing.T) {
+	// C3 fix: SrcIp/DstIp must hold only the IP; ports go in SrcPort/DstPort.
 	m := New("host", []byte("agent"))
 	ev, err := m.Map(rawEvent("netlink", map[string]interface{}{
 		"local_addr": "10.0.0.1:1234", "remote_addr": "8.8.8.8:53",
@@ -109,8 +112,11 @@ func TestMapNetlinkFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Map error: %v", err)
 	}
-	if ev.SrcIp != "10.0.0.1:1234" || ev.DstIp != "8.8.8.8:53" {
-		t.Errorf("bad net ips: %+v", ev)
+	if ev.SrcIp != "10.0.0.1" || ev.SrcPort != 1234 {
+		t.Errorf("bad src: ip=%q port=%d", ev.SrcIp, ev.SrcPort)
+	}
+	if ev.DstIp != "8.8.8.8" || ev.DstPort != 53 {
+		t.Errorf("bad dst: ip=%q port=%d", ev.DstIp, ev.DstPort)
 	}
 	if ev.Protocol != "tcp" || ev.Type != "new" {
 		t.Errorf("bad net fields: %+v", ev)
@@ -159,5 +165,88 @@ func TestMapExtraJsonPreserved(t *testing.T) {
 	}
 	if got := int(parsed["pid"].(float64)); got != 5 {
 		t.Errorf("ExtraJson pid = %d, want 5", got)
+	}
+}
+
+func TestMapNetlinkAddrSplit(t *testing.T) {
+	// C3 fix: SrcIp/DstIp must contain only the IP, SrcPort/DstPort the port.
+	m := New("host", []byte("agent"))
+	ev, err := m.Map(rawEvent("netlink", map[string]interface{}{
+		"local_addr":  "10.0.0.1:1234",
+		"remote_addr": "8.8.8.8:53",
+		"proto":       "udp",
+		"event":       "new",
+	}), []byte("chain"))
+	if err != nil {
+		t.Fatalf("Map error: %v", err)
+	}
+	if ev.SrcIp != "10.0.0.1" {
+		t.Errorf("SrcIp = %q, want %q", ev.SrcIp, "10.0.0.1")
+	}
+	if ev.SrcPort != 1234 {
+		t.Errorf("SrcPort = %d, want 1234", ev.SrcPort)
+	}
+	if ev.DstIp != "8.8.8.8" {
+		t.Errorf("DstIp = %q, want %q", ev.DstIp, "8.8.8.8")
+	}
+	if ev.DstPort != 53 {
+		t.Errorf("DstPort = %d, want 53", ev.DstPort)
+	}
+}
+
+func TestIntFieldOverflow(t *testing.T) {
+	// H5 fix: values > MaxInt32 must clamp to 0, not silently overflow.
+	m := map[string]interface{}{
+		"big":      float64(3_000_000_000),
+		"neg_big":  float64(-3_000_000_000),
+		"normal":   float64(42),
+		"str_pid":  "1234",
+		"str_bad":  "abc",
+		"null_val": nil,
+	}
+	if got := intField(m, "big"); got != 0 {
+		t.Errorf("big overflow: got %d, want 0", got)
+	}
+	if got := intField(m, "neg_big"); got != 0 {
+		t.Errorf("neg_big overflow: got %d, want 0", got)
+	}
+	if got := intField(m, "normal"); got != 42 {
+		t.Errorf("normal: got %d, want 42", got)
+	}
+	if got := intField(m, "str_pid"); got != 1234 {
+		// H6 fix: string-encoded integer (journald _PID) must be parsed.
+		t.Errorf("str_pid: got %d, want 1234", got)
+	}
+	if got := intField(m, "str_bad"); got != 0 {
+		t.Errorf("str_bad: got %d, want 0", got)
+	}
+	if got := intField(m, "null_val"); got != 0 {
+		t.Errorf("null_val: got %d, want 0", got)
+	}
+}
+
+func TestMapLogSeverityEmergency(t *testing.T) {
+	// H7 fix: "emergency" must map to "critical".
+	if got := mapLogSeverity("emergency"); got != "critical" {
+		t.Errorf("mapLogSeverity(emergency) = %q, want critical", got)
+	}
+	if got := mapLogSeverity("emerg"); got != "critical" {
+		t.Errorf("mapLogSeverity(emerg) = %q, want critical", got)
+	}
+}
+
+func TestMapJournaldIdentifierFallback(t *testing.T) {
+	// journald services without a process emit "identifier" but no "comm".
+	m := New("host", []byte("agent"))
+	ev, err := m.Map(rawEvent("journald", map[string]interface{}{
+		"unit":       "sshd.service",
+		"priority":   "5",
+		"identifier": "sshd",
+	}), []byte("chain"))
+	if err != nil {
+		t.Fatalf("Map error: %v", err)
+	}
+	if ev.ProcessName != "sshd" {
+		t.Errorf("ProcessName = %q, want sshd", ev.ProcessName)
 	}
 }

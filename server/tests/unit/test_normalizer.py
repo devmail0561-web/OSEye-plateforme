@@ -351,10 +351,11 @@ def test_inotify_normalize_full_path() -> None:
 
 
 def test_inotify_normalize_delete_severity() -> None:
+    # M12 fix: "warning" is not a valid severity in the schema — assert "medium".
     adapter = InotifyAdapter()
     for ev_type in ("create", "delete", "moved_from", "moved_to"):
         event = adapter.normalize(_raw({"event_type": ev_type}), _HOSTNAME, _AGENT_ID)
-        assert event.severity in ("warning", "medium"), f"{ev_type} should not be info"
+        assert event.severity == "medium", f"{ev_type} should be medium, got {event.severity!r}"
 
 
 def test_inotify_normalize_missing_fields() -> None:
@@ -527,3 +528,114 @@ async def test_engine_dispatches_phase2_collectors() -> None:
         event = await engine.process(payload, source=source, os_name="linux", agent_id=_AGENT_ID)
         assert event is not None, f"engine returned None for source={source!r}"
         assert event.collector == source
+
+
+# ---------------------------------------------------------------------------
+# Robustness — C1/C2/H8/H9/F08/F10/F13/F14 fixes
+# ---------------------------------------------------------------------------
+
+
+def test_fanotify_pid_null_does_not_crash() -> None:
+    """C2/F13 fix: pid=null must not raise TypeError."""
+    adapter = FanotifyAdapter()
+    event = adapter.normalize(_raw({"event_type": "open", "path": "/tmp/x", "pid": None}), _HOSTNAME, _AGENT_ID)
+    assert event.pid == 0
+
+
+def test_fanotify_pid_absent_defaults_to_zero() -> None:
+    """F02 fix: absent pid must use 0, not -1."""
+    adapter = FanotifyAdapter()
+    event = adapter.normalize(_raw({"event_type": "open", "path": "/tmp/x"}), _HOSTNAME, _AGENT_ID)
+    assert event.pid == 0
+
+
+def test_journald_pid_null_does_not_crash() -> None:
+    """C2/F13 fix: journald pid=null must not raise TypeError."""
+    adapter = JournaldAdapter()
+    event = adapter.normalize(_raw({"priority": "3", "pid": None}), _HOSTNAME, _AGENT_ID)
+    assert event.pid == 0
+
+
+def test_journald_pid_empty_string_does_not_crash() -> None:
+    """F14 fix: journald _PID="" must not raise ValueError."""
+    adapter = JournaldAdapter()
+    event = adapter.normalize(_raw({"priority": "5", "pid": ""}), _HOSTNAME, _AGENT_ID)
+    assert event.pid == 0
+
+
+def test_journald_pid_string_parsed_correctly() -> None:
+    """journald emits _PID as a JSON string — must be parsed to int."""
+    adapter = JournaldAdapter()
+    event = adapter.normalize(_raw({"priority": "5", "pid": "1234"}), _HOSTNAME, _AGENT_ID)
+    assert event.pid == 1234
+
+
+def test_inotify_null_paths_produce_empty_resource() -> None:
+    """F08 fix: full_path=null and base_path=null must produce resource="" not "None"."""
+    adapter = InotifyAdapter()
+    event = adapter.normalize(_raw({"event_type": "create", "full_path": None, "base_path": None}), _HOSTNAME, _AGENT_ID)
+    assert event.resource == ""
+
+
+def test_netlink_ipv6_bare_address_no_brackets() -> None:
+    """F16 fix: bare [::1] without port must strip brackets."""
+    from oseye.normalizer.adapters.linux.netlink import _split_addr
+    ip, port = _split_addr("[::1]")
+    assert ip == "::1"
+    assert port == 0
+
+
+def test_fanotify_uses_agent_timestamp() -> None:
+    """H10 fix: timestamp_ns must use the agent-side value from the payload."""
+    adapter = FanotifyAdapter()
+    agent_ts_value = 1_700_000_000_000_000_000
+    event = adapter.normalize(
+        _raw({"event_type": "open", "path": "/x", "timestamp_ns": agent_ts_value}),
+        _HOSTNAME,
+        _AGENT_ID,
+    )
+    assert event.timestamp_ns == agent_ts_value
+
+
+@pytest.mark.asyncio
+async def test_engine_invalid_agent_id_returns_none() -> None:
+    """H8/F10 fix: engine must return None gracefully on bad agent_id."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+    result = await engine.process(
+        _raw({"event_type": "open", "path": "/tmp/x"}),
+        source="fanotify",
+        os_name="linux",
+        agent_id="not-a-valid-uuid",
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_engine_corrupted_json_returns_none() -> None:
+    """C1/H9/F15 fix: engine must return None gracefully on invalid JSON payload."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+    result = await engine.process(
+        b"NOT JSON AT ALL",
+        source="fanotify",
+        os_name="linux",
+        agent_id=_AGENT_ID,
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_engine_adapter_exception_returns_none() -> None:
+    """C1/F12 fix: any adapter exception must be caught; engine returns None."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    # Register a broken adapter that always raises.
+    def _broken(_raw: bytes, _host: str, _aid: str) -> None:  # type: ignore[return]
+        raise RuntimeError("simulated adapter crash")
+
+    engine._adapters[("linux", "broken")] = _broken  # type: ignore[assignment]
+
+    result = await engine.process(b"{}", source="broken", os_name="linux", agent_id=_AGENT_ID)
+    assert result is None

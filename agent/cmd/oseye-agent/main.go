@@ -32,7 +32,9 @@ const (
 )
 
 func main() {
+	// H2 fix: set as default so all packages (watchdog, policy, commands) use JSON logger.
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(log)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -41,12 +43,25 @@ func main() {
 	}
 
 	// ── Agent identity ────────────────────────────────────────────────────────
-	hostname, _ := os.Hostname()
-	agentIDStr := cfg.AgentID
-	if agentIDStr == "" {
-		agentIDStr = uuid.New().String()
+	// L10 fix: log hostname resolution failure instead of silently ignoring it.
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Warn("hostname unavailable, using empty string", "err", err)
+		hostname = ""
 	}
-	agentIDBytes := []byte(agentIDStr)
+
+	// H1 fix: store agentID as 16-byte binary UUID, not as a 36-char ASCII string.
+	var agentUUID uuid.UUID
+	if cfg.AgentID != "" {
+		agentUUID, err = uuid.Parse(cfg.AgentID)
+		if err != nil {
+			log.Warn("invalid OSEYE_AGENT_ID, generating ephemeral UUID", "err", err)
+			agentUUID = uuid.New()
+		}
+	} else {
+		agentUUID = uuid.New()
+	}
+	agentIDBytes := agentUUID[:]
 	mp := mapper.New(hostname, agentIDBytes)
 
 	// ── Platform resolution ──────────────────────────────────────────────────
@@ -66,7 +81,7 @@ func main() {
 	// ── Crypto ───────────────────────────────────────────────────────────────
 	ch := chain.New()
 	var s *signer.Signer
-	if cfg.TLSCertFile != "" {
+	if cfg.TLSKeyFile != "" {
 		s, err = signer.New(cfg.TLSKeyFile)
 		if err != nil {
 			log.Warn("key file unavailable, using ephemeral signer", "err", err)
@@ -86,6 +101,8 @@ func main() {
 		log.Error("buffer open failed", "err", err, "path", cfg.BufferPath)
 		os.Exit(1)
 	}
+	// M5 fix: buf.Close() called explicitly on every exit path, not only via defer,
+	// because os.Exit() skips deferred calls.
 	defer buf.Close()
 
 	// ── gRPC transport ────────────────────────────────────────────────────────
@@ -102,7 +119,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	// L11 fix: stop signal notification when the goroutine exits.
 	go func() {
+		defer signal.Stop(sigCh)
 		<-sigCh
 		log.Info("shutdown signal received — draining")
 		cancel()
@@ -112,6 +131,7 @@ func main() {
 	mgr := collector.NewManager(collectors, fanInBufSize)
 	if err := mgr.Start(ctx); err != nil {
 		log.Error("collector manager start failed", "err", err)
+		buf.Close()
 		os.Exit(1)
 	}
 	log.Info("collectors started", "count", len(collectors))
@@ -133,7 +153,7 @@ func main() {
 	batcher := transport.NewBatcher(cfg.BatchSize, cfg.BatchTimeout)
 	go func() {
 		err := batcher.Run(ctx, mgr.Events(), func(batch []collector.RawEvent) error {
-			return sendBatch(ctx, log, cfg, client, buf, ch, s, mp, batch)
+			return sendBatch(ctx, log, client, buf, ch, mp, batch)
 		})
 		if err != nil && err != context.Canceled {
 			log.Error("batcher exited with error", "err", err)
@@ -154,17 +174,14 @@ func main() {
 	log.Info("agent stopped")
 }
 
-// sendBatch serialises events, appends to offline buffer as fallback, and
-// tries to send the batch immediately via gRPC. On transport failure, events
-// are left in the buffer for the next drain cycle.
+// sendBatch serialises events, writes to offline buffer as durability layer, and
+// tries to send immediately via gRPC. On transport failure events stay buffered.
 func sendBatch(
 	ctx context.Context,
 	log *slog.Logger,
-	cfg *config.Config,
 	client *transport.GRPCClient,
 	buf *buffer.Buffer,
 	ch *chain.Chain,
-	s *signer.Signer,
 	mp *mapper.EventMapper,
 	batch []collector.RawEvent,
 ) error {
@@ -172,12 +189,11 @@ func sendBatch(
 	protoPayloads := make([][]byte, 0, len(batch))
 
 	for _, ev := range batch {
-		raw := ev.Raw
-		if raw == nil {
+		if ev.Raw == nil {
 			log.Warn("event has no raw payload, skipping", "source", ev.Source)
 			continue
 		}
-		hashChain := ch.Append(raw)
+		hashChain := ch.Append(ev.Raw)
 		pb, err := mp.Map(ev, hashChain)
 		if err != nil {
 			log.Warn("event mapping failed, skipping", "err", err, "source", ev.Source)
@@ -220,7 +236,8 @@ func sendBatch(
 	return nil
 }
 
-// drainBuffer reads any buffered events and ships them before shutdown.
+// drainBuffer reads buffered events and ships them before shutdown.
+// H11 fix: on send failure, payloads are re-pushed to the buffer instead of dropped.
 func drainBuffer(ctx context.Context, log *slog.Logger, client *transport.GRPCClient, buf *buffer.Buffer) {
 	for {
 		select {
@@ -250,7 +267,11 @@ func drainBuffer(ctx context.Context, log *slog.Logger, client *transport.GRPCCl
 		}
 
 		if err := client.SendBatch(ctx, pbEvents); err != nil {
-			log.Warn("drain send failed", "err", err)
+			log.Warn("drain send failed — re-buffering events", "err", err, "count", len(payloads))
+			// Best-effort re-push so events survive a temporary send failure.
+			if pushErr := buf.Push(payloads); pushErr != nil {
+				log.Warn("re-buffer failed — events lost", "err", pushErr)
+			}
 			return
 		}
 		log.Info("drained buffered events", "count", len(pbEvents))

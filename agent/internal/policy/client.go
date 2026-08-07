@@ -4,6 +4,7 @@ package policy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"time"
@@ -12,7 +13,7 @@ import (
 )
 
 // PolicyClient maintains the server→agent SurveillanceProfile stream and
-// applies profile updates via onProfile (non-blocking).
+// applies profile updates via onProfile serially (ordered, non-racy).
 type PolicyClient struct {
 	svc       gen.AgentServiceClient
 	agentID   []byte
@@ -25,34 +26,49 @@ func NewClient(svc gen.AgentServiceClient, agentID []byte, onProfile func(*gen.S
 }
 
 // Run opens the ReceivePolicy stream and forwards each received profile to
-// onProfile. On stream errors it reconnects with exponential backoff
-// (1s → 2s → 4s → 30s max) until ctx is cancelled.
+// onProfile. Profile application is serialised via a worker goroutine so that
+// concurrent deliveries cannot reorder (H4 fix).
+// On stream errors it reconnects with exponential backoff (1s → 2s → … → 30s)
+// until ctx is cancelled.
 func (c *PolicyClient) Run(ctx context.Context) {
+	// H4 fix: serialise profile application through a buffered work channel so
+	// profile P2 is never applied before profile P1 when both arrive in a burst.
+	workCh := make(chan *gen.SurveillanceProfilePB, 8)
+	go func() {
+		for p := range workCh {
+			if c.onProfile != nil {
+				c.onProfile(p)
+			}
+		}
+	}()
+	defer close(workCh)
+
 	delay := 1 * time.Second
 	const maxDelay = 30 * time.Second
 
 	for {
-		err := c.runStream(ctx)
-		if err == nil || ctx.Err() != nil {
+		err := c.runStream(ctx, workCh)
+		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("policy stream error, reconnecting", "err", err, "delay", delay)
-
-		t := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			t.Stop()
-			return
-		case <-t.C:
-		}
-		delay *= 2
-		if delay > maxDelay {
-			delay = maxDelay
+		if err != nil {
+			slog.Warn("policy stream error, reconnecting", "err", err, "delay", delay)
+			t := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return
+			case <-t.C:
+			}
+			delay *= 2
+			if delay > maxDelay {
+				delay = maxDelay
+			}
 		}
 	}
 }
 
-func (c *PolicyClient) runStream(ctx context.Context) error {
+func (c *PolicyClient) runStream(ctx context.Context, workCh chan<- *gen.SurveillanceProfilePB) error {
 	stream, err := c.svc.ReceivePolicy(ctx, &gen.PolicyRequest{AgentId: c.agentID})
 	if err != nil {
 		return err
@@ -60,13 +76,16 @@ func (c *PolicyClient) runStream(ctx context.Context) error {
 	for {
 		profile, err := stream.Recv()
 		if err == io.EOF {
-			return nil
+			// M3 fix: server-side EOF (e.g. rolling restart) triggers reconnect.
+			return fmt.Errorf("policy: server closed stream")
 		}
 		if err != nil {
 			return err
 		}
-		if c.onProfile != nil {
-			go c.onProfile(profile)
+		select {
+		case workCh <- profile:
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }
