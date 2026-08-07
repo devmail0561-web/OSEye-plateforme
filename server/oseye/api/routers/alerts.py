@@ -12,7 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, StringConstraints
 
 from oseye.api.auth.rbac import require_analyst
+from oseye.core.observability import get_logger
 from oseye.core.schema import Alert
+
+_logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["alerts"])
 
@@ -173,9 +176,9 @@ async def acknowledge_alert(
 async def mark_false_positive(
     alert_id: UUID,
     request: Request,
-    _auth: dict[str, Any] = Depends(require_analyst),
+    auth: dict[str, Any] = Depends(require_analyst),
 ) -> Alert:
-    """Mark alert as false positive and increment rule's fp counter."""
+    """Mark alert as false positive, increment rule fp counter, log to rule_versions."""
     repo = _get_alert_repo(request)
     alert: Alert | None = await repo.get(alert_id)
     if alert is None:
@@ -184,4 +187,19 @@ async def mark_false_positive(
     alert.false_positive_count += 1
     alert.updated_at = datetime.now(tz=UTC)
     await repo.update(alert)
+
+    # P3.14 — log to rule_versions
+    rv_repo = getattr(request.app.state, "rule_version_repo", None)
+    if rv_repo is not None and alert.rule_id:
+        operator = str(auth.get("sub", "unknown"))
+        try:
+            await rv_repo.log_false_positive(
+                rule_id=alert.rule_id,
+                alert_id=str(alert_id),
+                operator=operator,
+                false_positive_count=alert.false_positive_count,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("rule_version_log_failed", error=str(exc))
+
     return alert

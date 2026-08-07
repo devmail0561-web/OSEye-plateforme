@@ -25,7 +25,9 @@ from oseye.normalizer.engine import NormalizerEngine
 from oseye.rule_engine import RuleEngine
 from oseye.storage.backends.sqlite import SQLiteBackend
 from oseye.storage.repositories.alerts import SQLAlertRepository
+from oseye.storage.repositories.api_keys import SQLApiKeyRepository
 from oseye.storage.repositories.events import SQLEventRepository
+from oseye.storage.repositories.rule_versions import SQLRuleVersionRepository
 from oseye.workers.rule_worker import RuleWorker
 from oseye.workers.storage_writer import StorageWriter
 
@@ -100,6 +102,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         app.state.event_repo = repo  # type: ignore[attr-defined]
         app.state.alert_repo = alert_repo  # type: ignore[attr-defined]
         app.state.rule_engine = rule_engine  # type: ignore[attr-defined]
+        app.state.api_key_repo = SQLApiKeyRepository(backend.session_factory)  # type: ignore[attr-defined]
+        app.state.rule_version_repo = SQLRuleVersionRepository(backend.session_factory)  # type: ignore[attr-defined]
 
         yield  # server runs here
 

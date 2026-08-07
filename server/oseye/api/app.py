@@ -10,7 +10,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from oseye.api.routers import alerts, auth, events, health, rules
+from oseye.api.routers import alerts, api_keys, auth, events, health, rules
 from oseye.api.ws.alerts import alerts_ws_manager
 from oseye.api.ws.alerts import router as ws_alerts_router
 from oseye.config import Settings
@@ -51,6 +51,7 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     app.include_router(events.router)
     app.include_router(alerts.router)
     app.include_router(rules.router)
+    app.include_router(api_keys.router)
     app.include_router(ws_alerts_router)
 
     # Expose WS alert manager on app state so RuleWorker and alert endpoints can broadcast

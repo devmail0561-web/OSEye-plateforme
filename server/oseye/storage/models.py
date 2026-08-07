@@ -209,3 +209,28 @@ class CaseNoteRow(Base):
     updated_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     author: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class ApiKeyRow(Base):
+    __tablename__ = "api_keys"
+
+    key_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    roles: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON list
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class RuleVersionRow(Base):
+    __tablename__ = "rule_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rule_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    logged_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)  # "false_positive"
+    alert_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    operator: Mapped[str] = mapped_column(String(255), nullable=False)
+    false_positive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
