@@ -20,7 +20,7 @@ class UniversalEvent(BaseModel):
     agent_id: UUID
 
     # Classification
-    category: Literal["file", "process", "network", "user", "device"]
+    category: Literal["file", "process", "network", "user", "device", "log", "audit"]
     type: str
     severity: Literal["info", "low", "medium", "high", "critical"]
     collector: str
