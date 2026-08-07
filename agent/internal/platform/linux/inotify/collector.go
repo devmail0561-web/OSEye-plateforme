@@ -34,6 +34,7 @@ type InotifyCollector struct {
 	name       string
 	watches    []InotifyWatch
 	fd         int
+	closeOnce  sync.Once
 	wdsMu      sync.RWMutex
 	wds        map[int]string
 	logger     *slog.Logger
@@ -112,7 +113,7 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 		close(c.stopCh)
 	}
 	if c.fd >= 0 {
-		unix.Close(c.fd)
+		c.closeOnce.Do(func() { unix.Close(c.fd) })
 	}
 	return nil
 }
@@ -134,7 +135,7 @@ func (c *InotifyCollector) Stop() error {
 		for _, wd := range wds {
 			_, _ = unix.InotifyRmWatch(c.fd, uint32(wd))
 		}
-		return unix.Close(c.fd)
+		c.closeOnce.Do(func() { unix.Close(c.fd) })
 	}
 	return nil
 }

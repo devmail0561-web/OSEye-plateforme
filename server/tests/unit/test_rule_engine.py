@@ -203,7 +203,7 @@ class TestEvaluator:
 
     def test_re_match(self) -> None:
         ev = _event(executable="/usr/bin/python3.11")
-        rule = _rule("re.match(r'/usr/bin/python', event.executable)")
+        rule = _rule("re_match(r'/usr/bin/python', event.executable)")
         assert evaluate(rule, ev) is True
 
     def test_numeric_comparison(self) -> None:

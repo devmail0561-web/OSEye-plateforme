@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -77,6 +78,23 @@ func Load() (*Config, error) {
 		SyslogAddr: getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
 	}
 	return cfg, nil
+}
+
+// Validate checks that required configuration fields have valid values.
+func (c *Config) Validate() error {
+	if c.BatchSize <= 0 {
+		return fmt.Errorf("config: BatchSize must be > 0, got %d", c.BatchSize)
+	}
+	if c.BatchTimeout <= 0 {
+		return fmt.Errorf("config: BatchTimeout must be > 0, got %s", c.BatchTimeout)
+	}
+	if c.MaxCPUPct < 0 {
+		return fmt.Errorf("config: MaxCPUPct must be >= 0, got %f", c.MaxCPUPct)
+	}
+	if c.GRPCAddr == "" {
+		return fmt.Errorf("config: GRPCAddr must not be empty")
+	}
+	return nil
 }
 
 func parseCSV(s string) []string {

@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import collections
 import re
+import threading
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -31,19 +32,38 @@ _log = get_logger(__name__)
 # Deque of (timestamp_float, event_snapshot_dict) per window key
 _temporal_windows: dict[str, collections.deque[tuple[float, dict[str, Any]]]] = {}
 _MAX_WINDOW_ENTRIES = 10_000  # safety cap per window
+_temporal_windows_lock = threading.Lock()
+_record_count = 0  # global call counter for periodic purge
 
 
 def _window_key(rule_id: str, entity_key: str) -> str:
     return f"{rule_id}::{entity_key}"
 
 
+def _purge_old_windows() -> None:
+    """Remove window keys whose all entries have expired (older than 1 hour)."""
+    cutoff = time.time() - 3600
+    with _temporal_windows_lock:
+        stale_keys = [
+            k for k, dq in _temporal_windows.items()
+            if all(ts < cutoff for ts, _ in dq)
+        ]
+        for k in stale_keys:
+            del _temporal_windows[k]
+
+
 def record_event_for_temporal(rule_id: str, event_dict: dict[str, Any]) -> None:
     """Append an event snapshot to the temporal window store."""
+    global _record_count  # noqa: PLW0603
     entity_key = f"{event_dict.get('hostname', '')}:{event_dict.get('pid', '')}"
     key = _window_key(rule_id, entity_key)
-    if key not in _temporal_windows:
-        _temporal_windows[key] = collections.deque(maxlen=_MAX_WINDOW_ENTRIES)
-    _temporal_windows[key].append((time.time(), event_dict))
+    with _temporal_windows_lock:
+        if key not in _temporal_windows:
+            _temporal_windows[key] = collections.deque(maxlen=_MAX_WINDOW_ENTRIES)
+        _temporal_windows[key].append((time.time(), event_dict))
+    _record_count += 1
+    if _record_count % 500 == 0:
+        _purge_old_windows()
 
 
 def _count_events_in_window(
@@ -54,13 +74,16 @@ def _count_events_in_window(
 ) -> int:
     """Count how many events in the rolling window match filter_expr."""
     key = _window_key(rule_id, entity_key)
-    window = _temporal_windows.get(key)
-    if not window:
+    with _temporal_windows_lock:
+        window = _temporal_windows.get(key)
+        snapshot = list(window) if window else []
+
+    if not snapshot:
         return 0
 
     cutoff = time.time() - seconds
     count = 0
-    for ts, snap in window:
+    for ts, snap in snapshot:
         if ts < cutoff:
             continue
         try:
@@ -109,12 +132,20 @@ def _build_namespace(
     def _contains_method(s: Any, sub: str) -> bool:
         return isinstance(s, str) and sub in s
 
+    def _safe_re_match(pattern: str, value: Any) -> bool:
+        if not isinstance(value, str):
+            return False
+        try:
+            return bool(re.match(pattern, value))
+        except Exception:  # noqa: BLE001
+            return False
+
     def count_events(filter_expr: str, seconds: int) -> int:
         return _count_events_in_window(rule_id, entity_key, filter_expr, seconds)
 
     return {
         "event": _Event(event_dict),
-        "re": re,
+        "re_match": _safe_re_match,
         "count_events": count_events,
         "contains": _contains_method,
         "True": True,

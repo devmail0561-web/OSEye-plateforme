@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -22,6 +23,7 @@ type FanotifyCollector struct {
 	name       string
 	paths      []string
 	fd         int
+	closeOnce  sync.Once
 	logger     *slog.Logger
 	stopCh     chan struct{}
 	eventCount atomic.Uint64
@@ -101,7 +103,7 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 		close(c.stopCh)
 	}
 	if c.fd >= 0 {
-		unix.Close(c.fd)
+		c.closeOnce.Do(func() { unix.Close(c.fd) })
 	}
 	return nil
 }
@@ -114,7 +116,7 @@ func (c *FanotifyCollector) Stop() error {
 		close(c.stopCh)
 	}
 	if c.fd >= 0 {
-		return unix.Close(c.fd)
+		c.closeOnce.Do(func() { unix.Close(c.fd) })
 	}
 	return nil
 }

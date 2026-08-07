@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
@@ -121,13 +122,11 @@ func NewLoader() (*EBPFLoader, error) {
 // reader error occurs.
 func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 	out := make(chan EBPFEvent, 256)
+	var once sync.Once
+	closeOut := func() { once.Do(func() { close(out) }) }
 	for i, r := range l.readers {
 		go func(idx int, rd *perf.Reader) {
-			defer func() {
-				if idx == len(l.readers)-1 {
-					close(out)
-				}
-			}()
+			defer closeOut()
 			for {
 				select {
 				case <-ctx.Done():
@@ -231,7 +230,7 @@ type openatKernelEvent struct {
 }
 
 func parseOpenat(raw []byte) (EBPFEvent, bool) {
-	if len(raw) < 284 { // 8+4+4+4+16+256 (-4 padding may vary)
+	if len(raw) < 292 { // 8+4+4+4+16+256
 		return EBPFEvent{}, false
 	}
 	var k openatKernelEvent
@@ -264,7 +263,7 @@ type connectKernelEvent struct {
 }
 
 func parseConnect(raw []byte) (EBPFEvent, bool) {
-	if len(raw) < 44 { // 8+4+4+2+2+16+16 - 8 (alignment)
+	if len(raw) < 52 { // 8+4+4+2+2+16+16
 		return EBPFEvent{}, false
 	}
 	var k connectKernelEvent

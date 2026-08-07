@@ -40,6 +40,12 @@ func (m *EventMapper) Map(raw collector.RawEvent, hashChain []byte) (*gen.Univer
 	}
 
 	id := uuid.New()
+	category := m.mapCategory(raw.Source)
+	if raw.Source == "ebpf" {
+		if evType, _ := payload["event_type"].(string); evType == "connect" {
+			category = "network"
+		}
+	}
 	ev := &gen.UniversalEventPB{
 		EventId:     id[:],
 		TimestampNs: raw.Timestamp,
@@ -48,7 +54,7 @@ func (m *EventMapper) Map(raw collector.RawEvent, hashChain []byte) (*gen.Univer
 		Os:          raw.OS,
 		Collector:   raw.Source,
 		HashChain:   hashChain,
-		Category:    m.mapCategory(raw.Source),
+		Category:    category,
 	}
 
 	m.mapFields(payload, raw.Source, ev)
@@ -83,7 +89,7 @@ func (m *EventMapper) mapCategory(source string) string {
 // mapFields populates collector-specific fields on ev.
 func (m *EventMapper) mapFields(payload map[string]interface{}, source string, ev *gen.UniversalEventPB) {
 	switch source {
-	case "procfs", "ebpf":
+	case "procfs":
 		ev.Pid = intField(payload, "pid")
 		ev.Ppid = intField(payload, "ppid")
 		ev.Uid = intField(payload, "uid")
@@ -91,6 +97,23 @@ func (m *EventMapper) mapFields(payload map[string]interface{}, source string, e
 		ev.ProcessName = strField(payload, "name")
 		ev.Executable = strField(payload, "exe")
 		ev.Cmdline = strField(payload, "cmdline")
+	case "ebpf":
+		ev.Pid = intField(payload, "pid")
+		ev.Ppid = intField(payload, "ppid")
+		ev.Uid = intField(payload, "uid")
+		ev.Gid = intField(payload, "gid")
+		ev.ProcessName = firstStrField(payload, "comm", "name")
+		ev.Executable = firstStrField(payload, "filename", "exe")
+		ev.Type = strField(payload, "event_type")
+		switch ev.Type {
+		case "connect":
+			ev.DstIp = strField(payload, "dst_ip")
+			if p := intField(payload, "dst_port"); p != 0 {
+				ev.DstPort = p
+			}
+		case "openat", "open":
+			ev.Resource = strField(payload, "filename")
+		}
 	case "fanotify", "inotify":
 		ev.Resource = firstField(payload, "path", "full_path")
 		ev.Type = strField(payload, "event_type")
@@ -177,6 +200,16 @@ func firstField(m map[string]interface{}, keys ...string) string {
 	for _, k := range keys {
 		if s := strField(m, k); s != "" {
 			return s
+		}
+	}
+	return ""
+}
+
+// firstStrField returns the first non-empty string value among the given keys.
+func firstStrField(m map[string]interface{}, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := m[k].(string); ok && v != "" {
+			return v
 		}
 	}
 	return ""

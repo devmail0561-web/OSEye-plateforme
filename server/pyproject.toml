@@ -55,6 +55,9 @@ dependencies = [
     "slowapi>=0.1.9",
     "python-multipart>=0.0.9",
 
+    # Password hashing (SEC-AUTH-001)
+    "passlib[bcrypt]>=1.7.4",
+
     # HTTP client (TI providers)
     "httpx>=0.28.0",
     "pybreaker>=1.2.0",
