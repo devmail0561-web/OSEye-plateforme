@@ -25,11 +25,9 @@
   mitre: [T1070.003]
   platforms: [linux, darwin]
   condition: |
-    event.category == "process"
-    and (event.cmdline contains "history -c" or event.cmdline contains "HISTFILE=/dev/null"
-         or event.cmdline contains "unset HISTFILE" or event.cmdline contains "HISTSIZE=0"
-         or event.resource contains ".bash_history")
-    and event.type == "delete"
+    (event.category == "file" and event.type == "delete" and event.resource contains ".bash_history")
+    or (event.category == "process" and (event.cmdline contains "history -c" or event.cmdline contains "HISTFILE=/dev/null"
+         or event.cmdline contains "unset HISTFILE" or event.cmdline contains "HISTSIZE=0"))
   timeframe: null
   threshold: null
   actions: [ALERT]

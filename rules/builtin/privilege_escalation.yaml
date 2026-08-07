@@ -82,7 +82,7 @@
   enabled: true
   severity: high
   tags: [privilege_escalation, polkit]
-  mitre: [T1548]
+  mitre: [T1548.003]
   platforms: [linux]
   condition: |
     event.category == "process"

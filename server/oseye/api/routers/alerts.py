@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from oseye.api.auth.rbac import require_analyst
 from oseye.core.schema import Alert
@@ -28,7 +28,7 @@ class AlertPatch(BaseModel):
     """Partial update for an alert — only status and assigned_to."""
 
     status: str | None = None
-    assigned_to: str | None = None
+    assigned_to: Annotated[str, StringConstraints(max_length=200)] | None = None
 
 
 # ---------------------------------------------------------------------------

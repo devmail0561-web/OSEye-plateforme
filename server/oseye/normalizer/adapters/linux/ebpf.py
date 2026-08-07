@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Literal
 
 from oseye.core.schema import UniversalEvent
+from oseye.normalizer.adapters.linux._utils import safe_int
 from oseye.normalizer.secret_masker import mask
 
 # Mapping: event_type → (category, normalised_type)
@@ -37,8 +38,10 @@ class EBPFAdapter:
         * ``connect``        → category=``"network"``, type=``"connect"``
         * ``unlink``/``unlinkat`` → category=``"file"``, type=``"delete"``
 
-        For ``connect`` events, ``src_ip``, ``src_port``, ``dst_ip``,
-        ``dst_port`` are extracted from the payload when present.
+        For ``connect`` events, ``dst_ip`` and ``dst_port`` are extracted
+        from the payload when present.
+        For ``openat``/``open`` events, ``executable`` and ``resource`` are
+        taken from ``filename`` (the file being opened).
         """
         data: dict[str, Any] = json.loads(raw_json)
 
@@ -58,28 +61,28 @@ class EBPFAdapter:
             cmdline_str = str(data.get("cmdline", ""))
         cmdline = mask(cmdline_str)
 
-        # Network fields — only meaningful for connect events
-        src_ip: str | None = None
-        src_port: int | None = None
+        # executable: prefer "filename" (path of the file involved), fall back to "exe"
+        executable = str(data.get("filename") or data.get("exe", ""))
+
+        # resource: for file-open and exec events use the filename field
+        if event_type_raw in ("open", "openat", "execve"):
+            resource = str(data.get("filename", ""))
+        else:
+            resource = str(data.get("resource", ""))
+
+        # Network fields — only dst_ip/dst_port are meaningful for connect events
+        # src_ip/src_port are not emitted by the eBPF Go collector; do not read them
         dst_ip: str | None = None
         dst_port: int | None = None
 
         if category == "network":
-            raw_src_ip = data.get("src_ip")
-            if raw_src_ip is not None:
-                src_ip = str(raw_src_ip)
-
-            raw_src_port = data.get("src_port")
-            if raw_src_port is not None:
-                src_port = int(raw_src_port)
-
             raw_dst_ip = data.get("dst_ip")
             if raw_dst_ip is not None:
                 dst_ip = str(raw_dst_ip)
 
             raw_dst_port = data.get("dst_port")
             if raw_dst_port is not None:
-                dst_port = int(raw_dst_port)
+                dst_port = safe_int(raw_dst_port) or None
 
         return UniversalEvent(
             event_id=uuid.uuid4(),
@@ -91,15 +94,14 @@ class EBPFAdapter:
             severity="info",
             collector="ebpf",
             os="linux",
-            pid=int(data.get("pid", 0)),
-            ppid=int(data.get("ppid", 0)),
-            uid=int(data.get("uid", 0)),
-            gid=int(data.get("gid", 0)),
+            pid=safe_int(data.get("pid")),
+            ppid=safe_int(data.get("ppid")),
+            uid=safe_int(data.get("uid")),
+            gid=safe_int(data.get("gid")),
             process_name=str(data.get("comm", "")),
-            executable=str(data.get("exe", "")),
+            executable=executable,
+            resource=resource,
             cmdline=cmdline,
-            src_ip=src_ip,
-            src_port=src_port,
             dst_ip=dst_ip,
             dst_port=dst_port,
         )

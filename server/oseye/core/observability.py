@@ -36,7 +36,7 @@ def configure(log_level: str = "INFO", service_name: str = "oseye-server") -> No
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.StackInfoRenderer(),
-            structlog.processors.ExceptionPrettyPrinter(file=sys.stderr),
+            structlog.processors.format_exc_info,
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
@@ -54,9 +54,10 @@ def configure(log_level: str = "INFO", service_name: str = "oseye-server") -> No
     provider = TracerProvider(resource=resource)
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    insecure = os.getenv("OTEL_INSECURE", "false").lower() == "true"
     exporter: SpanExporter
     if otlp_endpoint:
-        exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+        exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=insecure)
     else:
         exporter = ConsoleSpanExporter()
 

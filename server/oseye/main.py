@@ -16,6 +16,7 @@ from pathlib import Path
 import uvicorn
 
 from oseye.api.app import create_app
+from oseye.api.auth.jwt import JWTHandler
 from oseye.bus.factory import create_bus
 from oseye.config import Settings
 from oseye.core.observability import get_logger
@@ -91,6 +92,12 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         _logger.info("workers_started", count=len(tasks))
 
         # Expose shared state to API routers
+        app.state.jwt_handler = JWTHandler(  # type: ignore[attr-defined]
+            private_key_path=settings.jwt_private_key_path,
+            public_key_path=settings.jwt_public_key_path,
+            expire_minutes=settings.jwt_access_token_expire_minutes,
+        )
+        app.state.event_repo = repo  # type: ignore[attr-defined]
         app.state.alert_repo = alert_repo  # type: ignore[attr-defined]
         app.state.rule_engine = rule_engine  # type: ignore[attr-defined]
 
@@ -121,7 +128,7 @@ def main() -> None:
 
 
 # Expose `app` for `uvicorn oseye.main:app` invocation (Docker CMD).
-app = create_app(get_settings())
+app = create_app(get_settings(), lifespan=_build_lifespan(get_settings()))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Literal
 
 from oseye.core.schema import UniversalEvent
+from oseye.normalizer.adapters.linux._utils import safe_int
 from oseye.normalizer.secret_masker import mask
 
 # Mapping: syscall name → (category, event_type)
@@ -62,10 +63,10 @@ class AuditdAdapter:
             severity="info",
             collector="auditd",
             os="linux",
-            pid=int(data.get("pid", 0)),
-            ppid=int(data.get("ppid", 0)),
-            uid=int(data.get("uid", 0)),
-            gid=int(data.get("gid", 0)),
+            pid=safe_int(data.get("pid")),
+            ppid=safe_int(data.get("ppid")),
+            uid=safe_int(data.get("uid")),
+            gid=safe_int(data.get("gid")),
             process_name=comm,
             executable=exe,
             cmdline=cmdline,

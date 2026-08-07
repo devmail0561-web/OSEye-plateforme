@@ -163,13 +163,14 @@ class RuleEngine:
         _log.info("rule_engine_loaded", count=len(rules), rules_root=str(self._rules_root))
 
     def _current_mtime(self) -> float:
-        """Return sum of mtimes for all YAML files under rules_root."""
+        """Return sum of mtimes for all YAML/YML files under rules_root."""
         total = 0.0
         if not self._rules_root.exists():
             return total
-        for path in self._rules_root.rglob("*.yaml"):
-            try:
-                total += path.stat().st_mtime
-            except OSError:
-                pass
+        for pattern in ("*.yaml", "*.yml"):
+            for path in self._rules_root.rglob(pattern):
+                try:
+                    total += path.stat().st_mtime
+                except OSError:
+                    pass
         return total

@@ -33,13 +33,17 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
         threshold_raw = data.get("threshold")
         threshold = int(str(threshold_raw)) if threshold_raw is not None else None
         actions_raw = data.get("actions", ["ALERT"])
-        actions: list[str] = [str(a) for a in (actions_raw if isinstance(actions_raw, list) else [])]
+        actions: list[str] = [
+            str(a) for a in (actions_raw if isinstance(actions_raw, list) else [])
+        ]
         tags_raw = data.get("tags", [])
         tags: list[str] = [str(t) for t in (tags_raw if isinstance(tags_raw, list) else [])]
         mitre_raw = data.get("mitre", [])
         mitre: list[str] = [str(m) for m in (mitre_raw if isinstance(mitre_raw, list) else [])]
         platforms_raw = data.get("platforms", [])
-        platforms: list[str] = [str(p) for p in (platforms_raw if isinstance(platforms_raw, list) else [])]
+        platforms: list[str] = [
+            str(p) for p in (platforms_raw if isinstance(platforms_raw, list) else [])
+        ]
         explanation = str(data.get("explanation", ""))
         return RuleDefinition(
             id=rule_id,

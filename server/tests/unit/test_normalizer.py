@@ -182,8 +182,9 @@ def test_ebpf_connect_with_network_fields() -> None:
 
     assert event.category == "network"
     assert event.type == "connect"
-    assert event.src_ip == "192.168.1.5"
-    assert event.src_port == 54321
+    # eBPF adapter intentionally does not extract src_ip/src_port (audit fix)
+    assert event.src_ip is None
+    assert event.src_port is None
     assert event.dst_ip == "93.184.216.34"
     assert event.dst_port == 443
 

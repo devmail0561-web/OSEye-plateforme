@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from oseye.core.schema import UniversalEvent
+from oseye.normalizer.adapters.linux._utils import safe_int
 from oseye.normalizer.secret_masker import mask
 
 
@@ -39,10 +40,10 @@ class ProcfsAdapter:
             severity="info",
             collector="procfs",
             os="linux",
-            pid=int(data.get("pid", 0)),
-            ppid=int(data.get("ppid", 0)),
-            uid=int(data.get("uid", 0)),
-            gid=int(data.get("gid", 0)),
+            pid=safe_int(data.get("pid")),
+            ppid=safe_int(data.get("ppid")),
+            uid=safe_int(data.get("uid")),
+            gid=safe_int(data.get("gid")),
             process_name=str(data.get("name", "")),
             executable=str(data.get("exe", "")),
             cmdline=cmdline,
