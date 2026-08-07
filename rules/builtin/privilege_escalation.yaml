@@ -1,0 +1,97 @@
+- id: rule_suid_execution
+  name: "Exécution d'un binaire SUID inhabituel"
+  enabled: true
+  severity: high
+  tags: [privilege_escalation, setuid]
+  mitre: [T1548.001]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and event.type == "exec"
+    and event.uid != 0
+    and (event.executable contains "find" or event.executable contains "vim"
+         or event.executable contains "python" or event.executable contains "perl"
+         or event.executable contains "nmap" or event.executable contains "less"
+         or event.executable contains "more" or event.executable contains "awk")
+    and event.cmdline contains "-exec"
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Exécution d'un binaire potentiellement SUID connu pour être exploité dans
+    les techniques GTFOBins (find -exec, vim -c, python -c, etc.).
+
+- id: rule_sudo_abuse
+  name: "Abus sudo — exécution shell via sudo"
+  enabled: true
+  severity: high
+  tags: [privilege_escalation, sudo_abuse]
+  mitre: [T1548.003]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and event.process_name == "sudo"
+    and (event.cmdline contains "bash" or event.cmdline contains "sh"
+         or event.cmdline contains "python" or event.cmdline contains "perl"
+         or event.cmdline contains "-i" or event.cmdline contains "su -")
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Utilisation de sudo pour lancer un shell interactif ou un interpréteur.
+    Technique d'escalade de privilèges via GTFOBins.
+
+- id: rule_capabilities_add
+  name: "Ajout de capabilities Linux"
+  enabled: true
+  severity: high
+  tags: [privilege_escalation, linux_capabilities]
+  mitre: [T1548.001]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "setcap" or event.cmdline contains "setcap")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Attribution de capabilities Linux (setcap) par un utilisateur non-root.
+    Peut permettre l'exécution de code avec privilèges élargis sans sudo.
+
+- id: rule_ptrace_injection
+  name: "Injection de processus via ptrace"
+  enabled: true
+  severity: critical
+  tags: [privilege_escalation, process_injection]
+  mitre: [T1055.008]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and event.type == "ptrace"
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT, INVESTIGATE]
+  explanation: >
+    Utilisation de ptrace pour s'attacher à un processus.
+    Vecteur classique d'injection de code et d'escalade de privilèges.
+
+- id: rule_polkit_abuse
+  name: "Exploitation potentielle de polkit"
+  enabled: true
+  severity: high
+  tags: [privilege_escalation, polkit]
+  mitre: [T1548]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.executable contains "pkexec" or event.process_name == "pkexec")
+    and event.uid != 0
+    and event.ppid != 1
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Exécution de pkexec (polkit) depuis un processus non-système.
+    Peut indiquer une exploitation CVE-2021-4034 (PwnKit) ou similaire.

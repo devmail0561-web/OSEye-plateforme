@@ -1,0 +1,98 @@
+- id: rule_recon_enumeration
+  name: "Énumération système (whoami, id, uname en rafale)"
+  enabled: true
+  severity: low
+  tags: [discovery, system_info]
+  mitre: [T1082, T1033]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "whoami" or event.process_name == "id"
+         or event.process_name == "uname" or event.process_name == "hostname"
+         or event.process_name == "uptime")
+    and event.uid != 0
+  timeframe: 10
+  threshold: 3
+  actions: [ALERT]
+  explanation: >
+    Plusieurs commandes d'énumération système en 10 secondes.
+    Pattern typique post-exploitation pour cartographier l'environnement.
+
+- id: rule_network_discovery
+  name: "Découverte réseau (netstat, ss, arp)"
+  enabled: true
+  severity: low
+  tags: [discovery, network_discovery]
+  mitre: [T1049]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and (event.process_name == "netstat" or event.process_name == "ss"
+         or event.process_name == "arp" or event.cmdline contains "ip route"
+         or event.cmdline contains "ip neigh")
+    and event.uid != 0
+  timeframe: 10
+  threshold: 3
+  actions: [ALERT]
+  explanation: >
+    Exécution de commandes de découverte réseau en rafale.
+    Indique une cartographie réseau post-compromission.
+
+- id: rule_process_discovery
+  name: "Énumération des processus (ps aux, /proc scan)"
+  enabled: true
+  severity: info
+  tags: [discovery, process_discovery]
+  mitre: [T1057]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and event.process_name == "ps"
+    and (event.cmdline contains "aux" or event.cmdline contains "-ef")
+    and event.uid != 0
+  timeframe: 5
+  threshold: 5
+  actions: [ALERT]
+  explanation: >
+    Énumération répétée des processus en cours.
+    Souvent utilisé pour trouver des cibles d'injection ou des processus privilégiés.
+
+- id: rule_sensitive_file_discovery
+  name: "Accès à des fichiers de configuration sensibles"
+  enabled: true
+  severity: medium
+  tags: [discovery, credentials_in_files]
+  mitre: [T1552.001]
+  platforms: [linux]
+  condition: |
+    event.category == "file"
+    and event.type == "read"
+    and (event.resource contains "/.aws/credentials" or event.resource contains "/.env"
+         or event.resource contains "/etc/kubernetes" or event.resource contains "kubeconfig"
+         or event.resource contains "docker-compose.yml" or event.resource contains ".npmrc"
+         or event.resource contains ".pypirc")
+    and event.uid != 0
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Accès à des fichiers contenant potentiellement des credentials (AWS, Kubernetes,
+    variables d'environnement, registres de packages).
+
+- id: rule_sudo_discovery
+  name: "Énumération des droits sudo"
+  enabled: true
+  severity: low
+  tags: [discovery, privilege_escalation]
+  mitre: [T1069.001]
+  platforms: [linux]
+  condition: |
+    event.category == "process"
+    and event.process_name == "sudo"
+    and event.cmdline contains "-l"
+  timeframe: null
+  threshold: null
+  actions: [ALERT]
+  explanation: >
+    Liste des commandes sudo disponibles pour l'utilisateur courant.
+    Étape de reconnaissance précédant souvent une escalade de privilèges.
