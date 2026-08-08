@@ -240,3 +240,124 @@ async def test_ti_client_cache_hit_skips_provider_calls() -> None:
     assert result.max_score == 55.0
     assert result.malicious is True
     assert "port-scan" in result.tags
+
+
+# ---------------------------------------------------------------------------
+# 11. ti_unavailable flag
+# ---------------------------------------------------------------------------
+
+
+async def test_ti_client_all_providers_fail_sets_ti_unavailable() -> None:
+    """When all providers raise exceptions, ti_unavailable=True in the report."""
+    mock_provider = AsyncMock()
+    mock_provider.name = "mock_provider"
+    mock_provider.lookup_ip.side_effect = Exception("network error")
+    mock_provider.close = AsyncMock()
+
+    cache = MemoryTICache()
+    client = ThreatIntelClient(providers=[mock_provider], cache=cache)
+    result = await client.lookup("1.2.3.4", "ip")
+    await client.close()
+
+    assert result.ti_unavailable is True
+    assert result.max_score == 0.0
+
+
+async def test_ti_client_no_providers_not_unavailable() -> None:
+    """With zero providers configured, ti_unavailable stays False (nothing to fail)."""
+    cache = MemoryTICache()
+    client = ThreatIntelClient(providers=[], cache=cache)
+    result = await client.lookup("1.2.3.4", "ip")
+    await client.close()
+
+    assert result.ti_unavailable is False
+
+
+# ---------------------------------------------------------------------------
+# 12. Circuit breaker on AbuseIPDB
+# ---------------------------------------------------------------------------
+
+
+async def test_abuseipdb_circuit_open_returns_none() -> None:
+    """When the circuit breaker is already open, lookup_ip returns None without HTTP."""
+    from oseye.threat_intel.breaker import AsyncCircuitBreaker
+
+    # Force breaker into open state by exhausting fail_max
+    breaker = AsyncCircuitBreaker(fail_max=1, reset_timeout=9999, name="test")
+    try:
+        async def _fail() -> None:
+            raise Exception("forced open")
+        await breaker.call(_fail)
+    except Exception:
+        pass
+
+    assert breaker.state == "open"
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("HTTP should not be called when circuit is open")
+
+    transport = httpx.MockTransport(_handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        provider = AbuseIPDBProvider(api_key="test-key", http_client=http_client, breaker=breaker)
+        result = await provider.lookup_ip("1.2.3.4")
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 13. Retry on transient errors
+# ---------------------------------------------------------------------------
+
+
+async def test_retry_async_retries_on_connect_error() -> None:
+    """retry_async retries up to N times on ConnectError before returning None."""
+    from oseye.threat_intel.retry import retry_async
+
+    call_count = 0
+
+    async def flaky() -> None:
+        nonlocal call_count
+        call_count += 1
+        raise httpx.ConnectError("refused")
+
+    result = await retry_async(flaky, attempts=3, base_delay=0.0, label="test")
+    assert result is None
+    assert call_count == 3
+
+
+async def test_retry_async_succeeds_on_second_attempt() -> None:
+    """retry_async returns the result as soon as one attempt succeeds."""
+    from oseye.threat_intel.retry import retry_async
+
+    call_count = 0
+
+    async def flaky() -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count < 2:
+            raise httpx.ConnectError("refused")
+        return "ok"
+
+    result = await retry_async(flaky, attempts=3, base_delay=0.0, label="test")
+    assert result == "ok"
+    assert call_count == 2
+
+
+async def test_retry_async_no_retry_on_4xx() -> None:
+    """retry_async does not retry on HTTP 4xx (client error)."""
+    from oseye.threat_intel.retry import retry_async
+
+    call_count = 0
+
+    async def client_error() -> None:
+        nonlocal call_count
+        call_count += 1
+        raise httpx.HTTPStatusError(
+            "not found",
+            request=httpx.Request("GET", "http://x"),
+            response=httpx.Response(404),
+        )
+
+    result = await retry_async(client_error, attempts=3, base_delay=0.0, label="test")
+    assert result is None
+    assert call_count == 1  # no retry on 4xx

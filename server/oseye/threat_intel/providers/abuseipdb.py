@@ -6,7 +6,9 @@ from typing import Any
 
 import httpx
 
+from oseye.threat_intel.breaker import AsyncCircuitBreaker, CircuitOpenError
 from oseye.threat_intel.models import ThreatIntelReport
+from oseye.threat_intel.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +31,16 @@ class AbuseIPDBProvider:
         self,
         api_key: str,
         http_client: httpx.AsyncClient | None = None,
-        breaker: Any | None = None,
+        breaker: AsyncCircuitBreaker | None = None,
+        fail_max: int = 5,
+        reset_timeout: float = 60.0,
     ) -> None:
         self._api_key = api_key or ""
-        self._breaker = breaker
+        self._breaker = breaker or AsyncCircuitBreaker(
+            fail_max=fail_max,
+            reset_timeout=reset_timeout,
+            name="abuseipdb",
+        )
 
         if http_client is None:
             self._http_client = httpx.AsyncClient(timeout=10.0)
@@ -41,27 +49,37 @@ class AbuseIPDBProvider:
             self._http_client = http_client
             self._owns_client = False
 
+    async def _do_lookup_ip(self, ip: str) -> ThreatIntelReport | None:
+        params = {"ipAddress": ip, "maxAgeInDays": "90", "verbose": "true"}
+        headers = {"Key": self._api_key, "Accept": "application/json"}
+        response = await self._http_client.get(
+            _ABUSEIPDB_CHECK_URL, params=params, headers=headers
+        )
+        response.raise_for_status()
+        return self._parse(ip, response.json().get("data", {}))
+
     async def lookup_ip(self, ip: str) -> ThreatIntelReport | None:
         if not self._api_key:
             return None
 
-        params = {
-            "ipAddress": ip,
-            "maxAgeInDays": "90",
-            "verbose": "true",
-        }
-        headers = {"Key": self._api_key, "Accept": "application/json"}
+        async def _with_retry() -> ThreatIntelReport | None:
+            return await retry_async(
+                lambda: self._do_lookup_ip(ip),
+                attempts=3,
+                base_delay=0.5,
+                label=f"abuseipdb:ip:{ip}",
+            )
 
         try:
-            response = await self._http_client.get(
-                _ABUSEIPDB_CHECK_URL, params=params, headers=headers
-            )
-            response.raise_for_status()
-            data: dict[str, Any] = response.json().get("data", {})
-        except httpx.HTTPError as exc:
+            return await self._breaker.call(_with_retry)
+        except CircuitOpenError:
+            logger.warning("AbuseIPDB circuit open — skipping lookup for %s", ip)
+            return None
+        except Exception as exc:  # noqa: BLE001
             logger.warning("AbuseIPDB lookup_ip failed for %s: %s", ip, exc)
             return None
 
+    def _parse(self, ip: str, data: dict[str, Any]) -> ThreatIntelReport:
         confidence_score: float = float(data.get("abuseConfidenceScore", 0))
         is_whitelisted: bool = bool(data.get("isWhitelisted", False))
 

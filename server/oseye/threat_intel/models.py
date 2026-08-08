@@ -27,3 +27,5 @@ class AggregatedTIReport(BaseModel):
     tags: list[str] = []
     reports: list[ThreatIntelReport] = []
     queried_at: datetime
+    # True when all providers failed (circuit open, timeout, errors) — score/malicious not reliable
+    ti_unavailable: bool = False

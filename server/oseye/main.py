@@ -98,6 +98,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 AbuseIPDBProvider(
                     api_key=settings.abuseipdb_api_key,
                     http_client=http_client,
+                    fail_max=settings.ti_breaker_fail_max,
+                    reset_timeout=settings.ti_breaker_reset_timeout,
                 )
             )
         if settings.virustotal_api_key:
@@ -105,6 +107,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 VirusTotalProvider(
                     api_key=settings.virustotal_api_key,
                     http_client=http_client,
+                    fail_max=settings.ti_breaker_fail_max,
+                    reset_timeout=settings.ti_breaker_reset_timeout,
                 )
             )
         if settings.misp_url:

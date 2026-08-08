@@ -120,7 +120,10 @@ class ThreatIntelClient:
             elif item is not None:
                 reports.append(item)
 
-        aggregated = self._aggregate(indicator, indicator_type, reports)
+        ti_unavailable = len(raw_results) > 0 and not reports
+        aggregated = self._aggregate(
+            indicator, indicator_type, reports, ti_unavailable=ti_unavailable
+        )
 
         # Persist a lightweight stub into the cache so subsequent requests skip providers
         stub = ThreatIntelReport(
@@ -190,6 +193,7 @@ class ThreatIntelClient:
         indicator: str,
         indicator_type: str,
         reports: list[ThreatIntelReport],
+        ti_unavailable: bool = False,
     ) -> AggregatedTIReport:
         max_score = 0.0
         malicious = False
@@ -215,4 +219,5 @@ class ThreatIntelClient:
             tags=all_tags,
             reports=reports,
             queried_at=datetime.now(tz=UTC),
+            ti_unavailable=ti_unavailable,
         )
