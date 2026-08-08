@@ -25,12 +25,17 @@ from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.correlation.engine import CorrelationEngine
 from oseye.correlation.linkers.same_host import SameHostLinker
+from oseye.decision.action_executor import ActionExecutor
+from oseye.decision.engine import DecisionEngine, PolicyOverrides
+from oseye.decision.human_queue import HumanApprovalQueue
+from oseye.decision.journal import DecisionJournal
 from oseye.ingest.server import create_grpc_server
 from oseye.normalizer.engine import NormalizerEngine
 from oseye.rule_engine import RuleEngine
 from oseye.storage.backends.sqlite import SQLiteBackend
 from oseye.storage.repositories.alerts import SQLAlertRepository
 from oseye.storage.repositories.api_keys import SQLApiKeyRepository
+from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.storage.repositories.events import SQLEventRepository
 from oseye.storage.repositories.incidents import SQLIncidentRepository
 from oseye.storage.repositories.rule_versions import SQLRuleVersionRepository
@@ -39,11 +44,6 @@ from oseye.threat_intel.client import ThreatIntelClient
 from oseye.threat_intel.providers.abuseipdb import AbuseIPDBProvider
 from oseye.threat_intel.providers.misp import MISPProvider
 from oseye.threat_intel.providers.virustotal import VirusTotalProvider
-from oseye.decision.action_executor import ActionExecutor
-from oseye.decision.engine import DecisionEngine, PolicyOverrides
-from oseye.decision.human_queue import HumanApprovalQueue
-from oseye.decision.journal import DecisionJournal
-from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.workers.correlation_worker import CorrelationWorker
 from oseye.workers.decision_worker import DecisionWorker
 from oseye.workers.rule_worker import RuleWorker
@@ -156,7 +156,9 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # ------------------------------------------------------------------
 
         decision_repo = SQLDecisionRepository(backend.session_factory)
-        journal = DecisionJournal()
+        # F-02: restore last journal hash from DB so the chain survives restarts.
+        _last_hash = await decision_repo.get_last_journal_hash()
+        journal = DecisionJournal(last_hash=_last_hash) if _last_hash else DecisionJournal()
         decision_engine = DecisionEngine(
             journal=journal,
             policy_overrides=PolicyOverrides(),

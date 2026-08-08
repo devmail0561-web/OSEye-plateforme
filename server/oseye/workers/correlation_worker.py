@@ -151,7 +151,13 @@ class CorrelationWorker:
             severity=incident.severity,
         )
 
-        # Notify DecisionWorker
+        # F-04: only notify DecisionWorker when the incident is newly created
+        # (alert_count == 1).  Subsequent alerts that are linked to an existing
+        # incident do NOT trigger a new Decision — this prevents N alerts to the
+        # same incident from producing N duplicate ISOLATE commands.
+        if incident.alert_count != 1:
+            return
+
         correlated_payload = json.dumps(
             {
                 "incident_id": str(incident.incident_id),

@@ -92,6 +92,8 @@ class HumanApprovalQueue:
             return decision
 
         now = datetime.now(UTC)
+        # F-03: update_human_decision uses WHERE human_decision IS NULL — atomic.
+        # rowcount=0 means either not found or already decided by a concurrent request.
         updated = await self._repo.update_human_decision(
             decision_id=decision_id,
             human_decision=outcome,
@@ -100,7 +102,11 @@ class HumanApprovalQueue:
             approved_at=now.isoformat(),
         )
         if not updated:
-            _log.warning("human_queue_update_failed", decision_id=str(decision_id))
+            _log.warning(
+                "human_queue_update_skipped",
+                decision_id=str(decision_id),
+                reason="not_found_or_already_decided",
+            )
             return None
 
         result = decision.model_copy(

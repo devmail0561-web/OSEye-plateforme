@@ -22,10 +22,16 @@ class DecisionJournal:
 
     Not thread-safe — access must be serialised by the caller (e.g., asyncio
     single event-loop, or an asyncio.Lock).
+
+    Parameters
+    ----------
+    last_hash:  Seed the chain from a known hash (used on server restart to
+                resume from the last persisted decision).  Defaults to the
+                genesis zero-hash for a fresh chain.
     """
 
-    def __init__(self) -> None:
-        self._last_hash: str = _GENESIS_HASH
+    def __init__(self, last_hash: str = _GENESIS_HASH) -> None:
+        self._last_hash: str = last_hash
 
     @property
     def last_hash(self) -> str:
@@ -37,14 +43,24 @@ class DecisionJournal:
         *decision_fields* should contain the stable, deterministic fields that
         define the decision (excluding journal hashes themselves).
 
-        Returns the pair ``(prev_hash, new_hash)`` that must be stored on the
-        Decision object before persisting.
+        Returns the pair ``(prev_hash, new_hash)``.  The caller MUST persist
+        the decision successfully before treating the chain as advanced; use
+        :meth:`rollback` to undo on persist failure.
         """
         prev = self._last_hash
         payload = json.dumps(decision_fields, sort_keys=True, default=str).encode()
         new_hash = blake3.blake3(prev.encode() + payload).hexdigest()
         self._last_hash = new_hash
         return prev, new_hash
+
+    def rollback(self, prev_hash: str) -> None:
+        """Revert _last_hash to *prev_hash* after a failed persist.
+
+        Must be called with the ``prev_hash`` returned by the matching
+        :meth:`commit` call while the journal lock is still held (or
+        re-acquired).
+        """
+        self._last_hash = prev_hash
 
     def verify_chain(self, decisions: list[Decision]) -> list[int]:
         """Return the list of indices where the chain is broken.

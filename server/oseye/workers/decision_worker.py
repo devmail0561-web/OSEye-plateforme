@@ -122,9 +122,13 @@ class DecisionWorker:
             _log.warning("decision_worker_incident_not_found", incident_id=incident_id_str)
             return
 
-        # Optionally load the trigger alert
+        # Optionally load the trigger alert.
+        # F-06: payload.get() may return None (JSON null) — str(None) = "None"
+        # which is non-empty and would cause UUID("None") to raise ValueError.
+        # Guard explicitly against None and empty string.
         alert = None
-        trigger_alert_id_str = str(payload.get("trigger_alert_id", ""))
+        raw_alert_id = payload.get("trigger_alert_id")
+        trigger_alert_id_str = str(raw_alert_id) if raw_alert_id is not None else ""
         if trigger_alert_id_str:
             try:
                 alert = await self._alert_repo.get(UUID(trigger_alert_id_str))
@@ -155,6 +159,8 @@ class DecisionWorker:
                 decision_id=str(decision.decision_id),
                 error=str(exc),
             )
+            # F-01: roll back journal so it stays consistent with the DB.
+            await self._engine.rollback_journal(decision.prev_journal_hash)
             return
 
         self._total_decisions += 1

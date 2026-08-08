@@ -109,7 +109,7 @@ class SQLDecisionRepository:
                 stmt = stmt.where(DecisionRow.entity_id == filters["entity_id"])
             if filters.get("decision_type"):
                 stmt = stmt.where(DecisionRow.decision_type == filters["decision_type"])
-            if filters.get("requires_human"):
+            if filters.get("requires_human") is not None:
                 stmt = stmt.where(DecisionRow.requires_human == filters["requires_human"])
 
             count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -142,9 +142,15 @@ class SQLDecisionRepository:
         """
         from sqlalchemy import update
 
+        # F-03: add WHERE human_decision IS NULL to make the update atomic.
+        # If two concurrent requests race, only the first one wins (rowcount=1);
+        # the second gets rowcount=0 and is treated as "already decided".
         stmt = (
             update(DecisionRow)
-            .where(DecisionRow.decision_id == str(decision_id))
+            .where(
+                DecisionRow.decision_id == str(decision_id),
+                DecisionRow.human_decision.is_(None),
+            )
             .values(
                 human_decision=human_decision,
                 human_operator=human_operator,
@@ -156,6 +162,24 @@ class SQLDecisionRepository:
             async with session.begin():
                 result = await session.execute(stmt)
                 return bool(result.rowcount > 0)  # type: ignore[attr-defined]
+
+    async def get_last_journal_hash(self) -> str | None:
+        """Return the journal_hash of the most recently created Decision.
+
+        Returns None if no decisions exist yet (genesis state).
+        Used on startup to restore the DecisionJournal in-memory hash so the
+        chain remains consistent after a server restart (F-02).
+        """
+        from sqlalchemy import desc
+
+        async with self._session_factory() as session:
+            stmt = (
+                select(DecisionRow.journal_hash)
+                .order_by(desc(DecisionRow.created_at))
+                .limit(1)
+            )
+            result = (await session.execute(stmt)).scalar_one_or_none()
+            return result
 
     async def get_pending(self) -> list[Decision]:
         async with self._session_factory() as session:

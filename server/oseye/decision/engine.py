@@ -182,6 +182,8 @@ class DecisionEngine:
         async with self._lock:
             prev_hash, journal_hash = self._journal.commit(decision_fields)
 
+        # Store prev_hash on the decision so DecisionWorker can rollback if
+        # persistence fails (F-01: journal must not permanently diverge from DB).
         decision = Decision(
             decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
             created_at=now,
@@ -214,6 +216,16 @@ class DecisionEngine:
         )
 
         return decision
+
+
+    async def rollback_journal(self, prev_hash: str) -> None:
+        """Revert the journal to *prev_hash* after a failed persist.
+
+        Must be called when decision_repo.create() fails so that the in-memory
+        journal stays consistent with what is actually in the database.
+        """
+        async with self._lock:
+            self._journal.rollback(prev_hash)
 
 
 def _build_explanation(
