@@ -84,10 +84,10 @@
   condition: |
     event.category == "process"
     and (event.process_name == "insmod" or event.process_name == "modprobe")
-    and event.uid != 0
+    and event.uid == 0
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Chargement d'un module noyau par un utilisateur non-root.
+    Chargement d'un module noyau par root (uid==0).
     Vecteur d'installation de rootkit ou de backdoor kernel.

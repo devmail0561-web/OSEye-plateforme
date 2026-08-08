@@ -111,7 +111,17 @@ class RuleWorker:
                 "hostname": event.hostname,
                 "matched_fields": match.matched_fields,
             }
-            await self._bus.publish(topic, json.dumps(payload).encode())
+            # F-04: a single publish failure must not abort the remaining matches
+            try:
+                await self._bus.publish(topic, json.dumps(payload).encode())
+            except Exception as e:  # noqa: BLE001
+                _log.error(
+                    "rule_worker_publish_error",
+                    rule_id=match.rule_id,
+                    topic=topic,
+                    error=str(e),
+                )
+                continue
 
             # Create alert in storage if ALERT action is requested
             if "ALERT" in match.actions:

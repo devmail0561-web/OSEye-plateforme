@@ -44,8 +44,8 @@
     Volume élevé de connexions TCP refusées en 30 secondes.
     Pattern typique d'un scan de ports (nmap, masscan).
 
-- id: rule_rsync_exfil
-  name: "Transfert rsync/scp hors horaires business"
+- id: rule_rsync_scp_large_transfer
+  name: "Transfert de données volumineux via rsync/scp"
   enabled: true
   severity: medium
   tags: [lateral_movement, data_transfer]
@@ -59,8 +59,10 @@
   threshold: 3
   actions: [ALERT]
   explanation: >
-    Utilisation de rsync ou scp pour un transfert de données.
-    Surveiller en combinaison avec les destinations réseau pour détecter l'exfiltration.
+    Utilisation répétée de rsync ou scp (>3 invocations en 60s) par un utilisateur
+    non-root. Peut indiquer une exfiltration de données. Aucun filtre horaire n'est
+    appliqué — la règle se déclenche 24h/24 ; combiner avec les destinations réseau
+    pour affiner le triage.
 
 - id: rule_nfs_smb_mount_suspicious
   name: "Montage NFS/SMB suspect"
@@ -74,12 +76,11 @@
     and (event.process_name == "mount" or event.cmdline contains "mount")
     and (event.cmdline contains "cifs" or event.cmdline contains "nfs"
          or event.cmdline contains "smbfs")
-    and event.uid != 0
   timeframe: null
   threshold: null
   actions: [ALERT]
   explanation: >
-    Montage de partage réseau NFS/SMB par un utilisateur non-root.
+    Montage de partage réseau NFS/SMB (tout utilisateur, y compris root).
     Peut indiquer une reconnaissance ou un accès latéral à des ressources partagées.
 
 - id: rule_rdp_tunneling

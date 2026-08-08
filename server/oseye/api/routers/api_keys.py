@@ -15,6 +15,9 @@ from oseye.api.auth.rbac import require_admin
 
 router = APIRouter(prefix="/api/v1", tags=["api-keys"])
 
+# SEC-002: allowlist of valid roles
+VALID_ROLES: frozenset[str] = frozenset({"analyst", "admin"})
+
 
 class ApiKeyCreate(BaseModel):
     name: Annotated[str, StringConstraints(min_length=1, max_length=200)]
@@ -56,6 +59,10 @@ async def create_api_key(
     auth: dict[str, Any] = Depends(require_admin),
 ) -> ApiKeyCreated:
     """Generate a new API key (admin only). The raw key is shown once."""
+    # SEC-002: validate roles against the allowlist before persisting
+    invalid = set(body.roles) - VALID_ROLES
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"Invalid roles: {invalid}")
     repo = _get_repo(request)
     raw, key_id = await repo.create(
         name=body.name,

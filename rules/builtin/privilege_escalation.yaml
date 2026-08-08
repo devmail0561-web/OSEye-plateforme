@@ -51,13 +51,12 @@
   condition: |
     event.category == "process"
     and (event.process_name == "setcap" or event.cmdline contains "setcap")
-    and event.uid != 0
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Attribution de capabilities Linux (setcap) par un utilisateur non-root.
-    Peut permettre l'exécution de code avec privilèges élargis sans sudo.
+    Attribution de capabilities Linux (setcap). Seul root peut effectuer cette opération ;
+    elle permet l'exécution de code avec privilèges élargis sans sudo complet.
 
 - id: rule_ptrace_injection
   name: "Injection de processus via ptrace"
@@ -68,14 +67,20 @@
   platforms: [linux]
   condition: |
     event.category == "process"
-    and event.type == "ptrace"
-    and event.uid != 0
+    and (
+      event.syscall == "ptrace"
+      or (
+        (event.executable contains "gdb" or event.executable contains "strace")
+        and (event.cmdline contains "--pid" or event.cmdline contains "-p ")
+      )
+    )
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Utilisation de ptrace pour s'attacher à un processus.
-    Vecteur classique d'injection de code et d'escalade de privilèges.
+    Utilisation de ptrace pour s'attacher à un processus (via syscall ptrace direct
+    ou via gdb/strace avec --pid/-p). Vecteur classique d'injection de code et
+    d'escalade de privilèges.
 
 - id: rule_polkit_abuse
   name: "Exploitation potentielle de polkit"

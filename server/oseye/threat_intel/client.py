@@ -107,7 +107,7 @@ class ThreatIntelClient:
                     timeout=self._timeout,
                 )
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             logger.warning(
                 "ti_lookup_timeout indicator=%s timeout=%.1f", indicator, self._timeout
             )
@@ -120,7 +120,10 @@ class ThreatIntelClient:
             elif item is not None:
                 reports.append(item)
 
-        ti_unavailable = len(raw_results) > 0 and not reports
+        # TI-002: a global timeout with providers configured means TI is unavailable
+        ti_unavailable = (len(raw_results) > 0 and not reports) or (
+            not raw_results and len(self._providers) > 0 and not reports
+        )
         aggregated = self._aggregate(
             indicator, indicator_type, reports, ti_unavailable=ti_unavailable
         )

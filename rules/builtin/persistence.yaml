@@ -7,7 +7,7 @@
   platforms: [linux]
   condition: |
     event.category == "file"
-    and event.type == "write"
+    and (event.type == "modify" or event.type == "close_write")
     and (event.resource contains "/etc/cron" or event.resource contains "/var/spool/cron")
   timeframe: null
   threshold: null
@@ -25,7 +25,7 @@
   platforms: [linux]
   condition: |
     event.category == "file"
-    and event.type == "write"
+    and (event.type == "modify" or event.type == "close_write")
     and (event.resource contains "/etc/systemd/system/" or event.resource contains "/usr/lib/systemd/system/")
     and event.uid != 0
   timeframe: null
@@ -44,7 +44,7 @@
   platforms: [linux]
   condition: |
     event.category == "file"
-    and event.type == "write"
+    and (event.type == "modify" or event.type == "close_write")
     and event.resource == "/etc/rc.local"
   timeframe: null
   threshold: null
@@ -62,7 +62,7 @@
   platforms: [linux, darwin]
   condition: |
     event.category == "file"
-    and event.type == "write"
+    and (event.type == "modify" or event.type == "close_write")
     and event.resource contains "authorized_keys"
   timeframe: null
   threshold: null

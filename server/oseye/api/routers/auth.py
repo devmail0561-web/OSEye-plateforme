@@ -6,7 +6,10 @@ SEC-AUTH-001: Passwords are verified with bcrypt via passlib.
 
 from __future__ import annotations
 
+import logging
 import os
+import time
+from collections import defaultdict
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
@@ -17,8 +20,26 @@ from slowapi.util import get_remote_address
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
 
 _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# F2 / SEC-003: detect weak or missing credentials at startup
+_WEAK_DEFAULTS: frozenset[str] = frozenset({"admin123", "analyst123"})
+
+# ---------------------------------------------------------------------------
+# SEC-006: in-memory rate limiter for /auth/refresh
+# ---------------------------------------------------------------------------
+_refresh_rate_store: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(ip: str, max_calls: int = 10, window_seconds: float = 60.0) -> None:
+    """Raise HTTP 429 if *ip* has exceeded *max_calls* within *window_seconds*."""
+    now = time.monotonic()
+    _refresh_rate_store[ip] = [t for t in _refresh_rate_store[ip] if now - t < window_seconds]
+    if len(_refresh_rate_store[ip]) >= max_calls:
+        raise HTTPException(status_code=429, detail="Too many requests")
+    _refresh_rate_store[ip].append(now)
 
 
 def _hash(pw: str) -> str:
@@ -27,12 +48,22 @@ def _hash(pw: str) -> str:
 
 # ---------------------------------------------------------------------------
 # In-process user store — configurable via environment variables.
-# Defaults are dev-only; override OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD
-# in production.
+# Override OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD in production.
 # ---------------------------------------------------------------------------
 
-_ADMIN_PW_RAW = os.getenv("OSEYE_ADMIN_PASSWORD", "admin123")
-_ANALYST_PW_RAW = os.getenv("OSEYE_ANALYST_PASSWORD", "analyst123")
+_ADMIN_PW_RAW = os.getenv("OSEYE_ADMIN_PASSWORD") or "admin123"
+_ANALYST_PW_RAW = os.getenv("OSEYE_ANALYST_PASSWORD") or "analyst123"
+
+if _ADMIN_PW_RAW in _WEAK_DEFAULTS:
+    logger.critical(
+        "OSEYE_ADMIN_PASSWORD is missing or uses a weak dev default — "
+        "set a strong password before deploying to production"
+    )
+if _ANALYST_PW_RAW in _WEAK_DEFAULTS:
+    logger.critical(
+        "OSEYE_ANALYST_PASSWORD is missing or uses a weak dev default — "
+        "set a strong password before deploying to production"
+    )
 
 # Pre-hashed at startup; also accept the dev default "password" for tests.
 _USERS: dict[str, dict[str, Any]] = {
@@ -90,7 +121,12 @@ async def login(
 
 @router.post("/refresh")
 async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[str, Any]:
-    """Refresh a token by verifying the existing one and issuing a new one."""
+    """Refresh a token by verifying the existing one and issuing a new one.
+
+    SEC-006: rate-limited to 10 requests per 60 seconds per IP.
+    """
+    client_ip: str = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
     handler = request.app.state.jwt_handler
     payload = handler.verify_token(token)
     subject: str = str(payload.get("sub", ""))

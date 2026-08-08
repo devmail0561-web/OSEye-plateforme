@@ -32,6 +32,8 @@ _log = get_logger(__name__)
 # Deque of (timestamp_float, event_snapshot_dict) per window key
 _temporal_windows: dict[str, collections.deque[tuple[float, dict[str, Any]]]] = {}
 _MAX_WINDOW_ENTRIES = 10_000  # safety cap per window
+# F-05: max TTL used for eager pruning in record_event_for_temporal
+_MAX_TTL = 3600  # seconds — entries older than this are always stale
 _temporal_windows_lock = threading.Lock()
 _record_count = 0  # global call counter for periodic purge
 
@@ -41,12 +43,12 @@ def _window_key(rule_id: str, entity_key: str) -> str:
 
 
 def _purge_old_windows() -> None:
-    """Remove window keys whose all entries have expired (older than 1 hour)."""
-    cutoff = time.time() - 3600
+    """Remove window keys whose all entries have expired (older than _MAX_TTL)."""
+    cutoff = time.time() - _MAX_TTL
     with _temporal_windows_lock:
         stale_keys = [
             k for k, dq in _temporal_windows.items()
-            if all(ts < cutoff for ts, _ in dq)
+            if not dq or all(ts < cutoff for ts, _ in dq)
         ]
         for k in stale_keys:
             del _temporal_windows[k]
@@ -57,10 +59,18 @@ def record_event_for_temporal(rule_id: str, event_dict: dict[str, Any]) -> None:
     global _record_count  # noqa: PLW0603
     entity_key = f"{event_dict.get('hostname', '')}:{event_dict.get('pid', '')}"
     key = _window_key(rule_id, entity_key)
+    cutoff = time.time() - _MAX_TTL
     with _temporal_windows_lock:
         if key not in _temporal_windows:
             _temporal_windows[key] = collections.deque(maxlen=_MAX_WINDOW_ENTRIES)
-        _temporal_windows[key].append((time.time(), event_dict))
+        dq = _temporal_windows[key]
+        dq.append((time.time(), event_dict))
+        # F-05: eagerly prune entries older than max TTL to prevent unbounded growth
+        while dq and dq[0][0] < cutoff:
+            dq.popleft()
+        # F-05: delete the key when the window becomes empty after pruning
+        if not dq:
+            del _temporal_windows[key]
     _record_count += 1
     if _record_count % 500 == 0:
         _purge_old_windows()
@@ -74,14 +84,20 @@ def _count_events_in_window(
 ) -> int:
     """Count how many events in the rolling window match filter_expr."""
     key = _window_key(rule_id, entity_key)
+    cutoff = time.time() - seconds
     with _temporal_windows_lock:
         window = _temporal_windows.get(key)
-        snapshot = list(window) if window else []
+        if window is None:
+            return 0
+        # F-05: eagerly prune entries outside this rule's timeframe
+        while window and window[0][0] < cutoff:
+            window.popleft()
+        # F-05: delete the key if the window is now empty to prevent memory leak
+        if not window:
+            del _temporal_windows[key]
+            return 0
+        snapshot = list(window)
 
-    if not snapshot:
-        return 0
-
-    cutoff = time.time() - seconds
     count = 0
     for ts, snap in snapshot:
         if ts < cutoff:
@@ -109,12 +125,25 @@ _ALLOWED_NODES = {
     ast.IfExp,
 }
 
+# F-03: detect nested quantifiers that cause catastrophic backtracking
+# Matches patterns like (a+)+, (a*)*, (a+)*, (a|b+)+, (x{2,})+, etc.
+_REDOS_NESTED_RE = re.compile(r'\([^)]*[+*{][^)]*\)\s*[+*{?]')
+_MAX_REGEX_LEN = 200
+
 
 def _check_ast(node: ast.AST) -> None:
-    """Raise ValueError if AST contains disallowed nodes."""
+    """Raise ValueError if AST contains disallowed nodes or attribute names.
+
+    F1/F-02: Block any attribute access whose name starts with ``_`` to
+    prevent dunder-chain sandbox escapes such as
+    ``"".__class__.__mro__[-1].__subclasses__()``.
+    """
     for child in ast.walk(node):
         if type(child) not in _ALLOWED_NODES:
             raise ValueError(f"Disallowed AST node: {type(child).__name__}")
+        # F1/F-02: reject private and dunder attribute names at AST level
+        if isinstance(child, ast.Attribute) and child.attr.startswith("_"):
+            raise ValueError(f"Disallowed attribute access: {child.attr!r}")
 
 
 def _build_namespace(
@@ -122,18 +151,60 @@ def _build_namespace(
     rule_id: str,
     entity_key: str,
 ) -> dict[str, Any]:
+    # F-02: _Event blocks all _-prefixed attribute access at runtime (defense
+    # in depth alongside the _check_ast guard), closing the __class__ chain.
     class _Event:
         def __init__(self, d: dict[str, Any]) -> None:
             for k, v in d.items():
-                setattr(self, k, v)
+                # Skip keys that start with '_' to avoid leaking internal state
+                if not k.startswith("_"):
+                    object.__setattr__(self, k, v)
+
+        def __getattribute__(self, name: str) -> Any:  # noqa: D105
+            if name.startswith("_"):
+                raise AttributeError(f"Access denied: {name!r}")
+            return object.__getattribute__(self, name)
+
         def __getattr__(self, name: str) -> Any:  # noqa: D105
+            # __getattr__ is called only when __getattribute__ raises AttributeError.
+            # Re-block private names so the fallback also refuses them.
+            if name.startswith("_"):
+                raise AttributeError(f"Access denied: {name!r}")
             return None
+
+    # F-01: wrap each callable in a class instance that exposes only __call__,
+    # preventing access to __globals__, __code__, __closure__, etc.
+    class _SafeCallable:
+        """Thin callable wrapper — only __call__ is reachable from eval."""
+
+        __slots__ = ("_fn",)
+
+        def __init__(self, fn: Any) -> None:
+            object.__setattr__(self, "_fn", fn)
+
+        def __call__(self, *args: Any, **kwargs: Any) -> Any:
+            # Retrieve via object.__getattribute__ to bypass our own override
+            fn = object.__getattribute__(self, "_fn")
+            return fn(*args, **kwargs)
+
+        def __getattribute__(self, name: str) -> Any:
+            # Python resolves __call__ through type(obj).__call__, not through
+            # instance attribute lookup, so blocking all _-prefixed names here
+            # does not break callability.
+            if name.startswith("_"):
+                raise AttributeError(f"Access denied: {name!r}")
+            return object.__getattribute__(self, name)
 
     def _contains_method(s: Any, sub: str) -> bool:
         return isinstance(s, str) and sub in s
 
     def _safe_re_match(pattern: str, value: Any) -> bool:
         if not isinstance(value, str):
+            return False
+        # F-03: ReDoS guard — reject long patterns and nested quantifiers
+        if len(pattern) > _MAX_REGEX_LEN:
+            return False
+        if _REDOS_NESTED_RE.search(pattern):
             return False
         try:
             return bool(re.match(pattern, value))
@@ -145,9 +216,10 @@ def _build_namespace(
 
     return {
         "event": _Event(event_dict),
-        "re_match": _safe_re_match,
-        "count_events": count_events,
-        "contains": _contains_method,
+        # F-01: all callables are wrapped in _SafeCallable to hide __globals__
+        "re_match": _SafeCallable(_safe_re_match),
+        "count_events": _SafeCallable(count_events),
+        "contains": _SafeCallable(_contains_method),
         "True": True,
         "False": False,
         "None": None,

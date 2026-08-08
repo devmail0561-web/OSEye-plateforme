@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import os
 import secrets
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -14,8 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from oseye.storage.models import ApiKeyRow
 
 
+_HMAC_SECRET: bytes = os.getenv("OSEYE_SECRET_KEY", "dev-secret-key").encode()
+
+
 def _hash_key(raw: str) -> str:
-    return hashlib.sha256(raw.encode()).hexdigest()
+    # F4: HMAC-SHA256 with server secret instead of bare SHA-256
+    return hmac.new(_HMAC_SECRET, raw.encode(), hashlib.sha256).hexdigest()
 
 
 class SQLApiKeyRepository:

@@ -15,13 +15,15 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
-	"sync"
+	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
+	"golang.org/x/sync/errgroup"
 )
 
 // EBPFEvent is the Go-side representation of a kernel event read from the
@@ -119,39 +121,72 @@ func NewLoader() (*EBPFLoader, error) {
 
 // ReadEvents returns a channel that receives eBPF events from all three
 // programs. The channel is closed when ctx is cancelled or an unrecoverable
-// reader error occurs.
+// reader error occurs. It uses an errgroup so that out is closed exactly once,
+// by the orchestrating goroutine after all producers have exited — avoiding
+// "send on closed channel" panics.
 func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 	out := make(chan EBPFEvent, 256)
-	var once sync.Once
-	closeOut := func() { once.Do(func() { close(out) }) }
-	for i, r := range l.readers {
-		go func(idx int, rd *perf.Reader) {
-			defer closeOut()
-			for {
-				select {
-				case <-ctx.Done():
-					rd.Close()
-					return
-				default:
+
+	go func() {
+		g, gctx := errgroup.WithContext(ctx)
+
+		for i, r := range l.readers {
+			idx, rd := i, r
+			g.Go(func() error {
+				for {
+					// Unblock rd.Read() when the group context is cancelled.
+					// perf.Reader.SetDeadline is the idiomatic cilium/ebpf way to
+					// interrupt a blocked Read; closing is handled by Close() / the
+					// caller — we must not close rd here to avoid double-close races.
+					select {
+					case <-gctx.Done():
+						rd.SetDeadline(pastDeadline)
+						return nil
+					default:
+					}
+
+					rec, err := rd.Read()
+					if err != nil {
+						// A deadline error means we were asked to stop — not a real failure.
+						if gctx.Err() != nil {
+							return nil
+						}
+						return fmt.Errorf("ebpf reader %d: %w", idx, err)
+					}
+
+					ev, ok := parseRecord(idx, rec.RawSample)
+					if !ok {
+						continue
+					}
+
+					select {
+					case out <- ev:
+					case <-gctx.Done():
+						rd.SetDeadline(pastDeadline)
+						return nil
+					}
 				}
-				rec, err := rd.Read()
-				if err != nil {
-					return
-				}
-				ev, ok := parseRecord(idx, rec.RawSample)
-				if !ok {
-					continue
-				}
-				select {
-				case out <- ev:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}(i, r)
-	}
+			})
+		}
+
+		// Wait for all producers to finish, then close the output channel exactly once.
+		if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+			// Non-cancellation errors are silently swallowed here; callers detect
+			// shutdown via channel close. Structured logging can be added if needed.
+			_ = err
+		}
+		close(out)
+	}()
+
 	return out
 }
+
+// pastDeadline is a time in the distant past used to immediately unblock a
+// perf.Reader.Read() call via SetDeadline without closing the reader.
+var pastDeadline = func() time.Time {
+	t, _ := time.Parse(time.RFC3339, "2000-01-01T00:00:00Z")
+	return t
+}()
 
 // Close releases all eBPF resources.
 func (l *EBPFLoader) Close() error {

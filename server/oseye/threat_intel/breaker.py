@@ -39,6 +39,8 @@ class AsyncCircuitBreaker:
         self._failure_count = 0
         self._opened_at: float = 0.0
         self._lock = asyncio.Lock()
+        # TI-001: guard against multiple concurrent probes in HALF_OPEN state
+        self._half_open_probe_in_flight: bool = False
 
     @property
     def state(self) -> str:
@@ -61,6 +63,14 @@ class AsyncCircuitBreaker:
                         f"({self._reset_timeout - elapsed:.0f}s remaining)"
                     )
 
+            # TI-001: allow only one probe at a time in HALF_OPEN state
+            if self._state == _HALF_OPEN:
+                if self._half_open_probe_in_flight:
+                    raise CircuitOpenError(
+                        f"Circuit '{self._name}' is half-open and a probe is already in flight"
+                    )
+                self._half_open_probe_in_flight = True
+
         try:
             result = await coro_fn()  # type: ignore[operator]
         except Exception:
@@ -74,6 +84,7 @@ class AsyncCircuitBreaker:
                         self._name,
                         self._failure_count,
                     )
+                self._half_open_probe_in_flight = False
             raise
         else:
             async with self._lock:
@@ -81,6 +92,7 @@ class AsyncCircuitBreaker:
                     logger.info("circuit_closed name=%s (recovered)", self._name)
                 self._state = _CLOSED
                 self._failure_count = 0
+                self._half_open_probe_in_flight = False
             return result
 
 

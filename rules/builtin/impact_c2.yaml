@@ -53,7 +53,7 @@
       (event.process_name == "rm" and (event.cmdline contains "-rf /" or event.cmdline contains "--no-preserve-root"))
       or (event.process_name == "shred" and event.cmdline contains "-u")
       or (event.cmdline contains "dd if=/dev/zero of=/dev/sd")
-      or (event.cmdline contains "mkfs" and event.uid != 0)
+      or (event.cmdline contains "mkfs" and event.uid == 0)
     )
   timeframe: null
   threshold: null
@@ -94,20 +94,21 @@
     event.category == "network"
     and event.protocol == "tcp"
     and event.type == "new"
-    and not (event.dst_ip contains "10." or event.dst_ip contains "192.168."
-             or event.dst_ip contains "172.16." or event.dst_ip contains "172.17."
-             or event.dst_ip contains "172.18." or event.dst_ip contains "172.19."
-             or event.dst_ip contains "172.20." or event.dst_ip contains "172.21."
-             or event.dst_ip contains "172.22." or event.dst_ip contains "172.23."
-             or event.dst_ip contains "172.24." or event.dst_ip contains "172.25."
-             or event.dst_ip contains "172.26." or event.dst_ip contains "172.27."
-             or event.dst_ip contains "172.28." or event.dst_ip contains "172.29."
-             or event.dst_ip contains "172.30." or event.dst_ip contains "172.31.")
-    and (event.dst_port == 4444 or event.dst_port == 8080 or event.dst_port == 1337
+    and not (event.dst_ip starts_with "10." or event.dst_ip starts_with "192.168."
+             or event.dst_ip starts_with "172.16." or event.dst_ip starts_with "172.17."
+             or event.dst_ip starts_with "172.18." or event.dst_ip starts_with "172.19."
+             or event.dst_ip starts_with "172.20." or event.dst_ip starts_with "172.21."
+             or event.dst_ip starts_with "172.22." or event.dst_ip starts_with "172.23."
+             or event.dst_ip starts_with "172.24." or event.dst_ip starts_with "172.25."
+             or event.dst_ip starts_with "172.26." or event.dst_ip starts_with "172.27."
+             or event.dst_ip starts_with "172.28." or event.dst_ip starts_with "172.29."
+             or event.dst_ip starts_with "172.30." or event.dst_ip starts_with "172.31."
+             or event.dst_ip starts_with "127.")
+    and (event.dst_port == 4444 or event.dst_port == 1337
          or event.dst_port == 6666 or event.dst_port == 9001)
   timeframe: 300
   threshold: 5
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Connexions répétées vers la même IP externe sur des ports C2 courants
-    (4444 Metasploit, 1337, 6666, 9001 Tor). Pattern de beaconing C2.
+    Connexions répétées vers la même IP externe (hors RFC1918/loopback) sur des ports
+    C2 courants (4444 Metasploit, 1337, 6666, 9001 Tor). Pattern de beaconing C2.

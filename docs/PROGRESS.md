@@ -1,6 +1,6 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.4
+**Version :** 2.5
 **Dernière mise à jour :** 2026-08-08
 **Branche active :** `main` (`latest`)
 **Phase courante :** Phase 5 — Decision Engine `[ ]` À DÉMARRER
@@ -153,19 +153,99 @@ Audit complet réalisé sur les modules M14-M18 (3 agents parallèles : Go, Pyth
 
 ---
 
-## Audit code — Phase 4 (2026-08-08)
+## Audit code — Full Audit OSEye (2026-08-08)
 
-Audit complet réalisé sur les modules M25-M26 + corrections auth (F1/F2 ouverts depuis audit Phase 3).
+Audit complet tous modules (Go agent + Python server + Règles YAML) — 80 findings identifiés.
+**26 CRITICAL/HIGH confirmés → 26 corrigés. 48 MEDIUM/LOW identifiés (correction sprint suivant).**
+
+### Findings CRITICAL/HIGH résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| GO-001 | CRITICAL | `agent/ebpf/loader.go:129` | Send on closed channel — panic dans ReadEvents goroutines → errgroup + context cancel |
+| F1/SEC-001/F-01/F-02 | CRITICAL | `rule_engine/evaluator.py` | RCE via 4 vecteurs sandbox eval — `_check_ast` bloque `_*`, `_SafeCallable`, `_Event.__getattribute__` |
+| RULE-001 | CRITICAL | `rules/builtin/credential_access.yaml` + 4 fichiers | Types invalides `read`/`write` → 8 règles silencieuses → remplacés par `open/access`/`modify/close_write` |
+| RULE-002 | CRITICAL | `rules/builtin/defense_evasion.yaml:88` | `rule_rootkit_detection` logique UID inversée (`uid != 0` → `uid == 0`) |
+| RULE-003 | CRITICAL | `rules/builtin/privilege_escalation.yaml:71` | `rule_ptrace_injection` type `ptrace` jamais émis → réécriture sur syscall + patterns exec |
+| F2/SEC-003 | HIGH | `api/routers/auth.py:34` | Credentials hardcodés `admin123/analyst123` → avertissement CRITICAL au démarrage si valeurs faibles |
+| SEC-006 | HIGH | `api/routers/auth.py:92` | Pas de rate limiting sur `/refresh` → 10 req/min par IP |
+| SEC-002 | HIGH | `api/routers/api_keys.py:21` | Pas de validation des rôles à la création → allowlist `{analyst, admin}` |
+| F4 | HIGH | `storage/repositories/api_keys.py:17` | SHA-256 sans sel pour les API keys → HMAC-SHA256 avec pepper serveur |
+| SEC-004 | HIGH | `api/ws/alerts.py:18` | JWT exposé en query string (logs uvicorn) → authentification par premier frame WebSocket |
+| SEC-005 | HIGH | `api/ws/alerts.py:28` | Pas de vérification de rôle sur WebSocket → close 4003 si rôle invalide |
+| F-03/SEC-012 | HIGH | `rule_engine/evaluator.py:139` | ReDoS bloque la boucle asyncio → limite 200 chars + détection quantificateurs imbriqués |
+| F-04 | HIGH | `workers/rule_worker.py:114` | Erreur publish avorte tous les matches restants → try/except par itération |
+| F-05 | HIGH | `rule_engine/evaluator.py:33` | Fuite mémoire `_temporal_windows` avec PIDs éphémères → purge TTL eagerly |
+| TI-001 | HIGH | `threat_intel/breaker.py:52` | Race condition HALF_OPEN → multiple probes concurrentes → flag `_half_open_probe_in_flight` |
+| TI-002 | HIGH | `threat_intel/client.py:110` | `ti_unavailable=False` sur timeout global → `True` si providers > 0 |
+| RULE-005 | HIGH | `rules/builtin/privilege_escalation.yaml:53` | `rule_capabilities_add` UID inversé → filtre uid supprimé |
+| RULE-006 | HIGH | `rules/builtin/impact_c2.yaml:98` | `rule_outbound_c2_beaconing` port 8080 spam + exclusion RFC1918 cassée → corrigé |
+| RULE-007 | HIGH | `rules/builtin/credential_access.yaml:86` | `rule_ssh_bruteforce` compte toutes connexions → ajout `event.result == 'failed'` |
+| RULE-009 | HIGH | `rules/builtin/impact_c2.yaml:56` | `rule_data_destruction` UID inversé sur mkfs → `uid == 0` |
+| RULE-010 | HIGH | `rules/builtin/lateral_movement.yaml:47` | Nom trompeur `rule_rsync_exfil` → renommé `rule_rsync_scp_large_transfer` |
+| RULE-011 | HIGH | `rules/builtin/lateral_movement.yaml:73` | `rule_nfs_smb_mount_suspicious` UID inversé → filtre supprimé |
+
+### Findings MEDIUM/LOW ouverts (sprint suivant)
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| GO-003 | MEDIUM | `watchdog.go:97` | Memory soft-limit ne réduit jamais le throttle |
+| GO-004 | MEDIUM | `fanotify/collector.go:174` | Boucle infinie si `Event_len == 0` |
+| GO-005 | MEDIUM | `fanotify/collector.go:135` | Race fd concurrent entre `Start()` et `readLoop()` |
+| GO-006 | MEDIUM | `cmd/main.go:39` | `Config.Validate()` jamais appelé — config invalide silencieuse |
+| GO-007 | LOW | `policy/client.go:46` | Backoff reconnect jamais réinitialisé après succès |
+| GO-008 | LOW | `transport/grpc_client.go:164` | Paramètre `ch *chain.Chain` inutilisé dans `batchSignature` |
+| GO-009 | LOW | `auditd/collector.go:121` | `stopCh` jamais recréé — `Start()` no-op après `Stop()` |
+| GO-010 | LOW | `procfs/collector.go:49` | Émet tous les processus à chaque scan — volume non borné |
+| F5 | MEDIUM | `ingest/grpc_service.py:127` | IndexError/ValueError non capturés dans set comprehension |
+| F6 | MEDIUM | `api/routers/auth.py:91` | Rate limiting absent sur `/auth/refresh` (MEDIUM — doublon SEC-006 corrigé) |
+| F7 | MEDIUM | `api/auth/jwt.py:44` | JWT sans claims `aud` et `iss` |
+| F8 | MEDIUM | `bus/redis_bus.py:32` | Race condition init Redis — connexions leakées |
+| F9 | MEDIUM | `bus/redis_bus.py:127` | Suppression topic par substring — fragile |
+| F10 | MEDIUM | `threat_intel/providers/virustotal.py:101` | Paramètre `ip`/`hash` interpolé dans URL VT sans validation |
+| F11 | LOW | `normalizer/engine.py:22` | `logging` stdlib au lieu de structlog |
+| F12 | LOW | `api/routers/incidents.py:36` | `status` param masque l'import `fastapi.status` |
+| SEC-007 | MEDIUM | `api/routers/auth.py:50` | Side-channel timing — énumération des usernames |
+| SEC-008 | MEDIUM | `api/routers/ti.py:33` | Pas de validation format/longueur sur paramètres lookup TI |
+| SEC-009 | MEDIUM | `api/app.py:42` | CORS `allow_methods=["*"]` + `allow_headers=["*"]` trop permissif |
+| SEC-010 | MEDIUM | `api/routers/rules.py:101` | `/rules/validate` accessible au rôle analyst — vecteur RCE à privilège bas |
+| SEC-011 | MEDIUM | `api/routers/events.py:80` | Pas de contrainte longueur sur filtres string — DoS |
+| SEC-013 | LOW | `api/routers/health.py:10` | Health endpoint non authentifié |
+| SEC-014 | LOW | `api/auth/jwt.py:34` | HS256 activable via paramètre `secret` — algorithme faible |
+| SEC-015 | LOW | `api/auth/jwt.py:55` | Pas de JTI / mécanisme de révocation token |
+| F-08 | MEDIUM | `correlation/linkers/same_host.py:28` | SameHostLinker groupe toutes les alertes du même hôte → faux positifs massifs |
+| F-09 | MEDIUM | `correlation/linkers/same_host.py:29` | `min_severity=medium` hardcodé, écrase la config CorrelationEngine |
+| F-10 | MEDIUM | `workers/ti_worker.py:101` | Échec lookup TI → `ti_score=0 / malicious=False` silencieux |
+| F-11 | MEDIUM | `workers/correlation_worker.py:127` | Divergence état incident/alerte si `alert_repo.update` échoue après incident update |
+| F-12 | MEDIUM | `main.py:75` | Deux instances RuleEngine — `app.state` expose l'instance périmée |
+| F-13 | MEDIUM | `rule_engine/evaluator.py:69` | Évaluation temporelle O(N×M×W) — CPU exhaustion à débit modéré |
+| F-14 | LOW | `correlation/linkers/same_host.py:12` | `_SEVERITY_ORDER` dupliqué dans engine.py et same_host.py |
+| F-15 | LOW | `correlation/engine.py:95` | `self._linkers[0]._timeframe` lève IndexError si `linkers=[]` |
+| TI-003 | MEDIUM | `threat_intel/providers/virustotal.py:123` | Injection path URL VT via `hash_value` non validé |
+| TI-004 | MEDIUM | `threat_intel/providers/misp.py:20` | URL MISP interne loguée en clair au niveau WARNING |
+| TI-005 | LOW | `threat_intel/client.py:165` | IPs privées/loopback soumises aux providers TI externes |
+| TI-006 | LOW | `storage/repositories/incidents.py:190` | Comparaison temporelle par chaîne ISO — risque divergence TZ |
+| RULE-012 | MEDIUM | `defense_evasion.yaml:46` | `rule_timestomp` : uid != 0 + `process_name == 'touch'` trop large |
+| RULE-013 | MEDIUM | `privilege_escalation.yaml:91` | `rule_polkit_abuse` : `ppid != 1` déclenche sur tous les pkexec légitimes |
+| RULE-014 | MEDIUM | `lateral_movement.yaml:1` | `rule_ssh_lateral` : alerte sur chaque connexion SSH interne, pas de seuil |
+| RULE-015 | MEDIUM | `lateral_movement.yaml:35` | `rule_port_scan` : threshold 20 TCP/30s sans restriction IPs distinctes |
+| RULE-016 | MEDIUM | `persistence.yaml:83` | `rule_ld_preload_abuse` : LD_LIBRARY_PATH — faux positifs venv Python/Conda |
+| RULE-017 | MEDIUM | `impact_c2.yaml:11` | `rule_reverse_shell` : `>&` correspond à `2>&1` — faux positifs |
+| RULE-018 | MEDIUM | `lateral_movement.yaml:93` | `rule_rdp_tunneling` : `-D` trop large — SSH SOCKS légitime |
+| RULE-019 | MEDIUM | `privilege_escalation.yaml:30` | `rule_sudo_abuse` : `bash`/`sh` trop larges |
+| RULE-020 | LOW | `discovery.yaml:84` | `rule_sudo_discovery` : tag `privilege_escalation` incorrect pour T1069.001 |
+| RULE-021 | LOW | `impact_c2.yaml:33` | `rule_crypto_mining` : `stratum+tcp` dans `executable` — logiquement impossible |
+| RULE-022 | LOW | `defense_evasion.yaml:9` | `rule_log_deletion` : pas d'exclusion logrotate |
+
+### Audit Phase 4 — ancienne section (2026-08-08)
+
+Audit partiel réalisé sur les modules M25-M26 + corrections auth (F1/F2 ouverts depuis audit Phase 3).
 **25 findings confirmés → 25 corrigés** (23 déjà présents dans fix/audit-phase3 + 2 nouveaux).
-
-### Findings résolus
 
 | ID | Sévérité | Fichier | Description |
 |----|----------|---------|-------------|
 | F1 | CRITICAL | `api/routers/auth.py:43` | Comptes `admin1`/`analyst1` hardcodés sans variable d'env — supprimés |
 | F2 | HIGH | `api/routers/auth.py:103` | JWT `/auth/refresh` en query parameter → `Body(...)` |
-
-Les 23 autres findings étaient déjà corrigés dans `fix/audit-phase3` (voir section Audit Phase 3).
 
 ---
 
@@ -246,6 +326,12 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | SEC-AUDIT3-004 | `jwt.py` : detail exception révélait le type d'erreur dans les 401 | ✅ Corrigé — opacifié |
 | SEC-AUDIT4-001 | `auth.py` : comptes `admin1`/`analyst1` hardcodés avec `password` non configurable | ✅ Corrigé — supprimés |
 | SEC-AUDIT4-002 | `auth.py` `/refresh` : JWT en query parameter → exposé dans les access logs | ✅ Corrigé — Body(...) |
+| SEC-FULL-001 | `evaluator.py` : RCE via 4 vecteurs sandbox eval (dunder chain, `__globals__`, MRO walk) | ✅ Corrigé — `_check_ast` + `_SafeCallable` + `_Event.__getattribute__` |
+| SEC-FULL-002 | `api/ws/alerts.py` : JWT en query string loggé uvicorn + RBAC absent WS | ✅ Corrigé — first-frame auth + close 4003 |
+| SEC-FULL-003 | `api/routers/api_keys.py` : rôles arbitraires assignables à la création | ✅ Corrigé — allowlist |
+| SEC-FULL-004 | `storage/repositories/api_keys.py` : SHA-256 sans sel pour API keys | ✅ Corrigé — HMAC-SHA256 |
+| SEC-FULL-005 | `auth.py` : credentials `admin123/analyst123` sans avertissement démarrage | ✅ Corrigé — CRITICAL log |
+| SEC-FULL-006 | `threat_intel/breaker.py` : race HALF_OPEN — probes concurrentes | ✅ Corrigé — flag atomique |
 
 ---
 
@@ -283,6 +369,17 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | BUG-028 | `_temporal_windows` memory leak (pas de purge TTL) + race threading | fix/audit-phase3 |
 | BUG-029 | `auth.py` : comptes dev `admin1`/`analyst1` actifs en production | 2026-08-08 |
 | BUG-030 | `auth.py` `/refresh` : JWT exposé via query parameter dans les logs | 2026-08-08 |
+| BUG-031 | `ebpf/loader.go` : send on closed channel → panic agent eBPF (ReadEvents) | 2026-08-08 |
+| BUG-032 | `evaluator.py` : RCE via dunder chain + `__globals__` closure + MRO walk | 2026-08-08 |
+| BUG-033 | `evaluator.py` : ReDoS bloque event loop asyncio via `_safe_re_match` | 2026-08-08 |
+| BUG-034 | `evaluator.py` : fuite mémoire `_temporal_windows` avec PIDs éphémères | 2026-08-08 |
+| BUG-035 | `workers/rule_worker.py` : erreur publish avorte tous les matches restants | 2026-08-08 |
+| BUG-036 | `threat_intel/client.py` : `ti_unavailable=False` sur timeout global | 2026-08-08 |
+| BUG-037 | 8 règles YAML silencieuses — types `read`/`write` jamais émis par aucun collector | 2026-08-08 |
+| BUG-038 | `rule_rootkit_detection` + 4 autres règles : logique UID inversée (`!= 0` au lieu de `== 0`) | 2026-08-08 |
+| BUG-039 | `rule_ptrace_injection` : type `ptrace` jamais émis — règle morte | 2026-08-08 |
+| BUG-040 | `rule_ssh_bruteforce` : compte toutes connexions, pas seulement les échecs | 2026-08-08 |
+| BUG-041 | `rule_outbound_c2_beaconing` : exclusion RFC1918 cassée + port 8080 spam | 2026-08-08 |
 
 ---
 
