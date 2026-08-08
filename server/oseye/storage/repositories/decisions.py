@@ -127,6 +127,36 @@ class SQLDecisionRepository:
                 items=items, total=total, limit=pagination.limit, offset=pagination.offset
             )
 
+    async def update_human_decision(
+        self,
+        decision_id: UUID,
+        human_decision: str,
+        human_operator: str,
+        human_note: str,
+        approved_at: str,
+    ) -> bool:
+        """Update only the human approval fields (mutable columns).
+
+        Returns True if a row was updated, False if not found.
+        The core decision fields (score, type, hashes) are never touched.
+        """
+        from sqlalchemy import update
+
+        stmt = (
+            update(DecisionRow)
+            .where(DecisionRow.decision_id == str(decision_id))
+            .values(
+                human_decision=human_decision,
+                human_operator=human_operator,
+                human_note=human_note,
+                approved_at=approved_at,
+            )
+        )
+        async with self._session_factory() as session:
+            async with session.begin():
+                result = await session.execute(stmt)
+                return bool(result.rowcount > 0)  # type: ignore[attr-defined]
+
     async def get_pending(self) -> list[Decision]:
         async with self._session_factory() as session:
             stmt = select(DecisionRow).where(

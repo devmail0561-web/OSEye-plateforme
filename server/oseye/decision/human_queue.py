@@ -1,0 +1,138 @@
+"""Human approval queue — manages decisions awaiting operator review.
+
+Decisions with ``requires_human=True`` land here with a timeout.
+After *timeout_at*, they are auto-expired (human_decision set to "rejected").
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from oseye.core.observability import get_logger
+
+if TYPE_CHECKING:
+    from oseye.core.schema import Decision
+    from oseye.storage.repositories.decisions import SQLDecisionRepository
+
+_log = get_logger(__name__)
+
+
+class HumanApprovalQueue:
+    """Tracks pending human decisions and handles timeouts.
+
+    Parameters
+    ----------
+    decision_repo:   Repository used to persist approval outcomes.
+    poll_interval:   Seconds between timeout sweeps (default 30).
+    """
+
+    def __init__(
+        self,
+        decision_repo: SQLDecisionRepository,
+        poll_interval: int = 30,
+    ) -> None:
+        self._repo = decision_repo
+        self._poll_interval = poll_interval
+        self._stop = asyncio.Event()
+
+    async def run(self) -> None:
+        """Background loop — expires timed-out pending decisions."""
+        _log.info("human_queue_started")
+        try:
+            while not self._stop.is_set():
+                try:
+                    await self._expire_timeout()
+                except Exception as exc:  # noqa: BLE001
+                    _log.error("human_queue_sweep_error", error=str(exc))
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(self._stop.wait()),
+                        timeout=self._poll_interval,
+                    )
+                except TimeoutError:
+                    pass
+        finally:
+            _log.info("human_queue_stopped")
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    async def approve(self, decision_id: UUID, operator: str, note: str = "") -> Decision | None:
+        """Record an operator approval for *decision_id*.
+
+        Returns the updated Decision, or None if not found / already decided.
+        """
+        return await self._update_decision(decision_id, "approved", operator, note)
+
+    async def reject(self, decision_id: UUID, operator: str, note: str = "") -> Decision | None:
+        """Record an operator rejection for *decision_id*."""
+        return await self._update_decision(decision_id, "rejected", operator, note)
+
+    async def _update_decision(
+        self,
+        decision_id: UUID,
+        outcome: str,
+        operator: str,
+        note: str,
+    ) -> Decision | None:
+        decision = await self._repo.get(decision_id)
+        if decision is None:
+            _log.warning("human_queue_not_found", decision_id=str(decision_id))
+            return None
+
+        if decision.human_decision is not None:
+            _log.warning(
+                "human_queue_already_decided",
+                decision_id=str(decision_id),
+                existing=decision.human_decision,
+            )
+            return decision
+
+        now = datetime.now(UTC)
+        updated = await self._repo.update_human_decision(
+            decision_id=decision_id,
+            human_decision=outcome,
+            human_operator=operator,
+            human_note=note,
+            approved_at=now.isoformat(),
+        )
+        if not updated:
+            _log.warning("human_queue_update_failed", decision_id=str(decision_id))
+            return None
+
+        result = decision.model_copy(
+            update={
+                "human_decision": outcome,
+                "human_operator": operator,
+                "human_note": note,
+                "approved_at": now,
+            }
+        )
+        _log.info(
+            "human_queue_decided",
+            decision_id=str(decision_id),
+            outcome=outcome,
+            operator=operator,
+        )
+        return result
+
+    async def _expire_timeout(self) -> None:
+        """Auto-reject decisions whose timeout_at has passed."""
+        now = datetime.now(UTC)
+        pending = await self._repo.get_pending()
+
+        for decision in pending:
+            if decision.timeout_at and decision.timeout_at <= now:
+                await self._update_decision(
+                    decision.decision_id,
+                    "rejected",
+                    operator="system",
+                    note="Auto-expired: timeout reached",
+                )
+                _log.info(
+                    "human_queue_auto_expired",
+                    decision_id=str(decision.decision_id),
+                )

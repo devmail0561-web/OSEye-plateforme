@@ -39,7 +39,13 @@ from oseye.threat_intel.client import ThreatIntelClient
 from oseye.threat_intel.providers.abuseipdb import AbuseIPDBProvider
 from oseye.threat_intel.providers.misp import MISPProvider
 from oseye.threat_intel.providers.virustotal import VirusTotalProvider
+from oseye.decision.action_executor import ActionExecutor
+from oseye.decision.engine import DecisionEngine, PolicyOverrides
+from oseye.decision.human_queue import HumanApprovalQueue
+from oseye.decision.journal import DecisionJournal
+from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.workers.correlation_worker import CorrelationWorker
+from oseye.workers.decision_worker import DecisionWorker
 from oseye.workers.rule_worker import RuleWorker
 from oseye.workers.storage_writer import StorageWriter
 from oseye.workers.ti_worker import TIWorker
@@ -146,6 +152,24 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         )
 
         # ------------------------------------------------------------------
+        # Phase 5 — Decision Engine
+        # ------------------------------------------------------------------
+
+        decision_repo = SQLDecisionRepository(backend.session_factory)
+        journal = DecisionJournal()
+        decision_engine = DecisionEngine(
+            journal=journal,
+            policy_overrides=PolicyOverrides(),
+            human_timeout_secs=settings.decision_human_timeout_secs,
+            policy_version=settings.decision_policy_version,
+        )
+        action_executor = ActionExecutor(bus=bus)
+        human_queue = HumanApprovalQueue(
+            decision_repo=decision_repo,
+            poll_interval=settings.decision_human_poll_interval,
+        )
+
+        # ------------------------------------------------------------------
         # Workers
         # ------------------------------------------------------------------
 
@@ -159,6 +183,15 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             bus=bus,
             engine=correlation_engine,
             alert_repo=alert_repo,
+            stop_event=stop,
+        )
+        decision_worker = DecisionWorker(
+            bus=bus,
+            engine=decision_engine,
+            decision_repo=decision_repo,
+            incident_repo=incident_repo,
+            alert_repo=alert_repo,
+            action_executor=action_executor,
             stop_event=stop,
         )
 
@@ -186,6 +219,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             asyncio.create_task(rule_worker.run(stop_event=stop), name="rule_worker"),
             asyncio.create_task(ti_worker.run(), name="ti_worker"),
             asyncio.create_task(correlation_worker.run(), name="correlation_worker"),
+            asyncio.create_task(decision_worker.run(), name="decision_worker"),
+            asyncio.create_task(human_queue.run(), name="human_queue"),
         ]
         _logger.info("workers_started", count=len(tasks))
 
@@ -202,6 +237,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         app.state.rule_version_repo = SQLRuleVersionRepository(backend.session_factory)  # type: ignore[attr-defined]
         app.state.ti_client = ti_client  # type: ignore[attr-defined]
         app.state.incident_repo = incident_repo  # type: ignore[attr-defined]
+        app.state.decision_repo = decision_repo  # type: ignore[attr-defined]
+        app.state.human_queue = human_queue  # type: ignore[attr-defined]
 
         yield  # server runs here
 

@@ -265,7 +265,7 @@ class TestRuleEngine:
             pytest.skip("rules root not found")
         from oseye.rule_engine.engine import RuleEngine
         engine = RuleEngine(rules_root=_RULES_ROOT, hot_reload=False)
-        ev = _event(category="file", type="read", resource="/etc/shadow", uid=1000, os="linux")
+        ev = _event(category="file", type="open", resource="/etc/shadow", uid=1000, os="linux")
         matches = engine.evaluate(ev)
         rule_ids = [m.rule_id for m in matches]
         assert "rule_shadow_read" in rule_ids
@@ -345,7 +345,7 @@ class TestRuleWorker:
         await asyncio.sleep(0.05)
 
         # Publish a shadow read event
-        ev = _event(category="file", type="read", resource="/etc/shadow", uid=1000, os="linux")
+        ev = _event(category="file", type="open", resource="/etc/shadow", uid=1000, os="linux")
         await bus.publish("events:normalized", ev.model_dump_json().encode())
         await asyncio.sleep(0.1)
 
@@ -385,7 +385,7 @@ class TestRuleWorker:
         await asyncio.sleep(0.05)
 
         ev = _event(
-            category="file", type="write",
+            category="file", type="modify",
             resource="/etc/passwd", uid=1000, os="linux",
         )
         await bus.publish("events:normalized", ev.model_dump_json().encode())

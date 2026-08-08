@@ -72,3 +72,8 @@ class Settings(BaseSettings):
     # Correlation settings
     correlation_window_seconds: int = 300
     correlation_min_severity: str = "medium"
+
+    # Decision Engine settings
+    decision_human_timeout_secs: int = 3600
+    decision_human_poll_interval: int = 30
+    decision_policy_version: str = "v1.0"

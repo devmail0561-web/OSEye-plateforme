@@ -243,6 +243,18 @@ def _eval_expr(
         r'contains(\1, \2)',
         expr,
     )
+    # Handle ``starts_with`` as infix: rewrite `X starts_with Y` → `X.startswith(Y)`
+    expr = re.sub(
+        r'([^\s"\'(]+(?:\.[^\s"\'(]+)*)\s+starts_with\s+("[^"]*"|\'[^\']*\')',
+        r'\1.startswith(\2)',
+        expr,
+    )
+    # Handle ``ends_with`` as infix: rewrite `X ends_with Y` → `X.endswith(Y)`
+    expr = re.sub(
+        r'([^\s"\'(]+(?:\.[^\s"\'(]+)*)\s+ends_with\s+("[^"]*"|\'[^\']*\')',
+        r'\1.endswith(\2)',
+        expr,
+    )
 
     try:
         tree = ast.parse(expr, mode="eval")

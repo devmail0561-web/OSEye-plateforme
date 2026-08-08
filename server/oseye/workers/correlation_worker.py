@@ -3,6 +3,7 @@
 Subscribes to ``alerts:enriched``.
 For each message, loads the alert from alert_repo, calls engine.process_alert,
 then stamps alert.incident_chain_id with the resulting incident's ID.
+Publishes ``analysis:correlated`` for the DecisionWorker.
 
 Message format consumed (alerts:enriched)::
 
@@ -11,6 +12,13 @@ Message format consumed (alerts:enriched)::
         "ti_score": 75.0,
         "malicious": true,
         "tags": ["brute-force", "ssh"]
+    }
+
+Message format published (analysis:correlated)::
+
+    {
+        "incident_id": "<uuid>",
+        "trigger_alert_id": "<uuid>"
     }
 """
 
@@ -31,6 +39,7 @@ if TYPE_CHECKING:
 _log = get_logger(__name__)
 
 CONSUME_TOPIC = "alerts:enriched"
+PUBLISH_TOPIC = "analysis:correlated"
 
 
 class CorrelationWorker:
@@ -141,3 +150,19 @@ class CorrelationWorker:
             hostname=incident.hostname,
             severity=incident.severity,
         )
+
+        # Notify DecisionWorker
+        correlated_payload = json.dumps(
+            {
+                "incident_id": str(incident.incident_id),
+                "trigger_alert_id": alert_id_str,
+            }
+        ).encode()
+        try:
+            await self._bus.publish(PUBLISH_TOPIC, correlated_payload)
+        except Exception as exc:  # noqa: BLE001
+            _log.error(
+                "correlation_worker_publish_error",
+                incident_id=str(incident.incident_id),
+                error=str(exc),
+            )

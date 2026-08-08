@@ -1,0 +1,169 @@
+"""Decision worker — consumes analysis:correlated, produces decisions.
+
+Subscribes to ``analysis:correlated`` (published by CorrelationWorker).
+For each incident message, loads the Incident + trigger Alert, calls
+DecisionEngine.decide(), persists the Decision, then dispatches via
+ActionExecutor.
+
+Message format consumed (analysis:correlated)::
+
+    {
+        "incident_id": "<uuid>",
+        "trigger_alert_id": "<uuid>"   // optional
+    }
+
+Messages published (via ActionExecutor):
+    decisions:completed  — for ALERT / INVESTIGATE / ISOLATE / COLLECT_MORE / NOTIFY
+    decisions:pending    — for REQUEST_HUMAN / ESCALATE
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from typing import TYPE_CHECKING
+from uuid import UUID
+
+from oseye.core.observability import get_logger
+
+if TYPE_CHECKING:
+    from oseye.bus.interface import EventBus
+    from oseye.decision.action_executor import ActionExecutor
+    from oseye.decision.engine import DecisionEngine
+    from oseye.storage.repositories.alerts import SQLAlertRepository
+    from oseye.storage.repositories.decisions import SQLDecisionRepository
+    from oseye.storage.repositories.incidents import SQLIncidentRepository
+
+_log = get_logger(__name__)
+
+CONSUME_TOPIC = "analysis:correlated"
+
+
+class DecisionWorker:
+    """Drives the full Decision Engine pipeline for each correlated incident.
+
+    Parameters
+    ----------
+    bus:             EventBus instance.
+    engine:          DecisionEngine with journal + scorer.
+    decision_repo:   Persistence for Decision objects.
+    incident_repo:   Load Incidents by ID.
+    alert_repo:      Load trigger Alert by ID.
+    action_executor: Dispatches side-effects after persisting.
+    stop_event:      Optional asyncio.Event — worker exits when set.
+    """
+
+    def __init__(
+        self,
+        bus: EventBus,
+        engine: DecisionEngine,
+        decision_repo: SQLDecisionRepository,
+        incident_repo: SQLIncidentRepository,
+        alert_repo: SQLAlertRepository,
+        action_executor: ActionExecutor,
+        stop_event: asyncio.Event | None = None,
+    ) -> None:
+        self._bus = bus
+        self._engine = engine
+        self._decision_repo = decision_repo
+        self._incident_repo = incident_repo
+        self._alert_repo = alert_repo
+        self._action_executor = action_executor
+        self._stop_event = stop_event or asyncio.Event()
+        self._total_processed = 0
+        self._total_decisions = 0
+
+    async def run(self) -> None:
+        """Main loop — runs until stop_event is set or task is cancelled."""
+        _log.info("decision_worker_started", topic=CONSUME_TOPIC)
+
+        try:
+            async for message in await self._bus.subscribe(CONSUME_TOPIC):
+                try:
+                    payload = json.loads(message)
+                except Exception as exc:  # noqa: BLE001
+                    _log.warning("decision_worker_parse_error", error=str(exc))
+                    continue
+
+                await self._process(payload)
+
+                if self._stop_event.is_set():
+                    break
+        finally:
+            _log.info(
+                "decision_worker_stopped",
+                processed=self._total_processed,
+                decisions=self._total_decisions,
+            )
+
+    async def _process(self, payload: dict[str, object]) -> None:
+        incident_id_str = str(payload.get("incident_id", ""))
+        if not incident_id_str:
+            _log.warning("decision_worker_missing_incident_id", payload=payload)
+            return
+
+        try:
+            incident_id = UUID(incident_id_str)
+        except ValueError:
+            _log.warning("decision_worker_invalid_incident_id", incident_id=incident_id_str)
+            return
+
+        try:
+            incident = await self._incident_repo.get(incident_id)
+        except Exception as exc:  # noqa: BLE001
+            _log.error(
+                "decision_worker_incident_load_error",
+                incident_id=incident_id_str,
+                error=str(exc),
+            )
+            return
+
+        if incident is None:
+            _log.warning("decision_worker_incident_not_found", incident_id=incident_id_str)
+            return
+
+        # Optionally load the trigger alert
+        alert = None
+        trigger_alert_id_str = str(payload.get("trigger_alert_id", ""))
+        if trigger_alert_id_str:
+            try:
+                alert = await self._alert_repo.get(UUID(trigger_alert_id_str))
+            except Exception as exc:  # noqa: BLE001
+                _log.warning(
+                    "decision_worker_alert_load_error",
+                    alert_id=trigger_alert_id_str,
+                    error=str(exc),
+                )
+
+        self._total_processed += 1
+
+        try:
+            decision = await self._engine.decide(incident, alert=alert)
+        except Exception as exc:  # noqa: BLE001
+            _log.error(
+                "decision_worker_engine_error",
+                incident_id=incident_id_str,
+                error=str(exc),
+            )
+            return
+
+        try:
+            await self._decision_repo.create(decision)
+        except Exception as exc:  # noqa: BLE001
+            _log.error(
+                "decision_worker_persist_error",
+                decision_id=str(decision.decision_id),
+                error=str(exc),
+            )
+            return
+
+        self._total_decisions += 1
+
+        try:
+            await self._action_executor.execute(decision)
+        except Exception as exc:  # noqa: BLE001
+            _log.error(
+                "decision_worker_execute_error",
+                decision_id=str(decision.decision_id),
+                error=str(exc),
+            )
