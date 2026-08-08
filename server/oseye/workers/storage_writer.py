@@ -61,18 +61,20 @@ class StorageWriter:
         try:
             async for message in await self._bus.subscribe(TOPIC):
                 try:
-                    # [HIGH-1] Fast path: if event_id is present, use model_validate_json
-                    # (Pydantic v2 Rust parser — ~2× faster than dict round-trip).
-                    # Slow path: deserialise to dict first to inject a missing event_id.
-                    data = json.loads(message)
-                    if not data.get("event_id"):
-                        data["event_id"] = str(uuid.uuid4())
-                        event = UniversalEvent.model_validate(data)
-                    else:
-                        event = UniversalEvent.model_validate_json(message)
+                    # Fast path: model_validate_json uses Pydantic v2 Rust parser (~2× faster).
+                    event = UniversalEvent.model_validate_json(message)
                     self._batch.append(event)
-                except Exception as exc:  # noqa: BLE001
-                    _logger.warning("storage_writer_parse_error", error=str(exc))
+                except Exception:  # noqa: BLE001
+                    # Slow path: deserialise to dict first to inject a missing event_id.
+                    try:
+                        data = json.loads(message)
+                        if not data.get("event_id"):
+                            data["event_id"] = str(uuid.uuid4())
+                        event = UniversalEvent.model_validate(data)
+                        self._batch.append(event)
+                    except Exception as exc:  # noqa: BLE001
+                        _logger.warning("storage_writer_parse_error", error=str(exc))
+                        continue
 
                 if len(self._batch) >= self._batch_max_size:
                     await self._flush()
