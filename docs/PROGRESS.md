@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.5
+**Version :** 2.6
 **Dernière mise à jour :** 2026-08-08
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 5 — Decision Engine `[ ]` À DÉMARRER
+**Phase courante :** Phase 5 — Decision Engine `[x]` COMPLÈTE
 
 ---
 
@@ -60,6 +60,17 @@
 
 **10/10 modules Phase 2 mergés sur main.** Phase 2 Full Collection **COMPLÈTE**.
 
+### Phase 5 — Decision Engine `[x]` COMPLÈTE
+
+| # | Module | Statut | Tests | Notes |
+|---|--------|--------|-------|-------|
+| M27 | Decision Engine — WeightedScorer, RiskMatrix, PolicyOverrides, Journal BLAKE3 | `[x]` Mergé | 30 py | decision/engine.py + journal.py |
+| M28 | HumanQueue, ActionExecutor, DecisionWorker, API /decisions | `[x]` Mergé | — | câblage complet main.py |
+
+**Phase 5 Decision Engine COMPLÈTE — 251 tests verts.**
+
+---
+
 ### Phase 4 — Intelligence `[x]` COMPLÈTE
 
 | # | Module | Branche | Statut | Tests |
@@ -88,7 +99,7 @@
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **215/215** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **251/251** | 100% | ✅ |
 | Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy (rule_engine, workers, api, main — 23 fichiers) | **0 erreur** | 0 | ✅ |
