@@ -1,6 +1,6 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.6
+**Version :** 2.7
 **Dernière mise à jour :** 2026-08-08
 **Branche active :** `main` (`latest`)
 **Phase courante :** Phase 5 — Decision Engine `[x]` COMPLÈTE
@@ -66,6 +66,7 @@
 |---|--------|--------|-------|-------|
 | M27 | Decision Engine — WeightedScorer, RiskMatrix, PolicyOverrides, Journal BLAKE3 | `[x]` Mergé | 30 py | decision/engine.py + journal.py |
 | M28 | HumanQueue, ActionExecutor, DecisionWorker, API /decisions | `[x]` Mergé | — | câblage complet main.py |
+| — | Audit Phase 5 — 6 corrections (journal, TOCTOU, flooding, filtre, str(None)) | `main` | `[x]` Mergé | 251 py |
 
 **Phase 5 Decision Engine COMPLÈTE — 251 tests verts.**
 
@@ -248,6 +249,28 @@ Audit complet tous modules (Go agent + Python server + Règles YAML) — 80 find
 | RULE-021 | LOW | `impact_c2.yaml:33` | `rule_crypto_mining` : `stratum+tcp` dans `executable` — logiquement impossible |
 | RULE-022 | LOW | `defense_evasion.yaml:9` | `rule_log_deletion` : pas d'exclusion logrotate |
 
+---
+
+## Audit code — Phase 5 Decision Engine (2026-08-08)
+
+Audit ciblé sur les modules M27/M28. **6 findings confirmés → 6 corrigés.**
+
+### Findings CRITICAL/HIGH résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| P5-F01 | CRITICAL | `decision/engine.py:182` + `workers/decision_worker.py` | Journal BLAKE3 avance `_last_hash` avant persist — si `create()` échoue, chaîne mémoire ≠ DB → `rollback_journal(prev_hash)` appelé en cas d'échec |
+| P5-F02 | CRITICAL | `decision/journal.py:28` + `main.py` | Journal non restauré au redémarrage — `_last_hash` repartirait à `0×64` → `get_last_journal_hash()` charge le dernier hash DB au démarrage |
+| P5-F03 | HIGH | `decision/human_queue.py:81` + `storage/repositories/decisions.py` | TOCTOU approve/reject concurrent — UPDATE sans `WHERE human_decision IS NULL` → clause atomique ajoutée, seule la première requête gagne |
+| P5-F04 | HIGH | `workers/correlation_worker.py:154` | N alertes vers même incident = N décisions ISOLATE — publication `analysis:correlated` uniquement si `incident.alert_count == 1` |
+
+### Findings MEDIUM/LOW résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| P5-F05 | MEDIUM | `storage/repositories/decisions.py:112` | `requires_human=False` ignoré (`if filters.get(...)` falsy) → `is not None` |
+| P5-F06 | LOW | `workers/decision_worker.py:127` | `str(None)='None'` contourne guard alert_id → `raw_alert_id is not None` avant `str()` |
+
 ### Audit Phase 4 — ancienne section (2026-08-08)
 
 Audit partiel réalisé sur les modules M25-M26 + corrections auth (F1/F2 ouverts depuis audit Phase 3).
@@ -343,6 +366,8 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | SEC-FULL-004 | `storage/repositories/api_keys.py` : SHA-256 sans sel pour API keys | ✅ Corrigé — HMAC-SHA256 |
 | SEC-FULL-005 | `auth.py` : credentials `admin123/analyst123` sans avertissement démarrage | ✅ Corrigé — CRITICAL log |
 | SEC-FULL-006 | `threat_intel/breaker.py` : race HALF_OPEN — probes concurrentes | ✅ Corrigé — flag atomique |
+| SEC-P5-001 | `decision/human_queue.py` : TOCTOU approve/reject — double update concurrent possible | ✅ Corrigé — WHERE human_decision IS NULL atomique |
+| SEC-P5-002 | `workers/correlation_worker.py` : flooding décisions — N commandes ISOLATE sur même hôte | ✅ Corrigé — publication unique à la création d'incident |
 
 ---
 
@@ -391,6 +416,12 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | BUG-039 | `rule_ptrace_injection` : type `ptrace` jamais émis — règle morte | 2026-08-08 |
 | BUG-040 | `rule_ssh_bruteforce` : compte toutes connexions, pas seulement les échecs | 2026-08-08 |
 | BUG-041 | `rule_outbound_c2_beaconing` : exclusion RFC1918 cassée + port 8080 spam | 2026-08-08 |
+| BUG-042 | `decision/journal.py` : `_last_hash` non restauré au redémarrage — chaîne BLAKE3 casse après restart | fix/audit-phase5 |
+| BUG-043 | `decision/engine.py` : journal avance avant persist — divergence mémoire/DB si `create()` échoue | fix/audit-phase5 |
+| BUG-044 | `decision/human_queue.py` : TOCTOU approve/reject concurrent — UPDATE sans `WHERE human_decision IS NULL` | fix/audit-phase5 |
+| BUG-045 | `correlation_worker.py` : N alertes → N décisions ISOLATE pour le même incident (flooding) | fix/audit-phase5 |
+| BUG-046 | `decisions.py` repo : `requires_human=False` ignoré (`if filters.get(...)` falsy) | fix/audit-phase5 |
+| BUG-047 | `decision_worker.py` : `str(None)='None'` contourne le guard `trigger_alert_id` | fix/audit-phase5 |
 
 ---
 
