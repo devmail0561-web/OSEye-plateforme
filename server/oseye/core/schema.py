@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
@@ -290,3 +290,31 @@ class AgentInfo(BaseModel):
     active_profile: str = "workstation"
     revoked: bool = False
     online: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Correlation / Incident
+# ---------------------------------------------------------------------------
+
+class IncidentEvent(BaseModel):
+    alert_id: UUID
+    timestamp: datetime
+    severity: Literal["low", "medium", "high", "critical"]
+    title: str
+    hostname: str
+    mitre_techniques: list[str] = []
+
+
+class Incident(BaseModel):
+    incident_id: UUID = Field(default_factory=uuid4)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    hostname: str
+    severity: Literal["low", "medium", "high", "critical"]
+    status: Literal["open", "investigating", "resolved"] = "open"
+    alert_ids: list[UUID] = []
+    timeline: list[IncidentEvent] = []
+    mitre_tactics: list[str] = []
+    correlation_rule: str = "same_host_timeframe"
+    timeframe_seconds: int = 300
+    alert_count: int = 0

@@ -19,8 +19,8 @@ from oseye.storage.repositories.events import SQLEventRepository
 # ---------------------------------------------------------------------------
 
 TEST_SECRET = "test-secret-hs256-not-for-production"
-TEST_USER = "analyst1"
-TEST_PASSWORD = "password"
+TEST_USER = "analyst"
+TEST_PASSWORD = "analyst123"
 
 
 @pytest_asyncio.fixture

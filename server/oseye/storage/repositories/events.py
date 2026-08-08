@@ -57,7 +57,7 @@ def _row_to_event(row: EventRow) -> UniversalEvent:
     )
 
 
-def _event_to_dict(event: UniversalEvent) -> dict:
+def _event_to_dict(event: UniversalEvent) -> dict[str, object]:
     """Convert a UniversalEvent to a plain dict for bulk insert (no ORM overhead)."""
     return {
         "event_id": str(event.event_id),

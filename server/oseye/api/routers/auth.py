@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from slowapi import Limiter
@@ -40,16 +40,8 @@ _USERS: dict[str, dict[str, Any]] = {
         "hashed_password": _hash(_ADMIN_PW_RAW),
         "roles": ["admin", "analyst"],
     },
-    "admin1": {
-        "hashed_password": _hash("password"),
-        "roles": ["admin", "analyst"],
-    },
     "analyst": {
         "hashed_password": _hash(_ANALYST_PW_RAW),
-        "roles": ["analyst"],
-    },
-    "analyst1": {
-        "hashed_password": _hash("password"),
         "roles": ["analyst"],
     },
 }
@@ -74,10 +66,7 @@ async def login(
     """Issue a JWT access token (SEC-PREV-002: 5 req/min per IP).
 
     Passwords are validated with bcrypt (SEC-AUTH-001).
-    Default users:
-    - admin1 / password   (dev)
-    - analyst1 / password (dev)
-    Override via OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD env vars.
+    Default users: admin / analyst (override via OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD).
     """
     if not form.username or not form.password:
         raise HTTPException(
@@ -100,7 +89,7 @@ async def login(
 
 
 @router.post("/refresh")
-async def refresh(request: Request, token: str) -> dict[str, Any]:
+async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[str, Any]:
     """Refresh a token by verifying the existing one and issuing a new one."""
     handler = request.app.state.jwt_handler
     payload = handler.verify_token(token)

@@ -2,11 +2,12 @@
 
 Maps Pydantic schema models to SQL tables.
 - events, alerts, alert_notes, decisions, forensic_cases, custody_log, evidence_items, case_notes
+- incidents, incident_alerts
 """
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, Float, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Float, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -234,3 +235,33 @@ class RuleVersionRow(Base):
     alert_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     operator: Mapped[str] = mapped_column(String(255), nullable=False)
     false_positive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class IncidentRow(Base):
+    __tablename__ = "incidents"
+    __table_args__ = (Index("ix_incidents_hostname_status", "hostname", "status"),)
+
+    incident_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    created_at: Mapped[str] = mapped_column(String(32), index=True)
+    updated_at: Mapped[str] = mapped_column(String(32), index=True)
+    hostname: Mapped[str] = mapped_column(String(255), index=True)
+    severity: Mapped[str] = mapped_column(String(20), index=True)
+    status: Mapped[str] = mapped_column(String(20), index=True, default="open")
+    mitre_tactics: Mapped[str] = mapped_column(Text, default="[]")  # JSON
+    correlation_rule: Mapped[str] = mapped_column(String(100))
+    timeframe_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    alert_count: Mapped[int] = mapped_column(Integer, default=0)
+    alert_ids: Mapped[str] = mapped_column(Text, default="[]")  # JSON
+
+
+class IncidentAlertRow(Base):
+    __tablename__ = "incident_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[str] = mapped_column(String(36), index=True)
+    alert_id: Mapped[str] = mapped_column(String(36), index=True, unique=True)
+    added_at: Mapped[str] = mapped_column(String(32))
+    severity: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(500))
+    hostname: Mapped[str] = mapped_column(String(255))
+    mitre_techniques: Mapped[str] = mapped_column(Text, default="[]")  # JSON

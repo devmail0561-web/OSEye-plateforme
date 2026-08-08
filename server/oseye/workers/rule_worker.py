@@ -149,3 +149,25 @@ class RuleWorker:
             )
         except Exception as exc:  # noqa: BLE001
             _log.error("alert_create_error", rule_id=match.rule_id, error=str(exc))
+            return
+
+        # Publish to TI enrichment pipeline if there are network indicators
+        indicators: dict[str, list[str]] = {"ips": [], "hashes": []}
+        if event.dst_ip:
+            indicators["ips"].append(event.dst_ip)
+        if event.src_ip:
+            indicators["ips"].append(event.src_ip)
+        if indicators["ips"] or indicators["hashes"]:
+            try:
+                await self._bus.publish(
+                    "alerts:enrichment",
+                    json.dumps(
+                        {"alert_id": str(alert.alert_id), "indicators": indicators}
+                    ).encode(),
+                )
+            except Exception as exc:  # noqa: BLE001
+                _log.warning(
+                    "enrichment_publish_error",
+                    alert_id=str(alert.alert_id),
+                    error=str(exc),
+                )

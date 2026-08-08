@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from datetime import UTC, datetime
@@ -74,9 +75,10 @@ _token_cache: dict[str, str] = {}
 async def _token(client: AsyncClient, role: str = "analyst") -> str:
     if role in _token_cache:
         return _token_cache[role]
-    username = "analyst1" if role == "analyst" else "admin1"
+    username = "analyst" if role == "analyst" else "admin"
+    password = os.getenv("OSEYE_ANALYST_PASSWORD", "analyst123") if role == "analyst" else os.getenv("OSEYE_ADMIN_PASSWORD", "admin123")
     resp = await client.post(
-        "/api/v1/auth/token", data={"username": username, "password": "password"}
+        "/api/v1/auth/token", data={"username": username, "password": password}
     )
     assert resp.status_code == 200, resp.text
     tok = str(resp.json()["access_token"])

@@ -74,7 +74,7 @@ def _token(client: AsyncClient, role: str = "analyst") -> str:  # type: ignore[o
     """Generate a JWT directly via JWTHandler — avoids hitting the rate-limited /auth/token."""
     app = client._transport.app  # type: ignore[attr-defined]
     handler = app.state.jwt_handler
-    username = "analyst1" if role == "analyst" else "admin1"
+    username = "analyst" if role == "analyst" else "admin"
     roles = ["analyst"] if role == "analyst" else ["admin", "analyst"]
     return handler.create_token(subject=username, roles=roles)
 

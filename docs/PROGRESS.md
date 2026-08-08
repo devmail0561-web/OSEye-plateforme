@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.3
-**Dernière mise à jour :** 2026-08-07
+**Version :** 2.4
+**Dernière mise à jour :** 2026-08-08
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 4 — Intelligence `[ ]` À DÉMARRER
+**Phase courante :** Phase 5 — Decision Engine `[ ]` À DÉMARRER
 
 ---
 
@@ -60,6 +60,17 @@
 
 **10/10 modules Phase 2 mergés sur main.** Phase 2 Full Collection **COMPLÈTE**.
 
+### Phase 4 — Intelligence `[x]` COMPLÈTE
+
+| # | Module | Branche | Statut | Tests |
+|---|--------|---------|--------|-------|
+| M25 | Threat Intelligence — AbuseIPDB, VirusTotal, MISP, cache, TIWorker, API /ti | `main` | `[x]` Mergé | 10 py |
+| M26 | Correlation Engine — SameHostLinker, CorrelationWorker, Incidents, API /incidents | `main` | `[x]` Mergé | 9 py |
+
+**Phase 4 Intelligence COMPLÈTE — M25 + M26 livrés, 215 tests verts.**
+
+---
+
 ### Phase 3 — Détection `[x]` COMPLÈTE
 
 | # | Module | Branche | Statut | Tests |
@@ -77,7 +88,7 @@
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **196/196** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **215/215** | 100% | ✅ |
 | Tests Go | **133 tests / 21 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy (rule_engine, workers, api, main — 23 fichiers) | **0 erreur** | 0 | ✅ |
@@ -139,6 +150,22 @@ Audit complet réalisé sur les modules M14-M18 (3 agents parallèles : Go, Pyth
 | L13 | `journald.py`, `syslog.py` | `_Severity` Literal dupliqué — à exporter depuis `schema.py` |
 | L15 | `manager.go` | `Start()` peut être appelé plusieurs fois sans guard |
 | L17 | tests py | Payloads de test non alignés avec les payloads Go réels |
+
+---
+
+## Audit code — Phase 4 (2026-08-08)
+
+Audit complet réalisé sur les modules M25-M26 + corrections auth (F1/F2 ouverts depuis audit Phase 3).
+**25 findings confirmés → 25 corrigés** (23 déjà présents dans fix/audit-phase3 + 2 nouveaux).
+
+### Findings résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| F1 | CRITICAL | `api/routers/auth.py:43` | Comptes `admin1`/`analyst1` hardcodés sans variable d'env — supprimés |
+| F2 | HIGH | `api/routers/auth.py:103` | JWT `/auth/refresh` en query parameter → `Body(...)` |
+
+Les 23 autres findings étaient déjà corrigés dans `fix/audit-phase3` (voir section Audit Phase 3).
 
 ---
 
@@ -217,6 +244,8 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | SEC-AUDIT3-002 | Auth stub : `POST /auth/token` acceptait tout login/password | ✅ Corrigé — bcrypt passlib |
 | SEC-AUDIT3-003 | WebSocket `/ws/alerts` sans auth JWT | ✅ Corrigé — token query param |
 | SEC-AUDIT3-004 | `jwt.py` : detail exception révélait le type d'erreur dans les 401 | ✅ Corrigé — opacifié |
+| SEC-AUDIT4-001 | `auth.py` : comptes `admin1`/`analyst1` hardcodés avec `password` non configurable | ✅ Corrigé — supprimés |
+| SEC-AUDIT4-002 | `auth.py` `/refresh` : JWT en query parameter → exposé dans les access logs | ✅ Corrigé — Body(...) |
 
 ---
 
@@ -252,6 +281,8 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | BUG-026 | `rule_history_clear` condition impossible (`process AND type==delete`) | fix/audit-phase3 |
 | BUG-027 | `main.py` lifespan : `jwt_handler` / `event_repo` absents de `app.state` | fix/audit-phase3 |
 | BUG-028 | `_temporal_windows` memory leak (pas de purge TTL) + race threading | fix/audit-phase3 |
+| BUG-029 | `auth.py` : comptes dev `admin1`/`analyst1` actifs en production | 2026-08-08 |
+| BUG-030 | `auth.py` `/refresh` : JWT exposé via query parameter dans les logs | 2026-08-08 |
 
 ---
 

@@ -62,3 +62,13 @@ class Settings(BaseSettings):
     virustotal_api_key: str | None = Field(default=None)
     misp_url: str | None = Field(default=None)
     misp_api_key: str | None = Field(default=None)
+
+    # Threat Intelligence runtime settings
+    ti_cache_ttl_seconds: int = 3600
+    ti_lookup_timeout_seconds: float = 5.0
+    ti_breaker_fail_max: int = 5
+    ti_breaker_reset_timeout: float = 60.0
+
+    # Correlation settings
+    correlation_window_seconds: int = 300
+    correlation_min_severity: str = "medium"

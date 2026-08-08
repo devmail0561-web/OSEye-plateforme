@@ -184,7 +184,7 @@ async def infra():
 
 
 def _analyst_token(app: Any) -> str:
-    return app.state.jwt_handler.create_token(subject="analyst1", roles=["analyst"])
+    return app.state.jwt_handler.create_token(subject="analyst", roles=["analyst"])
 
 
 async def _run_normalizer_once(bus: InMemoryEventBus, normalizer: NormalizerEngine,
