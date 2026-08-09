@@ -1,0 +1,14 @@
+name: server
+description: "Full server monitoring"
+version: 1
+platforms: [linux]
+collectors:
+  procfs: {enabled: true, throttle: 0.5}
+  auditd: {enabled: true, throttle: 0.5}
+  fanotify: {enabled: true, throttle: 1.0}
+  inotify: {enabled: true, throttle: 1.0}
+  netlink: {enabled: true, throttle: 0.5}
+  journald: {enabled: true, throttle: 1.0}
+  syslog: {enabled: true, throttle: 1.0}
+min_severity: info
+push_interval_s: 30

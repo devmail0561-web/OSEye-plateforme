@@ -1,0 +1,15 @@
+name: investigation
+description: "Maximum collection for active incident investigation"
+version: 1
+platforms: [linux, windows, darwin]
+collectors:
+  procfs: {enabled: true, throttle: 0.1}
+  auditd: {enabled: true, throttle: 0.1}
+  fanotify: {enabled: true, throttle: 0.1}
+  inotify: {enabled: true, throttle: 0.1}
+  netlink: {enabled: true, throttle: 0.1}
+  journald: {enabled: true, throttle: 0.1}
+  syslog: {enabled: true, throttle: 0.1}
+  udev: {enabled: true, throttle: 0.5}
+min_severity: info
+push_interval_s: 5

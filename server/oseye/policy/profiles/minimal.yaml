@@ -1,0 +1,10 @@
+name: minimal
+description: "Minimal footprint for IoT or low-resource hosts"
+version: 1
+platforms: [linux]
+collectors:
+  procfs: {enabled: true, throttle: 5.0}
+  netlink: {enabled: false}
+  auditd: {enabled: false}
+min_severity: high
+push_interval_s: 300

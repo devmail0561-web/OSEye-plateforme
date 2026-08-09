@@ -1,0 +1,12 @@
+name: workstation
+description: "Lightweight workstation monitoring"
+version: 1
+platforms: [linux, windows, darwin]
+collectors:
+  procfs: {enabled: true, throttle: 1.0}
+  auditd: {enabled: true, throttle: 1.0}
+  fanotify: {enabled: false}
+  netlink: {enabled: true, throttle: 2.0}
+  journald: {enabled: false}
+min_severity: low
+push_interval_s: 60

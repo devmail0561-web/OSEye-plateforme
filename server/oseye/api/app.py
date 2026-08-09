@@ -19,6 +19,8 @@ from oseye.api.routers import (
     events,
     health,
     incidents,
+    plugins,
+    policies,
     rules,
     snapshots,
     ti,
@@ -69,6 +71,8 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     app.include_router(decisions.router)
     app.include_router(cases.router)
     app.include_router(snapshots.router)
+    app.include_router(policies.router)
+    app.include_router(plugins.router)
     app.include_router(ws_alerts_router)
 
     # Expose WS alert manager on app state so RuleWorker and alert endpoints can broadcast

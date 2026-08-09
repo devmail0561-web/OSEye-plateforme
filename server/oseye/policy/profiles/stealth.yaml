@@ -1,0 +1,9 @@
+name: stealth
+description: "Low-noise collection for sensitive targets"
+version: 1
+platforms: [linux]
+collectors:
+  procfs: {enabled: true, throttle: 10.0}
+  netlink: {enabled: true, throttle: 10.0}
+min_severity: high
+push_interval_s: 120
