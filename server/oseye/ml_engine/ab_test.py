@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
 _N_MIN_EVENTS = 1_000
 _DISAGREE_THRESHOLD = 20.0  # score difference considered a disagreement
+_MAX_STORED_SCORES = 50_000  # cap per list — ~2.4 MB at 8 bytes/float
 
 
 @dataclass
@@ -71,11 +72,13 @@ class ABTestSession:
         challenger: MLEngine,
         n_min_events: int = _N_MIN_EVENTS,
         disagree_threshold: float = _DISAGREE_THRESHOLD,
+        max_stored_scores: int = _MAX_STORED_SCORES,
     ) -> None:
         self._champion = champion
         self._challenger = challenger
         self._n_min = n_min_events
         self._threshold = disagree_threshold
+        self._max_stored = max_stored_scores
         self._champion_scores: list[float] = []
         self._challenger_scores: list[float] = []
         self._deltas: list[float] = []
@@ -87,6 +90,12 @@ class ABTestSession:
         """
         champ_score = self._champion.score_event(event)
         chal_score = self._challenger.score_event(event)
+
+        # Evict oldest entry when the cap is reached (sliding window).
+        if len(self._deltas) >= self._max_stored:
+            self._champion_scores.pop(0)
+            self._challenger_scores.pop(0)
+            self._deltas.pop(0)
 
         self._champion_scores.append(champ_score)
         self._challenger_scores.append(chal_score)
@@ -156,13 +165,21 @@ class ABTestSession:
         return len(self._deltas)
 
 
-def _clone_champion(_engine: MLEngine) -> MLEngine:
-    """Return a fresh MLEngine.
+def _clone_champion(engine: MLEngine) -> MLEngine:
+    """Return a fresh MLEngine with the same hyper-params as *engine*.
 
-    Used as the default challenger after a promotion — it starts cold and
-    will diverge as traffic flows in.
+    Used as the default challenger after a promotion — it starts cold but
+    shares the same detector configuration as the current champion.
     """
+    src = engine._anomaly  # noqa: SLF001
     return MLEngine(
-        anomaly_detector=EntityAnomalyDetector(),
-        classifier=MITREClassifier(),
+        anomaly_detector=EntityAnomalyDetector(
+            n_trees=src._n_trees,  # noqa: SLF001
+            height=src._height,  # noqa: SLF001
+            window_size=src._window_size,  # noqa: SLF001
+            window_size_by_category=dict(src._window_by_cat),  # noqa: SLF001
+            min_samples=src._min_samples,  # noqa: SLF001
+            max_models=src._store.maxsize,  # noqa: SLF001
+        ),
+        classifier=MITREClassifier(learning_rate=engine._classifier._lr),  # noqa: SLF001
     )

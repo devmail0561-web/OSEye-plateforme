@@ -2,7 +2,8 @@
 
 Subscribes to ``events:normalized``.
 Publishes ``analysis:ml`` with a JSON payload containing the ML score.
-Checkpoints the anomaly detector to disk every ``checkpoint_interval_s`` seconds.
+Checkpoints the anomaly detector + MITRE classifier to disk every
+``checkpoint_interval_s`` seconds via a background asyncio task.
 
 Message format consumed (events:normalized)::
 
@@ -37,7 +38,9 @@ _log = get_logger(__name__)
 CONSUME_TOPIC = "events:normalized"
 PUBLISH_TOPIC = "analysis:ml"
 _DEFAULT_CHECKPOINT_INTERVAL_S = 300  # 5 minutes
-_DEFAULT_CHECKPOINT_PATH = Path("/var/lib/oseye/ml_checkpoint.pkl")
+# Dev/CI-friendly default under XDG_RUNTIME_DIR or /tmp; production deployments
+# should always pass an explicit checkpoint_path.
+_DEFAULT_CHECKPOINT_PATH = Path("/tmp/oseye_ml_checkpoint.pkl")  # noqa: S108
 
 
 class MLWorker:
@@ -47,8 +50,9 @@ class MLWorker:
     ----------
     bus:                     EventBus instance.
     engine:                  MLEngine singleton shared with DecisionWorker.
-    checkpoint_path:         File path for anomaly model persistence.
-    checkpoint_interval_s:   Seconds between automatic checkpoints.
+    checkpoint_path:         File path for model persistence (anomaly + classifier).
+    checkpoint_interval_s:   Seconds between periodic checkpoint saves.
+                             0 disables the periodic task (checkpoint-on-stop only).
     stop_event:              Optional asyncio.Event — worker exits when set.
     """
 
@@ -67,10 +71,14 @@ class MLWorker:
         self._stop_event = stop_event or asyncio.Event()
         self._total_scored = 0
         self._total_published = 0
-        self._seconds_since_checkpoint: float = 0.0
 
     async def run(self) -> None:
-        """Main loop — runs until stop_event is set or task is cancelled."""
+        """Main loop — runs until stop_event is set or task is cancelled.
+
+        Starts a background checkpoint task (if interval > 0) that saves the
+        model state every ``checkpoint_interval_s`` seconds regardless of whether
+        the event stream is active.  This ensures the baseline survives crashes.
+        """
         self._try_load_checkpoint()
         _log.info(
             "ml_worker_started",
@@ -78,6 +86,10 @@ class MLWorker:
             checkpoint_path=str(self._checkpoint_path),
             checkpoint_interval_s=self._checkpoint_interval_s,
         )
+
+        checkpoint_task: asyncio.Task[None] | None = None
+        if self._checkpoint_interval_s > 0:
+            checkpoint_task = asyncio.create_task(self._periodic_checkpoint())
 
         try:
             async for message in await self._bus.subscribe(CONSUME_TOPIC):
@@ -92,12 +104,24 @@ class MLWorker:
                 if self._stop_event.is_set():
                     break
         finally:
+            if checkpoint_task is not None:
+                checkpoint_task.cancel()
+                try:
+                    await checkpoint_task
+                except asyncio.CancelledError:
+                    pass
             self._try_save_checkpoint()
             _log.info(
                 "ml_worker_stopped",
                 scored=self._total_scored,
                 published=self._total_published,
             )
+
+    async def _periodic_checkpoint(self) -> None:
+        """Save the model state every checkpoint_interval_s seconds."""
+        while True:
+            await asyncio.sleep(self._checkpoint_interval_s)
+            self._try_save_checkpoint()
 
     async def _process(self, event: UniversalEvent) -> None:
         ml_score = self._engine.score_event(event)
@@ -122,14 +146,8 @@ class MLWorker:
                 error=str(exc),
             )
 
-        # Periodic checkpoint (wall-clock approximated via event count is
-        # unreliable; use a separate periodic task when precise timing matters).
-        # Here we rely on the caller to invoke checkpoint() directly or run
-        # the built-in periodic task via run_with_checkpoint().
-        self._seconds_since_checkpoint = 0.0  # reset on each event (see below)
-
     def checkpoint(self) -> None:
-        """Save the anomaly model state to disk (idempotent, non-async)."""
+        """Save the model state to disk immediately (idempotent, non-async)."""
         self._try_save_checkpoint()
 
     # ------------------------------------------------------------------
@@ -146,10 +164,7 @@ class MLWorker:
 
     def _try_load_checkpoint(self) -> None:
         if not self._checkpoint_path.exists():
-            _log.info(
-                "ml_worker_no_checkpoint",
-                path=str(self._checkpoint_path),
-            )
+            _log.info("ml_worker_no_checkpoint", path=str(self._checkpoint_path))
             return
         try:
             self._engine.load_checkpoint(self._checkpoint_path)

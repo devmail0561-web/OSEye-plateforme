@@ -24,6 +24,10 @@ Usage:
 
 from __future__ import annotations
 
+import os
+import pickle
+from pathlib import Path
+
 from oseye.core.schema import UniversalEvent
 from oseye.ml_engine.anomaly import EntityAnomalyDetector
 from oseye.ml_engine.classifier import MITREClassifier
@@ -70,17 +74,33 @@ class MLEngine:
         """
         self._classifier.learn(trigger_event, mitre_techniques)
 
-    def save_checkpoint(self, path: str | "Path") -> None:
-        """Persist the anomaly detector state to *path* (pickle)."""
+    def save_checkpoint(self, path: str | Path) -> None:
+        """Persist anomaly detector + MITRE classifier state to *path*.
+
+        Both are written atomically: anomaly via its own atomic save(),
+        classifier via a companion .classifier.pkl file with the same
+        tmp-then-replace pattern.
+        """
+        path = Path(path)
         self._anomaly.save(path)
+        clf_path = path.with_suffix(".classifier.pkl")
+        clf_tmp = clf_path.with_suffix(".pkl.tmp")
+        try:
+            with open(clf_tmp, "wb") as fh:
+                pickle.dump(self._classifier, fh, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(clf_tmp, clf_path)
+        except Exception:
+            clf_tmp.unlink(missing_ok=True)
+            raise
 
-    def load_checkpoint(self, path: str | "Path") -> None:
-        """Restore anomaly detector state from a checkpoint written by :meth:`save_checkpoint`."""
-        from pathlib import Path
-
-        from oseye.ml_engine.anomaly import EntityAnomalyDetector
-
-        self._anomaly = EntityAnomalyDetector.load(Path(path))
+    def load_checkpoint(self, path: str | Path) -> None:
+        """Restore anomaly detector + MITRE classifier from a checkpoint."""
+        path = Path(path)
+        self._anomaly = EntityAnomalyDetector.load(path)
+        clf_path = path.with_suffix(".classifier.pkl")
+        if clf_path.exists():
+            with open(clf_path, "rb") as fh:
+                self._classifier = pickle.load(fh)  # noqa: S301  # trusted local file
 
     @property
     def model_count(self) -> int:

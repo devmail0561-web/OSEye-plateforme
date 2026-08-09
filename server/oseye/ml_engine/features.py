@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import math
 
+from oseye.core.observability import get_logger
 from oseye.core.schema import UniversalEvent
+
+_log = get_logger(__name__)
 
 _CATEGORY_ORD: dict[str, float] = {
     "file": 0.0, "process": 1.0, "network": 2.0,
@@ -40,6 +43,13 @@ def extract(event: UniversalEvent) -> dict[str, float]:
     hour = (event.timestamp_ns // 1_000_000_000 // 3600) % 24
 
     proc_hash = _stable_hash_norm(event.process_name)
+
+    if event.category not in _CATEGORY_ORD:
+        _log.warning(
+            "features_unknown_category",
+            category=event.category,
+            event_id=str(event.event_id),
+        )
 
     return {
         "category_ord": _CATEGORY_ORD.get(event.category, 0.0) / _CATEGORY_MAX,

@@ -39,6 +39,7 @@ Cold-start: fewer than `min_samples` events → score 0 (model not yet reliable)
 
 from __future__ import annotations
 
+import os
 import pickle
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -189,8 +190,11 @@ class EntityAnomalyDetector:
     def save(self, path: str | Path) -> None:
         """Persist the full detector state to *path* via pickle.
 
-        Call periodically (e.g. every 5 minutes) so baselines survive restarts.
+        Write is atomic: data goes to a tmp file alongside *path* then
+        os.replace() swaps it in, so a crash mid-write never corrupts the
+        existing checkpoint.
         """
+        path = Path(path)
         payload = {
             "n_trees": self._n_trees,
             "height": self._height,
@@ -200,8 +204,14 @@ class EntityAnomalyDetector:
             "max_models": self._store.maxsize,
             "states": self._store.items(),
         }
-        with open(path, "wb") as fh:
-            pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp = path.with_suffix(".pkl.tmp")
+        try:
+            with open(tmp, "wb") as fh:
+                pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(tmp, path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
 
     @classmethod
     def load(cls, path: str | Path) -> EntityAnomalyDetector:

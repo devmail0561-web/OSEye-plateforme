@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path  # used by tmp_path fixture
 
 import pytest
 
@@ -58,7 +58,7 @@ async def _collect_published(bus: InMemoryEventBus, topic: str, count: int, time
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_publishes_score():
+async def test_ml_worker_publishes_score(tmp_path: Path):
     """MLWorker publishes a score to analysis:ml for every valid event."""
     bus = InMemoryEventBus()
     engine = MLEngine()
@@ -66,7 +66,7 @@ async def test_ml_worker_publishes_score():
     worker = MLWorker(
         bus=bus,
         engine=engine,
-        checkpoint_path=Path("/tmp/oseye_test_checkpoint.pkl"),
+        checkpoint_path=tmp_path / "ckpt.pkl",
         checkpoint_interval_s=9999,
         stop_event=stop,
     )
@@ -99,7 +99,7 @@ async def test_ml_worker_publishes_score():
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_score_is_zero_cold_start():
+async def test_ml_worker_score_is_zero_cold_start(tmp_path: Path):
     """Cold-start: score must be 0 for the first min_samples events."""
     bus = InMemoryEventBus()
     engine = MLEngine()
@@ -107,7 +107,7 @@ async def test_ml_worker_score_is_zero_cold_start():
     worker = MLWorker(
         bus=bus,
         engine=engine,
-        checkpoint_path=Path("/tmp/oseye_test_checkpoint2.pkl"),
+        checkpoint_path=tmp_path / "ckpt2.pkl",
         stop_event=stop,
     )
 
@@ -135,7 +135,7 @@ async def test_ml_worker_score_is_zero_cold_start():
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_skips_invalid_json():
+async def test_ml_worker_skips_invalid_json(tmp_path: Path):
     """MLWorker ignores unparseable messages without crashing."""
     bus = InMemoryEventBus()
     engine = MLEngine()
@@ -143,7 +143,7 @@ async def test_ml_worker_skips_invalid_json():
     worker = MLWorker(
         bus=bus,
         engine=engine,
-        checkpoint_path=Path("/tmp/oseye_test_checkpoint3.pkl"),
+        checkpoint_path=tmp_path / "ckpt3.pkl",
         stop_event=stop,
     )
 
@@ -170,7 +170,7 @@ async def test_ml_worker_skips_invalid_json():
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_publish_error_does_not_crash():
+async def test_ml_worker_publish_error_does_not_crash(tmp_path: Path):
     """MLWorker continues even if bus.publish raises."""
 
     class BrokenBus(InMemoryEventBus):
@@ -185,7 +185,7 @@ async def test_ml_worker_publish_error_does_not_crash():
     worker = MLWorker(
         bus=bus,
         engine=engine,
-        checkpoint_path=Path("/tmp/oseye_test_checkpoint4.pkl"),
+        checkpoint_path=tmp_path / "ckpt4.pkl",
         stop_event=stop,
     )
 
@@ -272,7 +272,65 @@ async def test_ml_worker_loads_checkpoint_on_start(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_scored_counter():
+async def test_ml_worker_periodic_checkpoint(tmp_path: Path):
+    """Periodic checkpoint task fires before the worker stops (F1)."""
+    bus = InMemoryEventBus()
+    engine = MLEngine()
+    checkpoint = tmp_path / "periodic.pkl"
+    stop = asyncio.Event()
+    # Very short interval — checkpoint should fire well before stop
+    worker = MLWorker(
+        bus=bus,
+        engine=engine,
+        checkpoint_path=checkpoint,
+        checkpoint_interval_s=0.05,
+        stop_event=stop,
+    )
+
+    worker_task = asyncio.create_task(worker.run())
+    # Wait long enough for at least one periodic checkpoint to fire.
+    await asyncio.sleep(0.2)
+    stop.set()
+    worker_task.cancel()
+    with pytest.raises((asyncio.CancelledError, Exception)):
+        await worker_task
+
+    assert checkpoint.exists()
+
+
+@pytest.mark.asyncio
+async def test_ml_worker_classifier_persisted(tmp_path: Path):
+    """Classifier state survives a save/load round-trip (F2)."""
+    bus = InMemoryEventBus()
+    engine = MLEngine()
+    checkpoint = tmp_path / "clf.pkl"
+
+    # Train the classifier with a fake alert
+    event = UniversalEvent(
+        event_id=uuid.uuid4(),
+        timestamp_ns=time.time_ns(),
+        hostname="host-clf",
+        agent_id=uuid.uuid4(),
+        category="process",
+        type="exec",
+        severity="info",
+        collector="procfs",
+        hash_chain="c" * 64,
+    )
+    engine.learn_from_alert(event, ["T1059.001", "T1055"])
+    known_before = set(engine.known_techniques)
+    assert known_before  # sanity check
+
+    engine.save_checkpoint(checkpoint)
+
+    # Fresh engine — load checkpoint — classifier must be restored.
+    engine2 = MLEngine()
+    engine2.load_checkpoint(checkpoint)
+    assert set(engine2.known_techniques) == known_before
+
+
+@pytest.mark.asyncio
+async def test_ml_worker_scored_counter(tmp_path: Path):
     """MLWorker.total_scored increments correctly."""
     bus = InMemoryEventBus()
     engine = MLEngine()
@@ -280,7 +338,7 @@ async def test_ml_worker_scored_counter():
     worker = MLWorker(
         bus=bus,
         engine=engine,
-        checkpoint_path=Path("/tmp/oseye_test_ckpt_ctr.pkl"),
+        checkpoint_path=tmp_path / "ckpt_ctr.pkl",
         stop_event=stop,
     )
 
