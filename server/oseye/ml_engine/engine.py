@@ -70,6 +70,18 @@ class MLEngine:
         """
         self._classifier.learn(trigger_event, mitre_techniques)
 
+    def save_checkpoint(self, path: str | "Path") -> None:
+        """Persist the anomaly detector state to *path* (pickle)."""
+        self._anomaly.save(path)
+
+    def load_checkpoint(self, path: str | "Path") -> None:
+        """Restore anomaly detector state from a checkpoint written by :meth:`save_checkpoint`."""
+        from pathlib import Path
+
+        from oseye.ml_engine.anomaly import EntityAnomalyDetector
+
+        self._anomaly = EntityAnomalyDetector.load(Path(path))
+
     @property
     def model_count(self) -> int:
         """Number of per-entity anomaly models currently in memory."""

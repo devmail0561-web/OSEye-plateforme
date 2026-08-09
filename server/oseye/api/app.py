@@ -10,7 +10,17 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from oseye.api.routers import alerts, api_keys, auth, decisions, events, health, incidents, rules, ti
+from oseye.api.routers import (
+    alerts,
+    api_keys,
+    auth,
+    decisions,
+    events,
+    health,
+    incidents,
+    rules,
+    ti,
+)
 from oseye.api.ws.alerts import alerts_ws_manager
 from oseye.api.ws.alerts import router as ws_alerts_router
 from oseye.config import Settings

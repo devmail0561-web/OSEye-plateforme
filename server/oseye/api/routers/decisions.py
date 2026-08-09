@@ -10,10 +10,9 @@ Endpoints:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
-
-from dataclasses import dataclass
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 

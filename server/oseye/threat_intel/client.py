@@ -108,7 +108,7 @@ class ThreatIntelClient:
                     timeout=self._timeout,
                 )
             )
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             logger.warning(
                 "ti_lookup_timeout indicator=%s timeout=%.1f", indicator, self._timeout
             )

@@ -31,7 +31,7 @@ async def ws_alerts(ws: WebSocket) -> None:
     # SEC-004: read token from first text frame, not query string
     try:
         token = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
-    except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+    except (TimeoutError, Exception):  # noqa: BLE001
         await ws.close(code=4001)
         return
 
