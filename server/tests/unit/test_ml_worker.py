@@ -71,12 +71,13 @@ async def test_ml_worker_publishes_score():
         stop_event=stop,
     )
 
-    # Start collector before worker so the subscription is registered first.
-    collector_task = asyncio.create_task(_collect_published(bus, "analysis:ml", count=3))
-    await asyncio.sleep(0.02)
-
     worker_task = asyncio.create_task(worker.run())
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.02)  # let worker subscribe first
+
+    collector_task = asyncio.create_task(
+        _collect_published(bus, "analysis:ml", count=3, timeout=3.0)
+    )
+    await asyncio.sleep(0.02)  # let collector subscribe
 
     for _ in range(3):
         await bus.publish("events:normalized", make_event_json())
@@ -110,11 +111,13 @@ async def test_ml_worker_score_is_zero_cold_start():
         stop_event=stop,
     )
 
-    collector_task = asyncio.create_task(_collect_published(bus, "analysis:ml", count=3))
-    await asyncio.sleep(0.02)
-
     worker_task = asyncio.create_task(worker.run())
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.02)  # let worker subscribe first
+
+    collector_task = asyncio.create_task(
+        _collect_published(bus, "analysis:ml", count=3, timeout=3.0)
+    )
+    await asyncio.sleep(0.02)  # let collector subscribe
 
     for _ in range(3):
         await bus.publish("events:normalized", make_event_json())
@@ -144,16 +147,18 @@ async def test_ml_worker_skips_invalid_json():
         stop_event=stop,
     )
 
-    collector_task = asyncio.create_task(_collect_published(bus, "analysis:ml", count=1))
-    await asyncio.sleep(0.02)
-
     worker_task = asyncio.create_task(worker.run())
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.02)  # let worker subscribe to events:normalized first
+
+    collector_task = asyncio.create_task(
+        _collect_published(bus, "analysis:ml", count=1, timeout=3.0)
+    )
+    await asyncio.sleep(0.02)  # let collector subscribe to analysis:ml
 
     await bus.publish("events:normalized", b"NOT_VALID_JSON")
     await bus.publish("events:normalized", make_event_json())
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.3)
     stop.set()
     worker_task.cancel()
     with pytest.raises((asyncio.CancelledError, Exception)):

@@ -265,3 +265,39 @@ class IncidentAlertRow(Base):
     title: Mapped[str] = mapped_column(String(500))
     hostname: Mapped[str] = mapped_column(String(255))
     mitre_techniques: Mapped[str] = mapped_column(Text, default="[]")  # JSON
+
+
+class EntityHourlyStatsRow(Base):
+    """Pre-aggregated per-entity stats used as ML feature inputs.
+
+    Populated by a periodic SQL job (or ClickHouse materialised view in prod).
+    One row per (hostname, category, hour_bucket).  The ``hour_bucket`` value
+    is a Unix timestamp truncated to the start of the hour
+    (i.e. timestamp_ns // 3_600_000_000_000 * 3_600).
+
+    Columns mirror the 10-dim feature vector from ``ml_engine/features.py``
+    so the ML worker can back-fill cold-start models from historical aggregates.
+    """
+
+    __tablename__ = "entity_hourly_stats"
+    __table_args__ = (
+        Index("ix_ehs_hostname_cat_hour", "hostname", "category", "hour_bucket"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Unix timestamp truncated to hour start (timestamp_ns // 3_600_000_000_000 * 3_600)
+    hour_bucket: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Aggregates used as ML features
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uid_p50: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    root_fraction: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    error_fraction: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    distinct_processes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    bytes_sent_sum: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    bytes_recv_sum: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    network_event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    distinct_dst_ips: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    alert_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
