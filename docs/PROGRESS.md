@@ -3,7 +3,7 @@
 **Version :** 2.8
 **Dernière mise à jour :** 2026-08-09
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 6 — ML Engine `[~]` EN COURS
+**Phase courante :** Phase 7 — Forensics `[~]` EN COURS
 
 ---
 
@@ -72,23 +72,27 @@
 
 ---
 
-### Phase 6 — ML Engine `[~]` EN COURS
+### Phase 6 — ML Engine `[x]` COMPLÈTE
 
 | # | Module | Statut | Tests | Notes |
 |---|--------|--------|-------|-------|
-| M29 | MLEngine — features.py, anomaly.py, classifier.py, engine.py, ml_worker.py | `[~]` En cours | 42 py | HalfSpaceTrees River, LRU 10 000 modèles, MITREClassifier online, score = 0.7×anomaly + 0.3×classifier, worker asyncio + checkpoint pickle |
+| M29 | MLEngine complet — features, anomaly, classifier, engine, ab_test, ml_worker | `[x]` Mergé | 54 py | P6.01–P6.10 tous livrés |
 
 **Composants livrés (M29) :**
 
-- `ml_engine/features.py` — extraction vecteur 10-dim [0,1] depuis UniversalEvent
-- `ml_engine/anomaly.py` — EntityAnomalyDetector (HalfSpaceTrees River, par hostname×category, LRU 10 000 modèles, window adaptative, decaying-max normalisation, save/load pickle)
-- `ml_engine/classifier.py` — MITREClassifier (LogisticRegression online par technique, entraîné sur alertes confirmées)
-- `ml_engine/engine.py` — MLEngine façade : `ml_score = 0.7×anomaly + 0.3×classifier` + `save_checkpoint()` / `load_checkpoint()`
-- `workers/ml_worker.py` — consomme `events:normalized`, publie `analysis:ml`, checkpoint automatique sur arrêt + chargement au démarrage (P6.06 ✓)
-- Câblage `decision/engine.py` — paramètre `ml_engine` + `trigger_event`
-- Câblage `workers/decision_worker.py` — charge le trigger_event depuis event_repo
+- `ml_engine/features.py` — vecteur 10-dim [0,1] depuis UniversalEvent
+- `ml_engine/anomaly.py` — EntityAnomalyDetector (HalfSpaceTrees River, LRU 10 000 modèles, window adaptative, decaying-max, save/load pickle)
+- `ml_engine/classifier.py` — MITREClassifier (LogisticRegression online par technique)
+- `ml_engine/engine.py` — MLEngine : `ml_score = 0.7×anomaly + 0.3×classifier` + checkpoint
+- `ml_engine/ab_test.py` — ABTestSession champion/challenger, métriques (mean, p95, disagree_rate, promote) — P6.08 ✓
+- `workers/ml_worker.py` — consomme `events:normalized`, publie `analysis:ml`, checkpoint auto — P6.06 ✓
+- `storage/models.py` — EntityHourlyStatsRow (10 agrégats, index composite) — P6.09 ✓
+- `storage/migrations/__init__.py` — refresh_entity_hourly_stats() PostgreSQL + SQLite UNIQUE INDEX
+- Tests FP < 5% workloads propres, recall > 80% DNS exfil + priv esc — P6.10 ✓
 
-**35 tests dans `tests/unit/test_ml_engine.py` + 7 tests dans `tests/unit/test_ml_worker.py` — 299 tests totaux.**
+**311 tests verts (35 ml_engine + 7 ml_worker + 12 quality + 257 existants).**
+
+**Phase 6 ML Engine COMPLÈTE.**
 
 ---
 
