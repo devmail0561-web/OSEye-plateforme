@@ -51,7 +51,7 @@ async def list_incidents(
         )
 
     repo = _get_incident_repo(request)
-    return cast(PageResult[Incident], await repo.list(
+    return cast(PageResult[Incident], await repo.list_incidents(
         hostname=hostname,
         status=status,
         page=page,

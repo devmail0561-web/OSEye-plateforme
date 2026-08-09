@@ -173,8 +173,8 @@ class EntityAnomalyDetector:
         state = self._get_or_create(key, event.category)
         features = extract(event)
 
-        raw = state.model.score_one(features)
-        state.model.learn_one(features)
+        raw: float = state.model.score_one(features)  # type: ignore[no-untyped-call]
+        state.model.learn_one(features)  # type: ignore[no-untyped-call]
         state.count += 1
 
         if state.count < self._min_samples:
@@ -184,7 +184,7 @@ class EntityAnomalyDetector:
         state.decaying_max = max(state.decaying_max * (1.0 - _MAX_DECAY), raw)
         if state.decaying_max == 0.0:
             return 0.0
-        return min(raw / state.decaying_max, 1.0) * 100.0
+        return float(min(raw / state.decaying_max, 1.0) * 100.0)
 
     def save(self, path: str | Path) -> None:
         """Persist the full detector state to *path* via pickle.

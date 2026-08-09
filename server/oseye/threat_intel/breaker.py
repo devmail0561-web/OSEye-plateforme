@@ -9,6 +9,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
+
+_T = TypeVar("_T")
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +50,7 @@ class AsyncCircuitBreaker:
     def state(self) -> str:
         return self._state
 
-    async def call(self, coro_fn: object) -> object:
+    async def call(self, coro_fn: Callable[[], Awaitable[_T]]) -> _T:
         """Execute *coro_fn()* respecting circuit state.
 
         Raises CircuitOpenError if the circuit is open.
@@ -72,7 +76,7 @@ class AsyncCircuitBreaker:
                 self._half_open_probe_in_flight = True
 
         try:
-            result = await coro_fn()  # type: ignore[operator]
+            result = await coro_fn()
         except Exception:
             async with self._lock:
                 self._failure_count += 1

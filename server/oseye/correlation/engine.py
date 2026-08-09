@@ -118,7 +118,9 @@ class CorrelationEngine:
 
         if best_incident is not None and best_score > 0.0:
             await self._repo.add_alert(best_incident.incident_id, event)
-            best_incident.severity = best_linker.max_severity(best_incident.severity, alert.severity)
+            best_incident.severity = best_linker.max_severity(
+                best_incident.severity, alert.severity
+            )
             best_incident.updated_at = datetime.now(UTC)
             best_incident.alert_count += 1
             if alert.alert_id not in best_incident.alert_ids:

@@ -123,7 +123,7 @@ class SQLIncidentRepository:
                 row.alert_ids = json.dumps([str(x) for x in incident.alert_ids])
         return incident
 
-    async def list(
+    async def list_incidents(
         self,
         hostname: str | None,
         status: str | None,

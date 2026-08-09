@@ -22,8 +22,8 @@ from __future__ import annotations
 from river.linear_model import LogisticRegression
 from river.optim import Adam
 
-from oseye.ml_engine.features import extract
 from oseye.core.schema import UniversalEvent
+from oseye.ml_engine.features import extract
 
 _LEARNING_RATE = 0.01
 
@@ -81,7 +81,7 @@ class MITREClassifier:
         features = extract(event)
         max_prob = 0.0
         for model in self._models.values():
-            prob = model.predict_proba_one(features).get(True, 0.0)
+            prob: float = model.predict_proba_one(features).get(True, 0.0)  # type: ignore[no-untyped-call]
             if prob > max_prob:
                 max_prob = prob
 

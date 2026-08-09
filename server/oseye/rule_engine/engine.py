@@ -189,7 +189,8 @@ class RuleEngine:
         tmp_path = str(path) + ".tmp"
         class _Encoder(json.JSONEncoder):
             def default(self, o: object) -> object:
-                import uuid, datetime
+                import datetime
+                import uuid
                 if isinstance(o, uuid.UUID):
                     return str(o)
                 if isinstance(o, (datetime.datetime, datetime.date)):
@@ -207,7 +208,7 @@ class RuleEngine:
         Call on startup before the rule worker begins consuming events.
         """
         try:
-            with open(path, "r") as fh:
+            with open(path) as fh:
                 raw = json.loads(fh.read())
         except Exception as exc:  # noqa: BLE001
             _log.warning("temporal_state_load_failed", path=str(path), error=str(exc))
@@ -234,12 +235,12 @@ class RuleEngine:
         self._stop_event.clear()
         # Correction 1: try inotify-based watchdog first
         try:
-            from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler
+            from watchdog.observers import Observer
 
             engine_ref = self
 
-            class _Handler(FileSystemEventHandler):
+            class _Handler(FileSystemEventHandler):  # type: ignore[misc]
                 def on_any_event(self, event: object) -> None:  # noqa: D102
                     _log.info("rule_engine_change_detected_inotify")
                     engine_ref.reload()

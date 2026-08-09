@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from datetime import UTC, datetime
@@ -15,10 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.storage.models import ApiKeyRow
 
+_log_keys = logging.getLogger(__name__)
 
 _HMAC_SECRET: bytes = os.getenv("OSEYE_SECRET_KEY", "dev-secret-key").encode()
-import logging as _logging
-_log_keys = _logging.getLogger(__name__)
 if not os.getenv("OSEYE_SECRET_KEY"):
     _log_keys.critical(
         "OSEYE_SECRET_KEY not set — using insecure default 'dev-secret-key'. "
