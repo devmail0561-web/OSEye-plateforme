@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
+
+from fastapi import HTTPException
 
 from oseye.threat_intel.cache import MemoryTICache, TICache
 from oseye.threat_intel.models import AggregatedTIReport, ThreatIntelReport
@@ -13,6 +17,10 @@ if TYPE_CHECKING:
     from oseye.core.schema import Alert
 
 logger = logging.getLogger(__name__)
+
+_HASH_RE = re.compile(r"^[0-9a-fA-F]+$")
+_VALID_HASH_LENGTHS = frozenset({32, 40, 64})
+_SHORT_UNAVAILABLE_TTL = 60  # seconds — used when TI providers are unavailable
 
 _DEFAULT_TTL = 3600  # seconds
 _DEFAULT_TIMEOUT = 5.0  # seconds
@@ -53,6 +61,51 @@ class ThreatIntelClient:
     # Public API
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Input validation helpers (SEC-005)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_indicator(indicator: str, indicator_type: Literal["ip", "hash"]) -> None:
+        """Raise HTTPException(400) if *indicator* fails basic format validation.
+
+        SEC-005: prevents private/malformed values from reaching external TI APIs.
+        """
+        if not indicator or len(indicator) > 256:
+            raise HTTPException(
+                status_code=400,
+                detail="Indicator must be a non-empty string of at most 256 characters",
+            )
+
+        if indicator_type == "ip":
+            try:
+                addr = ipaddress.ip_address(indicator)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid IP address: {indicator!r}")
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_multicast
+            ):
+                logger.warning(
+                    "ti_lookup_rejected_non_public indicator=%s reason=non_public_ip", indicator
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Non-routable IP address not queried against TI providers: {indicator}",
+                )
+
+        elif indicator_type == "hash":
+            if not _HASH_RE.fullmatch(indicator) or len(indicator) not in _VALID_HASH_LENGTHS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Invalid hash value: must be hex-only and 32, 40, or 64 characters "
+                        f"(got length={len(indicator)})"
+                    ),
+                )
+
     async def lookup(
         self,
         indicator: str,
@@ -63,6 +116,9 @@ class ThreatIntelClient:
         Results are cached per indicator.  All provider calls run concurrently
         and are bounded by *self._timeout* seconds total.
         """
+        # SEC-005: validate indicator before any external call
+        self._validate_indicator(indicator, indicator_type)
+
         # Cache hit — return early (cache stores the aggregated report keyed by indicator)
         cached = await self._cache.get(indicator_type, indicator)
         if cached is not None:
@@ -83,8 +139,13 @@ class ThreatIntelClient:
                     queried_at=cached.cached_at,
                 )
 
-        # Parallel provider lookups bounded by timeout
+        # Parallel provider lookups bounded by timeout.
+        # TI-005: track actual provider errors (exceptions) separately from
+        # intentional None returns (unsupported indicator type).
+        provider_error_count = 0
+
         async def _call_provider(provider: ThreatIntelProvider) -> ThreatIntelReport | None:
+            nonlocal provider_error_count
             try:
                 if indicator_type == "ip":
                     return await provider.lookup_ip(indicator)
@@ -96,6 +157,7 @@ class ThreatIntelClient:
                     indicator,
                     exc,
                 )
+                provider_error_count += 1
                 return None
 
         try:
@@ -117,13 +179,24 @@ class ThreatIntelClient:
         reports: list[ThreatIntelReport] = []
         for item in raw_results:
             if isinstance(item, BaseException):
+                # Should not happen since _call_provider catches all exceptions,
+                # but handle defensively.
                 logger.warning("ti_provider_exception indicator=%s error=%s", indicator, item)
+                provider_error_count += 1
             elif item is not None:
                 reports.append(item)
+            # item is None: provider intentionally returned None (not supported by
+            # this provider for this indicator type) — TI-005: not counted as error.
 
-        # TI-002: a global timeout with providers configured means TI is unavailable
-        ti_unavailable = (len(raw_results) > 0 and not reports) or (
-            not raw_results and len(self._providers) > 0 and not reports
+        # TI-005 / TI-002: ti_unavailable is True only when providers that are
+        # configured actually failed (raised exceptions or timed out), not when
+        # they returned None by design (e.g. AbuseIPDB for hash lookups).
+        # - provider_error_count > 0: at least one provider threw an exception
+        # - not raw_results: global timeout — no provider had a chance to respond
+        ti_unavailable = (
+            len(self._providers) > 0
+            and not reports
+            and (provider_error_count > 0 or not raw_results)
         )
         aggregated = self._aggregate(
             indicator, indicator_type, reports, ti_unavailable=ti_unavailable
@@ -146,7 +219,9 @@ class ThreatIntelClient:
             },
             cached_at=aggregated.queried_at,
         )
-        await self._cache.set(indicator_type, indicator, stub, ttl=self._cache_ttl)
+        # TI-002: use a short TTL when TI is unavailable to avoid caching stale "no data"
+        ttl = _SHORT_UNAVAILABLE_TTL if aggregated.ti_unavailable else self._cache_ttl
+        await self._cache.set(indicator_type, indicator, stub, ttl=ttl)
 
         return aggregated
 

@@ -243,7 +243,12 @@ class RuleEngine:
             class _Handler(FileSystemEventHandler):  # type: ignore[misc]
                 def on_any_event(self, event: object) -> None:  # noqa: D102
                     _log.info("rule_engine_change_detected_inotify")
-                    engine_ref.reload()
+                    # F-06: catch reload errors so the watchdog thread stays alive
+                    try:
+                        engine_ref.reload()
+                    except Exception as exc:  # noqa: BLE001
+                        _log.error("rule_engine_hot_reload_failed", error=str(exc))
+                        # Continue — watchdog stays alive
 
             observer = Observer()
             observer.schedule(_Handler(), str(self._rules_root), recursive=True)

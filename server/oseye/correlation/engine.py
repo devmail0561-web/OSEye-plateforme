@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from oseye.core.observability import get_logger
 from oseye.core.schema import Incident, IncidentEvent
@@ -79,6 +80,10 @@ class CorrelationEngine:
         self._min_severity = min_severity
         self._auto_close_after = auto_close_after_seconds
 
+    async def get_incident(self, incident_id: UUID) -> Incident | None:
+        """Return the Incident for *incident_id*, or None if not found."""
+        return await self._repo.get(incident_id)
+
     async def process_alert(self, alert: Alert) -> Incident | None:
         """Correlate *alert* into an existing or new Incident.
 
@@ -98,9 +103,10 @@ class CorrelationEngine:
         )
 
         # Correction 2: load all open incidents for this host, not just one
-        since = datetime.now(UTC) - timedelta(
-            seconds=self._linkers[0]._timeframe if self._linkers else 300
-        )
+        # F-04: use the maximum timeframe across all linkers so incidents older
+        # than linkers[0]._timeframe are not invisible when multiple linkers exist.
+        max_tf = max(getattr(lnk, "_timeframe", 300) for lnk in self._linkers)
+        since = datetime.now(UTC) - timedelta(seconds=max_tf)
         candidates = await self._repo.find_open_incidents_for_host(alert.hostname, since)
 
         # Correction 1: score every (linker, incident) pair, pick best match
@@ -145,7 +151,8 @@ class CorrelationEngine:
             alert_ids=[alert.alert_id],
             alert_count=1,
             mitre_tactics=list(alert.mitre_techniques or []),
-            timeframe_seconds=self._linkers[0]._timeframe if self._linkers else 300,
+            # F-04: store the max timeframe so the incident window covers all linkers.
+            timeframe_seconds=max(getattr(lnk, "_timeframe", 300) for lnk in self._linkers),
         )
         incident.timeline = [event]
         await self._repo.create(incident)

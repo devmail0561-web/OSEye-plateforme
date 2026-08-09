@@ -18,11 +18,16 @@
 
 - id: rule_systemd_service_creation
   name: "Création d'un service systemd hors package manager"
-  enabled: true
+  # YAML-006: disabled — les exclusions process_name sont inefficaces pour fanotify
+  # qui n'émet pas ce champ. Cela génèrerait du bruit massif (chaque écriture dans
+  # /etc/systemd/system/ serait alertée, y compris celles des package managers).
+  # Nécessite eBPF ou auditd pour avoir process_name disponible.
+  enabled: false
   severity: medium
   tags: [persistence, systemd_service]
   mitre: [T1543.002]
   platforms: [linux]
+  requires: [ebpf, auditd]
   condition: |
     event.category == "file"
     and (event.type == "modify" or event.type == "close_write")
@@ -35,8 +40,11 @@
   threshold: null
   actions: [ALERT]
   explanation: >
-    Création d'un fichier service systemd par un utilisateur non-root.
+    Création d'un fichier service systemd hors package manager connu.
     Indique une tentative de persistance via un service système.
+    NOTE (YAML-006): désactivée par défaut — fanotify n'émet pas process_name,
+    rendant les exclusions inopérantes et générant du bruit massif.
+    Activer uniquement avec eBPF ou auditd (requires: [ebpf, auditd]).
 
 - id: rule_rc_local_modification
   name: "Modification de /etc/rc.local"

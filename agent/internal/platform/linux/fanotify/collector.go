@@ -22,7 +22,7 @@ var _ collector.Collector = (*FanotifyCollector)(nil)
 type FanotifyCollector struct {
 	name       string
 	paths      []string
-	fd         int
+	fd         atomic.Int32
 	closeOnce  sync.Once
 	logger     *slog.Logger
 	stopCh     chan struct{}
@@ -41,10 +41,10 @@ func NewFanotifyCollector(paths []string, logger *slog.Logger) (*FanotifyCollect
 	c := &FanotifyCollector{
 		name:   "fanotify",
 		paths:  paths,
-		fd:     -1,
 		logger: logger,
 		stopCh: make(chan struct{}),
 	}
+	c.fd.Store(-1)
 	c.throttle.Store(1.0)
 	return c, nil
 }
@@ -70,8 +70,7 @@ func (c *FanotifyCollector) Health() collector.CollectorHealth {
 }
 
 func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
-	var err error
-	c.fd, err = unix.FanotifyInit(
+	fd, err := unix.FanotifyInit(
 		unix.FAN_CLASS_NOTIF|unix.FAN_CLOEXEC|unix.FAN_NONBLOCK,
 		unix.O_RDONLY|unix.O_LARGEFILE,
 	)
@@ -80,9 +79,10 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 		c.errorCount.Add(1)
 		return fmt.Errorf("fanotify_init: %w (requires CAP_SYS_ADMIN)", err)
 	}
+	c.fd.Store(int32(fd))
 
 	for _, path := range c.paths {
-		err = unix.FanotifyMark(c.fd, unix.FAN_MARK_ADD,
+		err = unix.FanotifyMark(fd, unix.FAN_MARK_ADD,
 			unix.FAN_OPEN|unix.FAN_MODIFY|unix.FAN_CLOSE_WRITE|unix.FAN_ACCESS,
 			unix.AT_FDCWD, path)
 		if err != nil {
@@ -102,8 +102,8 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 	default:
 		close(c.stopCh)
 	}
-	if c.fd >= 0 {
-		c.closeOnce.Do(func() { unix.Close(c.fd) })
+	if fd := c.fd.Load(); fd >= 0 {
+		c.closeOnce.Do(func() { unix.Close(int(c.fd.Load())) })
 	}
 	return nil
 }
@@ -115,8 +115,8 @@ func (c *FanotifyCollector) Stop() error {
 	default:
 		close(c.stopCh)
 	}
-	if c.fd >= 0 {
-		c.closeOnce.Do(func() { unix.Close(c.fd) })
+	if fd := c.fd.Load(); fd >= 0 {
+		c.closeOnce.Do(func() { unix.Close(int(c.fd.Load())) })
 	}
 	return nil
 }
@@ -132,7 +132,7 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 		default:
 		}
 
-		n, err := unix.Read(c.fd, buf)
+		n, err := unix.Read(int(c.fd.Load()), buf)
 		if err != nil {
 			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
 				time.Sleep(50 * time.Millisecond)

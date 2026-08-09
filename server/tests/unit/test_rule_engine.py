@@ -10,10 +10,9 @@ from pathlib import Path
 import pytest
 
 from oseye.core.schema import UniversalEvent
-from oseye.rule_engine.evaluator import _eval_expr, evaluate
+from oseye.rule_engine.evaluator import evaluate
 from oseye.rule_engine.models import RuleDefinition
 from oseye.rule_engine.parser import load_all_rules, load_rules_from_file
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -263,14 +262,26 @@ class TestRuleEngine:
         assert engine.enabled_count >= 25
 
     def test_engine_evaluate_shadow_read(self) -> None:
+        """rule_shadow_read is disabled (YAML-003: requires eBPF for uid field).
+        Verify it does NOT fire, and that rule_passwd_write (an enabled rule) fires
+        on a write to /etc/shadow as a sanity check that the engine still works.
+        """
         if not _RULES_ROOT.exists():
             pytest.skip("rules root not found")
         from oseye.rule_engine.engine import RuleEngine
         engine = RuleEngine(rules_root=_RULES_ROOT, hot_reload=False)
-        ev = _event(category="file", type="open", resource="/etc/shadow", uid=1000, os="linux")
-        matches = engine.evaluate(ev)
-        rule_ids = [m.rule_id for m in matches]
-        assert "rule_shadow_read" in rule_ids
+        # rule_shadow_read is now disabled — should not fire
+        ev_read = _event(category="file", type="open", resource="/etc/shadow", uid=1000, os="linux")
+        matches_read = engine.evaluate(ev_read)
+        assert "rule_shadow_read" not in [m.rule_id for m in matches_read], (
+            "rule_shadow_read must be disabled (YAML-003)"
+        )
+        # rule_passwd_write is still enabled — sanity check that file rules work
+        ev_write = _event(
+            category="file", type="modify", resource="/etc/shadow", uid=1000, os="linux"
+        )
+        matches_write = engine.evaluate(ev_write)
+        assert "rule_passwd_write" in [m.rule_id for m in matches_write]
 
     def test_engine_no_match_clean_event(self) -> None:
         if not _RULES_ROOT.exists():
@@ -351,9 +362,11 @@ class TestRuleEngine:
     # --- correction 3 : persistance des fenêtres temporelles ---
 
     def test_temporal_state_save_and_load(self, tmp_path: Path) -> None:
-        import tempfile, os
-        from oseye.rule_engine.engine import RuleEngine
+        import os
+        import tempfile
+
         from oseye.rule_engine import evaluator as ev_mod
+        from oseye.rule_engine.engine import RuleEngine
 
         builtin = tmp_path / "builtin"
         builtin.mkdir()
@@ -419,7 +432,6 @@ class TestRuleWorker:
         from oseye.workers.rule_worker import RuleWorker
 
         bus = InMemoryEventBus()
-        published: list[bytes] = []
 
         class _FakeAlertRepo:
             async def create(self, alert: object) -> object:
@@ -435,8 +447,9 @@ class TestRuleWorker:
         task = asyncio.create_task(worker.run(stop_event=stop))
         await asyncio.sleep(0.05)
 
-        # Publish a shadow read event
-        ev = _event(category="file", type="open", resource="/etc/shadow", uid=1000, os="linux")
+        # Use rule_passwd_write (always enabled) instead of rule_shadow_read
+        # (disabled since YAML-003 — requires eBPF for uid field).
+        ev = _event(category="file", type="modify", resource="/etc/shadow", uid=1000, os="linux")
         await bus.publish("events:normalized", ev.model_dump_json().encode())
         await asyncio.sleep(0.1)
 

@@ -10,8 +10,14 @@ PATTERNS: list[tuple[re.Pattern[str], str]] = [
         r"\1=***",
     ),
     (
-        # -p password (with space) or -pPassword (attached, as mysql/mysqldump use)
-        re.compile(r"(?i)(-p)(\s+\S+|\S+)"),
+        # SEC-004: only mask recognised password flags to avoid destroying forensic
+        # value of flags like -path, -port, -proto, -pid, etc.
+        # Matches: -p VALUE, -p=VALUE, -pass VALUE, -passwd VALUE, -password VALUE,
+        #          --password VALUE / --password=VALUE.
+        # The negative lookbehind (?<!\w) ensures the flag is not part of a longer word.
+        # The separator (space or =) is required to distinguish the -p password flag
+        # from longer flags such as -path, -port, -proto that share the -p prefix.
+        re.compile(r"(?i)(?<!\w)(-p(?:ass(?:word|wd)?)?|--password)(?:[ =])(\S+)"),
         r"\1***",
     ),
     (

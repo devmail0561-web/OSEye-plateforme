@@ -14,3 +14,12 @@ class ThreatIntelProvider(Protocol):
     async def lookup_hash(self, hash_value: str) -> ThreatIntelReport | None: ...
 
     async def close(self) -> None: ...
+
+    def supports(self, indicator_type: str) -> bool:
+        """Return True if this provider supports the given indicator type.
+
+        TI-005: distinguishes "not supported" (None by design) from "error".
+        Providers that do not override this method are assumed to support
+        both "ip" and "hash" for backwards compatibility.
+        """
+        return True

@@ -52,7 +52,9 @@ async def ws_alerts(ws: WebSocket) -> None:
         await ws.close(code=4003)
         return
 
-    await alerts_ws_manager.connect(ws)
+    # SEC-WS-001: pass user_sub so the manager can enforce per-user connection cap
+    user_sub: str | None = payload.get("sub")
+    await alerts_ws_manager.connect(ws, user_sub=user_sub)
     try:
         while True:
             # Keep connection alive; clients can send pings

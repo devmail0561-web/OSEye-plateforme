@@ -161,7 +161,21 @@ class RuleWorker:
             _log.error("alert_create_error", rule_id=match.rule_id, error=str(exc))
             return
 
-        # Publish to TI enrichment pipeline if there are network indicators
+        # F-01: ALWAYS publish alerts:created so CorrelationWorker and DecisionWorker
+        # receive non-network alerts (filesystem, process, privilege escalation, etc.).
+        try:
+            await self._bus.publish(
+                "alerts:created",
+                json.dumps({"alert_id": str(alert.alert_id)}).encode(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "alerts_created_publish_error",
+                alert_id=str(alert.alert_id),
+                error=str(exc),
+            )
+
+        # Publish to TI enrichment pipeline if there are network indicators (optional).
         indicators: dict[str, list[str]] = {"ips": [], "hashes": []}
         if event.dst_ip:
             indicators["ips"].append(event.dst_ip)

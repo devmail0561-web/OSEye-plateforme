@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from concurrent import futures
 
@@ -64,7 +65,11 @@ async def create_grpc_server(settings: Settings, bus: EventBus) -> grpc.aio.Serv
         The EventBus used by the AgentServiceServicer to publish events.
     """
     validator = BatchValidator()
-    servicer = AgentServiceServicer(bus=bus, validator=validator)
+    # SEC-002: pass the running event loop so IngestEvents / ReceivePolicy /
+    # StreamCommands can bridge from gRPC's sync threads back to the async bus
+    # via run_coroutine_threadsafe instead of the isolated asyncio.run() fallback.
+    loop = asyncio.get_event_loop()
+    servicer = AgentServiceServicer(bus=bus, validator=validator, loop=loop)
 
     server = grpc.aio.server(
         futures.ThreadPoolExecutor(max_workers=settings.grpc_max_workers),

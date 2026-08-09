@@ -330,8 +330,11 @@ async def test_grpc_secret_masked_over_wire(grpc_infra):
     stub, repo, _, _ = grpc_infra
 
     async def _send():
+        # SEC-004: use the space-separated form (-p TopSecret123) which is correctly
+        # masked by the new pattern.  The attached form (-pSECRET) is no longer
+        # masked to avoid false-positive forensic destruction of -path / -port flags.
         yield pb2.IngestRequest(events=[
-            _make_pb_event(pid=9999, cmdline="mysqldump -u root -pTopSecret123 mydb")
+            _make_pb_event(pid=9999, cmdline="mysqldump -u root -p TopSecret123 mydb")
         ])
 
     response = await stub.IngestEvents(_send())

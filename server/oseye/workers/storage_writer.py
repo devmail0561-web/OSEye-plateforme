@@ -23,6 +23,10 @@ _logger = get_logger(__name__)
 
 TOPIC = "events:normalized"
 
+# F-05: maximum number of consecutive flush failures before the accumulated
+# batch is dropped (rather than growing without bound).
+MAX_FLUSH_FAILURES = 5
+
 
 class StorageWriter:
     """Consumes normalised events from the bus and persists them in batches."""
@@ -40,6 +44,8 @@ class StorageWriter:
         self._batch_max_size = batch_max_size
         self._batch: list[UniversalEvent] = []
         self._total_written = 0
+        # F-05: track consecutive flush failures to prevent unbounded accumulation.
+        self._consecutive_failures: int = 0
 
     async def run(self, *, stop_event: asyncio.Event | None = None) -> None:
         """Main loop — runs until *stop_event* is set or task is cancelled.
@@ -95,8 +101,38 @@ class StorageWriter:
         try:
             await self._repo.insert_batch(batch)
             self._total_written += len(batch)
+            self._consecutive_failures = 0
             _logger.info("storage_writer_flushed", count=len(batch))
         except Exception as exc:  # noqa: BLE001
-            # Restore batch so events are not permanently lost on transient DB errors
-            self._batch = batch + self._batch
-            _logger.error("storage_writer_flush_error", error=str(exc), requeued=len(batch))
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= MAX_FLUSH_FAILURES:
+                # F-05: persistent DB failure — drop the batch to prevent
+                # unbounded memory accumulation, and route to dead-letter topic.
+                _logger.error(
+                    "storage_writer_batch_dropped",
+                    error=str(exc),
+                    dropped=len(batch),
+                    consecutive_failures=self._consecutive_failures,
+                )
+                try:
+                    dead_letter_payload = json.dumps(
+                        {
+                            "reason": "storage_flush_failed",
+                            "dropped_count": len(batch),
+                            "consecutive_failures": self._consecutive_failures,
+                            "error": str(exc),
+                        }
+                    ).encode()
+                    await self._bus.publish("events:dead_letter", dead_letter_payload)
+                except Exception as dl_exc:  # noqa: BLE001
+                    _logger.error("storage_writer_dead_letter_failed", error=str(dl_exc))
+                self._consecutive_failures = 0
+            else:
+                # Transient error — re-queue for next flush attempt
+                self._batch = batch + self._batch
+                _logger.error(
+                    "storage_writer_flush_error",
+                    error=str(exc),
+                    requeued=len(batch),
+                    consecutive_failures=self._consecutive_failures,
+                )

@@ -19,11 +19,11 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
@@ -67,35 +67,39 @@ def _get_alert_repo(request: Request) -> Any:
 # ---------------------------------------------------------------------------
 
 class _CreateCaseBody(BaseModel):
-    title: str
+    # SEC-CASES-001: length constraints to prevent DoS via oversized payloads
+    title: Annotated[str, StringConstraints(min_length=1, max_length=500)]
     severity: str
-    description: str = ""
-    tags: list[str] = []
-    alert_ids: list[UUID] = []
-    event_ids: list[UUID] = []
+    description: Annotated[str, StringConstraints(max_length=10_000)] = ""
+    tags: list[str] = Field(default_factory=list, max_length=50)
+    alert_ids: list[UUID] = Field(default_factory=list, max_length=500)
+    event_ids: list[UUID] = Field(default_factory=list, max_length=500)
 
 
 class _UpdateCaseBody(BaseModel):
-    title: str | None = None
-    description: str | None = None
+    # SEC-CASES-001: length constraints mirror _CreateCaseBody
+    title: Annotated[str, StringConstraints(min_length=1, max_length=500)] | None = None
+    description: Annotated[str, StringConstraints(max_length=10_000)] | None = None
     severity: str | None = None
     status: str | None = None
     assigned_to: str | None = None
-    tags: list[str] | None = None
+    tags: list[str] | None = Field(default=None, max_length=50)
 
 
 class _AddNoteBody(BaseModel):
-    content: str
+    # SEC-CASES-001: cap note content at 50 000 chars
+    content: Annotated[str, StringConstraints(min_length=1, max_length=50_000)]
 
 
 class _AddEvidenceBody(BaseModel):
     type: str
-    content: str
+    # SEC-CASES-001: cap evidence content at 1 MB (characters)
+    content: Annotated[str, StringConstraints(min_length=1, max_length=1_000_000)]
     description: str | None = None
 
 
 class _CloseBody(BaseModel):
-    resolution: str = ""
+    resolution: Annotated[str, StringConstraints(max_length=10_000)] = ""
 
 
 # ---------------------------------------------------------------------------

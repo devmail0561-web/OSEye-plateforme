@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
 from oseye.threat_intel.breaker import AsyncCircuitBreaker, CircuitOpenError
 from oseye.threat_intel.models import ThreatIntelReport
+from oseye.threat_intel.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -95,49 +96,51 @@ class VirusTotalProvider:
         data: dict[str, Any] = response.json().get("data", {})
         return self._parse_report(indicator, indicator_type, data)
 
+    def supports(self, indicator_type: str) -> bool:
+        """VirusTotal supports both IP and hash lookups (TI-005)."""
+        return indicator_type in ("ip", "hash")
+
+    async def _lookup_with_retry(
+        self, url: str, indicator: str, indicator_type: str
+    ) -> ThreatIntelReport | None:
+        """Execute the HTTP lookup with exponential-backoff retry.
+
+        TI-003: the entire retry loop is wrapped in a *single* breaker.call() so
+        that only one logical failure (not one per attempt) is counted against the
+        circuit breaker.
+        TI-004: retry_async already short-circuits on 4xx errors without retrying.
+        """
+        try:
+            return await self._breaker.call(
+                lambda: retry_async(
+                    lambda: self._do_lookup(url, indicator, indicator_type),
+                    attempts=3,
+                    base_delay=0.5,
+                    label=f"virustotal/{indicator_type}/{indicator}",
+                )
+            )
+        except CircuitOpenError:
+            logger.warning(
+                "VirusTotal circuit open — skipping lookup for %s", indicator
+            )
+            return None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("VirusTotal lookup failed for %s: %s", indicator, exc)
+            return None
+
     async def lookup_ip(self, ip: str) -> ThreatIntelReport | None:
         if not self._api_key:
             return None
-        url = f"{_VT_BASE_URL}/ip_addresses/{ip}"
-        delay = 0.5
-        for attempt in range(1, 4):
-            try:
-                result = await self._breaker.call(lambda: self._do_lookup(url, ip, "ip"))
-                return result
-            except CircuitOpenError:
-                logger.warning("VirusTotal circuit open — skipping lookup for %s", ip)
-                return None
-            except Exception as exc:  # noqa: BLE001
-                if attempt == 3:
-                    logger.warning("VirusTotal lookup_ip failed for %s: %s", ip, exc)
-                    return None
-                logger.debug("VirusTotal retry attempt=%d for %s: %s", attempt, ip, exc)
-            await asyncio.sleep(delay)
-            delay *= 2
-        return None
+        # TI-001: URL-encode the indicator to prevent path traversal
+        url = f"{_VT_BASE_URL}/ip_addresses/{quote(ip, safe='')}"
+        return await self._lookup_with_retry(url, ip, "ip")
 
     async def lookup_hash(self, hash_value: str) -> ThreatIntelReport | None:
         if not self._api_key:
             return None
-        url = f"{_VT_BASE_URL}/files/{hash_value}"
-        delay = 0.5
-        for attempt in range(1, 4):
-            try:
-                result = await self._breaker.call(
-                    lambda: self._do_lookup(url, hash_value, "hash")
-                )
-                return result
-            except CircuitOpenError:
-                logger.warning("VirusTotal circuit open — skipping hash lookup for %s", hash_value)
-                return None
-            except Exception as exc:  # noqa: BLE001
-                if attempt == 3:
-                    logger.warning("VirusTotal lookup_hash failed for %s: %s", hash_value, exc)
-                    return None
-                logger.debug("VirusTotal retry attempt=%d for %s: %s", attempt, hash_value, exc)
-            await asyncio.sleep(delay)
-            delay *= 2
-        return None
+        # TI-001: URL-encode the indicator to prevent path traversal
+        url = f"{_VT_BASE_URL}/files/{quote(hash_value, safe='')}"
+        return await self._lookup_with_retry(url, hash_value, "hash")
 
     async def close(self) -> None:
         if self._owns_client:

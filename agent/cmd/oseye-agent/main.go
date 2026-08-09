@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -151,7 +152,10 @@ func main() {
 
 	// ── Batcher + send loop ───────────────────────────────────────────────────
 	batcher := transport.NewBatcher(cfg.BatchSize, cfg.BatchTimeout)
+	var batcherWg sync.WaitGroup
+	batcherWg.Add(1)
 	go func() {
+		defer batcherWg.Done()
 		err := batcher.Run(ctx, mgr.Events(), func(batch []collector.RawEvent) error {
 			return sendBatch(ctx, log, client, buf, ch, mp, batch)
 		})
@@ -163,6 +167,9 @@ func main() {
 	// ── Wait for shutdown + drain ─────────────────────────────────────────────
 	<-ctx.Done()
 	mgr.Stop()
+	// Wait for the batcher goroutine to finish before touching buf, preventing
+	// a SQLite write-after-close race at shutdown (GO-004).
+	batcherWg.Wait()
 
 	// Drain buffer: flush remaining buffered events to server with a deadline.
 	if client != nil {

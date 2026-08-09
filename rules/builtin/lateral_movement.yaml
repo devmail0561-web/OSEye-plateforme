@@ -27,22 +27,29 @@
     Peut indiquer un mouvement latéral depuis une machine compromise vers d'autres cibles.
 
 - id: rule_port_scan
-  name: "Scan de ports (>20 connexions TCP/30s vers IPs différentes)"
+  name: "Scan de ports (>50 connexions TCP new/30s)"
   enabled: true
   severity: high
   tags: [lateral_movement, discovery, port_scan]
   mitre: [T1046]
   platforms: [linux]
+  # YAML-007: le rule engine ne supporte pas count_distinct nativement.
+  # La règle compte toutes les connexions TCP new, pas les IPs distinctes.
+  # Le threshold a été augmenté à 50 pour réduire les faux positifs immédiats.
+  known_limitation: "counts all TCP new connections, not distinct destination IPs"
   condition: |
     event.category == "network"
     and event.protocol == "tcp"
     and event.type == "new"
   timeframe: 30
-  threshold: 20
+  threshold: 50
   actions: [ALERT]
   explanation: >
-    Volume élevé de connexions TCP refusées en 30 secondes.
+    Plus de 50 connexions TCP new en 30 secondes depuis le même host.
     Pattern typique d'un scan de ports (nmap, masscan).
+    NOTE (YAML-007): cette règle compte toutes les connexions TCP new (pas
+    nécessairement vers des IPs distinctes) — le rule engine ne supporte pas
+    count_distinct nativement. Threshold augmenté à 50 pour réduire les faux positifs.
 
 - id: rule_rsync_scp_large_transfer
   name: "Transfert de données volumineux via rsync/scp"

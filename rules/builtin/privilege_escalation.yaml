@@ -64,28 +64,28 @@
     elle permet l'exécution de code avec privilèges élargis sans sudo complet.
 
 - id: rule_ptrace_injection
-  name: "Injection de processus via ptrace"
+  name: "Injection de processus via ptrace (wrappers userspace)"
   enabled: true
   severity: critical
   tags: [privilege_escalation, process_injection]
   mitre: [T1055.008]
   platforms: [linux]
+  # YAML-005: event.type == "ptrace" n'est émis par aucun adapter (ni fanotify,
+  # ni netlink, ni eBPF actuel). La branche a été supprimée pour éviter les
+  # faux positifs. La détection repose uniquement sur les wrappers userspace
+  # gdb et strace appelés avec --pid/-p.
   condition: |
     event.category == "process"
-    and (
-      event.type == "ptrace"
-      or (
-        (event.executable contains "gdb" or event.executable contains "strace")
-        and (event.cmdline contains "--pid" or event.cmdline contains "-p ")
-      )
-    )
+    and (event.executable contains "gdb" or event.executable contains "strace")
+    and (event.cmdline contains "--pid" or event.cmdline contains "-p ")
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Utilisation de ptrace pour s'attacher à un processus (via syscall ptrace direct
-    ou via gdb/strace avec --pid/-p). Vecteur classique d'injection de code et
-    d'escalade de privilèges.
+    Utilisation de gdb ou strace avec --pid/-p pour s'attacher à un processus en cours.
+    Vecteur classique d'injection de code et d'escalade de privilèges.
+    NOTE (YAML-005): la détection via syscall ptrace direct (event.type == "ptrace")
+    a été supprimée car ce type d'événement n'est émis par aucun adapter disponible.
 
 - id: rule_polkit_abuse
   name: "Exploitation potentielle de polkit"

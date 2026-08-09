@@ -18,12 +18,31 @@ from oseye.storage.models import ApiKeyRow
 
 _log_keys = logging.getLogger(__name__)
 
-_HMAC_SECRET: bytes = os.getenv("OSEYE_SECRET_KEY", "dev-secret-key").encode()
-if not os.getenv("OSEYE_SECRET_KEY"):
-    _log_keys.critical(
-        "OSEYE_SECRET_KEY not set — using insecure default 'dev-secret-key'. "
-        "All API key HMACs are forgeable. Set this env var before production deployment."
-    )
+
+def _load_hmac_secret() -> bytes:
+    """Load and validate OSEYE_SECRET_KEY from the environment.
+
+    Raises RuntimeError if the variable is absent or too short (< 32 chars),
+    so the process refuses to start with an insecure default.
+    """
+    raw = os.getenv("OSEYE_SECRET_KEY", "")
+    if not raw:
+        _log_keys.critical(
+            "OSEYE_SECRET_KEY not set — refusing to start with insecure default"
+        )
+        raise RuntimeError(
+            "OSEYE_SECRET_KEY environment variable is required. "
+            "Set it to a random string of at least 32 characters."
+        )
+    if len(raw) < 32:
+        raise RuntimeError(
+            f"OSEYE_SECRET_KEY is too short ({len(raw)} chars). "
+            "Minimum 32 characters required."
+        )
+    return raw.encode()
+
+
+_HMAC_SECRET: bytes = _load_hmac_secret()
 
 
 def _hash_key(raw: str) -> str:

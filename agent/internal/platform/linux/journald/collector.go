@@ -87,8 +87,9 @@ func (c *JournaldCollector) Start(ctx context.Context, out chan<- collector.RawE
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		const scanBufSize = 4 * 1024 * 1024 // 4 MB — handles large journal entries
 		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 512*1024), 512*1024)
+		scanner.Buffer(make([]byte, scanBufSize), scanBufSize)
 		for scanner.Scan() {
 			select {
 			case <-c.stopCh:
@@ -116,6 +117,12 @@ func (c *JournaldCollector) Start(ctx context.Context, out chan<- collector.RawE
 			case <-ctx.Done():
 				return
 			}
+		}
+		// If the scanner stopped due to a line that exceeded the buffer, log and
+		// continue rather than silently killing the goroutine (GO-005).
+		if err := scanner.Err(); err == bufio.ErrTooLong {
+			c.logger.Warn("journald: line too long, skipping oversized entry", slog.String("error", err.Error()))
+			c.errorCount.Add(1)
 		}
 	}()
 

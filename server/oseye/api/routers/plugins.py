@@ -11,6 +11,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,12 @@ from pydantic import BaseModel
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
+
+# SEC-PLUGIN-001: only allow plugin installs from this directory (configurable via env)
+_DEFAULT_PLUGIN_UPLOAD_DIR = "/tmp/oseye-plugin-uploads"  # noqa: S108
+_PLUGIN_UPLOAD_DIR = Path(
+    os.environ.get("OSEYE_PLUGIN_UPLOAD_DIR", _DEFAULT_PLUGIN_UPLOAD_DIR)
+).resolve()
 
 _logger = get_logger(__name__)
 
@@ -74,12 +81,27 @@ async def install_plugin(
     body: _InstallBody,
     _: dict[str, Any] = Depends(_require_admin),
 ) -> dict[str, Any]:
+    # SEC-PLUGIN-001: resolve the path and verify it is within the allowed upload directory
+    resolved = Path(body.path).resolve()
+    if not resolved.is_relative_to(_PLUGIN_UPLOAD_DIR):
+        _logger.warning(
+            "plugin_install_path_traversal_blocked path=%s allowed_base=%s",
+            resolved,
+            _PLUGIN_UPLOAD_DIR,
+        )
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Plugin path must be under the allowed upload directory "
+                f"({_PLUGIN_UPLOAD_DIR})"
+            ),
+        )
+
     mgr = _get_plugin_manager(request)
-    path = Path(body.path)
-    if not path.exists():
+    if not resolved.exists():
         raise HTTPException(status_code=422, detail=f"Path not found: {body.path}")
     try:
-        info = await mgr.install(path, verify=body.verify)
+        info = await mgr.install(resolved, verify=body.verify)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

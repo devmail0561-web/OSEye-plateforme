@@ -82,6 +82,10 @@ func (c *NetlinkCollector) Start(ctx context.Context, out chan<- collector.RawEv
 	}
 	defer c.running.Store(false)
 
+	// Reset known connections on each (re)start to avoid spurious "closed"
+	// events from stale state carried over from a previous run (GO-006).
+	c.known = make(map[string]bool)
+
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 

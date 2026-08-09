@@ -33,7 +33,7 @@ type InotifyWatch struct {
 type InotifyCollector struct {
 	name       string
 	watches    []InotifyWatch
-	fd         int
+	fd         atomic.Int32
 	closeOnce  sync.Once
 	wdsMu      sync.RWMutex
 	wds        map[int]string
@@ -57,11 +57,11 @@ func NewInotifyCollector(watches []InotifyWatch, logger *slog.Logger) (*InotifyC
 	c := &InotifyCollector{
 		name:    "inotify",
 		watches: watches,
-		fd:      -1,
 		wds:     make(map[int]string),
 		logger:  logger,
 		stopCh:  make(chan struct{}),
 	}
+	c.fd.Store(-1)
 	c.throttle.Store(1.0)
 	return c, nil
 }
@@ -87,13 +87,13 @@ func (c *InotifyCollector) Health() collector.CollectorHealth {
 }
 
 func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
-	var err error
-	c.fd, err = unix.InotifyInit1(unix.IN_NONBLOCK | unix.IN_CLOEXEC)
+	fd, err := unix.InotifyInit1(unix.IN_NONBLOCK | unix.IN_CLOEXEC)
 	if err != nil {
 		c.lastError.Store(err.Error())
 		c.errorCount.Add(1)
 		return fmt.Errorf("inotify_init: %w", err)
 	}
+	c.fd.Store(int32(fd))
 
 	for _, watch := range c.watches {
 		if err := c.addWatch(watch); err != nil {
@@ -112,8 +112,8 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 	default:
 		close(c.stopCh)
 	}
-	if c.fd >= 0 {
-		c.closeOnce.Do(func() { unix.Close(c.fd) })
+	if fd := c.fd.Load(); fd >= 0 {
+		c.closeOnce.Do(func() { unix.Close(int(c.fd.Load())) })
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func (c *InotifyCollector) Stop() error {
 	default:
 		close(c.stopCh)
 	}
-	if c.fd >= 0 {
+	if fd := c.fd.Load(); fd >= 0 {
 		c.wdsMu.RLock()
 		wds := make([]int, 0, len(c.wds))
 		for wd := range c.wds {
@@ -133,9 +133,9 @@ func (c *InotifyCollector) Stop() error {
 		}
 		c.wdsMu.RUnlock()
 		for _, wd := range wds {
-			_, _ = unix.InotifyRmWatch(c.fd, uint32(wd))
+			_, _ = unix.InotifyRmWatch(int(fd), uint32(wd))
 		}
-		c.closeOnce.Do(func() { unix.Close(c.fd) })
+		c.closeOnce.Do(func() { unix.Close(int(c.fd.Load())) })
 	}
 	return nil
 }
@@ -146,7 +146,7 @@ func (c *InotifyCollector) addWatch(watch InotifyWatch) error {
 		mask = unix.IN_CREATE | unix.IN_DELETE | unix.IN_MODIFY | unix.IN_MOVED_FROM | unix.IN_MOVED_TO
 	}
 
-	wd, err := unix.InotifyAddWatch(c.fd, watch.Path, mask)
+	wd, err := unix.InotifyAddWatch(int(c.fd.Load()), watch.Path, mask)
 	if err != nil {
 		return fmt.Errorf("inotify_add_watch(%s): %w", watch.Path, err)
 	}
@@ -175,7 +175,7 @@ func (c *InotifyCollector) addRecursive(root string, mask uint32) error {
 			return nil
 		}
 
-		wd, err := unix.InotifyAddWatch(c.fd, path, mask)
+		wd, err := unix.InotifyAddWatch(int(c.fd.Load()), path, mask)
 		if err != nil {
 			c.logger.Warn("failed to watch subdir", slog.String("path", path), slog.String("error", err.Error()))
 			return nil
@@ -199,7 +199,7 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 		default:
 		}
 
-		n, err := unix.Read(c.fd, buf)
+		n, err := unix.Read(int(c.fd.Load()), buf)
 		if err != nil {
 			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
 				time.Sleep(50 * time.Millisecond)
@@ -217,6 +217,9 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 
 		offset := 0
 		for offset < n {
+			if offset+unix.SizeofInotifyEvent > n {
+				break
+			}
 			event := (*unix.InotifyEvent)(unsafe.Pointer(&buf[offset]))
 
 				name := ""

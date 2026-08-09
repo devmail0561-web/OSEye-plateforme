@@ -77,6 +77,9 @@ func Load() (*Config, error) {
 		),
 		SyslogAddr: getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 

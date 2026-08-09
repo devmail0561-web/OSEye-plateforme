@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections import defaultdict
+from collections import OrderedDict
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
@@ -27,19 +27,36 @@ _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # F2 / SEC-003: detect weak or missing credentials at startup
 _WEAK_DEFAULTS: frozenset[str] = frozenset({"admin123", "analyst123"})
 
+# SEC-AUTH-002: maximum total session lifetime (absolute cap for refresh chains)
+_MAX_SESSION_LIFETIME_SECONDS: float = 24 * 3600  # 24 hours
+
 # ---------------------------------------------------------------------------
-# SEC-006: in-memory rate limiter for /auth/refresh
+# SEC-006: in-memory rate limiter for /auth/refresh — bounded LRU to 10 000 IPs
 # ---------------------------------------------------------------------------
-_refresh_rate_store: dict[str, list[float]] = defaultdict(list)
+_RATE_STORE_CAP = 10_000
+_refresh_rate_store: OrderedDict[str, list[float]] = OrderedDict()
 
 
 def _check_rate_limit(ip: str, max_calls: int = 10, window_seconds: float = 60.0) -> None:
-    """Raise HTTP 429 if *ip* has exceeded *max_calls* within *window_seconds*."""
+    """Raise HTTP 429 if *ip* has exceeded *max_calls* within *window_seconds*.
+
+    SEC-006: the store is capped at _RATE_STORE_CAP entries (LRU eviction) to
+    prevent unbounded growth under floods of distinct source IPs.
+    """
     now = time.monotonic()
-    _refresh_rate_store[ip] = [t for t in _refresh_rate_store[ip] if now - t < window_seconds]
-    if len(_refresh_rate_store[ip]) >= max_calls:
+    timestamps = _refresh_rate_store.get(ip, [])
+    timestamps = [t for t in timestamps if now - t < window_seconds]
+    if len(timestamps) >= max_calls:
         raise HTTPException(status_code=429, detail="Too many requests")
-    _refresh_rate_store[ip].append(now)
+    timestamps.append(now)
+
+    # Update the OrderedDict — move to end (most-recently-used)
+    _refresh_rate_store[ip] = timestamps
+    _refresh_rate_store.move_to_end(ip)
+
+    # Evict oldest entries when cap is exceeded
+    while len(_refresh_rate_store) > _RATE_STORE_CAP:
+        _refresh_rate_store.popitem(last=False)
 
 
 def _hash(pw: str) -> str:
@@ -124,11 +141,31 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
     """Refresh a token by verifying the existing one and issuing a new one.
 
     SEC-006: rate-limited to 10 requests per 60 seconds per IP.
+    SEC-AUTH-002: reject refresh if the absolute session lifetime (now - iat) exceeds
+    _MAX_SESSION_LIFETIME_SECONDS to prevent indefinite refresh chains.
     """
     client_ip: str = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
     handler = request.app.state.jwt_handler
     payload = handler.verify_token(token)
+
+    # SEC-AUTH-002: enforce absolute session lifetime
+    iat = payload.get("iat")
+    if iat is not None:
+        # PyJWT decodes iat as an int (Unix timestamp) or a datetime depending on version
+        if isinstance(iat, (int, float)):
+            age = time.time() - float(iat)
+        else:
+            # datetime object — use .timestamp() when available, else coerce
+            iat_ts = iat.timestamp() if hasattr(iat, "timestamp") else float(iat)
+            age = time.time() - iat_ts
+        if age > _MAX_SESSION_LIFETIME_SECONDS:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session has expired — please log in again",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     subject: str = str(payload.get("sub", ""))
     if subject not in _USERS:
         raise HTTPException(status_code=401, detail="User no longer exists")

@@ -355,9 +355,13 @@ async def test_scenario_secret_masking_in_cmdline(infra):
     original_cn = _grpc_svc._extract_cn_from_context
     _grpc_svc._extract_cn_from_context = lambda _: AGENT_ID  # type: ignore[assignment]
     try:
+        # SEC-004: use the space-separated form (-p S3cr3tP@ssword) which is
+        # correctly masked by the new pattern.  The attached form (-pSECRET) is
+        # intentionally not masked to avoid false-positive forensic destruction
+        # of unrelated flags like -path, -port, -proto.
         sensitive_event = FakePBEvent(
             pid=5555,
-            cmdline="mysql -u root -pS3cr3tP@ssword --host db.internal",
+            cmdline="mysql -u root -p S3cr3tP@ssword --host db.internal",
         )
         servicer.IngestEvents(
             FakeIngestRequest([sensitive_event]),

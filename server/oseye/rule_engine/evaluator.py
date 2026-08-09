@@ -130,9 +130,12 @@ _ALLOWED_NODES = {
     ast.IfExp,
 }
 
-# F-03: detect nested quantifiers that cause catastrophic backtracking
-# Matches patterns like (a+)+, (a*)*, (a+)*, (a|b+)+, (x{2,})+, etc.
-_REDOS_NESTED_RE = re.compile(r'\([^)]*[+*{][^)]*\)\s*[+*{?]')
+# F-03 / F-02: detect nested quantifiers and alternation-based ReDoS patterns.
+# Matches: (a+)+, (a*)*, (a+)*, (a|b+)+, (x{2,})+, (a|aa)+, (\w|\d)+, etc.
+_REDOS_NESTED_RE = re.compile(
+    r'(\([^)]*[+*{][^)]*\)\s*[+*{?])'  # quantifier inside group before outer quantifier
+    r'|(\([^)]*\|[^)]*\)\s*[+*{?])'    # alternation group before outer quantifier
+)
 _MAX_REGEX_LEN = 200
 
 

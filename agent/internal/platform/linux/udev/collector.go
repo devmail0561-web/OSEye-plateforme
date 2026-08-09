@@ -218,6 +218,9 @@ func (c *UdevCollector) startInotify(ctx context.Context, out chan<- collector.R
 
 		offset := 0
 		for offset < n {
+			if offset+unix.SizeofInotifyEvent > n {
+				break
+			}
 			event := (*unix.InotifyEvent)(unsafePtr(&buf[offset]))
 
 			// bounds check before slicing

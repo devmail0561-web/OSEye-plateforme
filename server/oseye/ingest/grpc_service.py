@@ -84,6 +84,11 @@ class AgentServiceServicer:
 
     SEC-PREV-001: agent_id is always taken from the CN of the client certificate
     via ``_require_cn``, never from ``request.agent_id``.
+
+    BUG-004: Ed25519 public-key verification is performed when the agent's key
+    is registered in ``_agent_keys``.  When no key is registered for a CN, the
+    verification step is skipped with a WARNING rather than silently passing.
+    Keys can be pre-loaded via ``register_agent_key(cn, der_public_key_bytes)``.
     """
 
     def __init__(
@@ -91,10 +96,18 @@ class AgentServiceServicer:
         bus: EventBus,
         validator: BatchValidator,
         loop: asyncio.AbstractEventLoop | None = None,
+        agent_keys: dict[str, bytes] | None = None,
     ) -> None:
         self._bus = bus
         self._validator = validator
         self._loop = loop
+        # BUG-004: registry of agent CN → DER-encoded Ed25519 public key bytes.
+        # Populated via register_agent_key() or passed at construction time.
+        self._agent_keys: dict[str, bytes] = dict(agent_keys) if agent_keys else {}
+
+    def register_agent_key(self, cn: str, der_public_key: bytes) -> None:
+        """Register the DER-encoded Ed25519 public key for agent *cn*."""
+        self._agent_keys[cn] = der_public_key
 
     # ------------------------------------------------------------------
     # IngestEvents — client-streaming RPC
@@ -115,7 +128,13 @@ class AgentServiceServicer:
         all_errors: list[str] = []
 
         for request in request_iterator:
-            result = self._validator.validate(request)
+            # BUG-004: look up the agent's public key by CN so Ed25519 signature
+            # verification is actually performed.  If no key is registered, log a
+            # WARNING instead of silently skipping the check.
+            agent_public_key = self._agent_keys.get(cn) if cn else None
+            if agent_public_key is None:
+                _logger.warning("agent_key_not_registered", cn=cn)
+            result = self._validator.validate(request, agent_public_key=agent_public_key)
             total_accepted += result.accepted
             total_rejected += result.rejected
             # [MEDIUM-4] cap accumulated errors to avoid unbounded growth

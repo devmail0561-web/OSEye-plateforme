@@ -1,17 +1,18 @@
-"""Correlation worker — consumes alerts:enriched and groups them into Incidents.
+"""Correlation worker — consumes alerts:created and groups them into Incidents.
 
-Subscribes to ``alerts:enriched``.
+Subscribes to ``alerts:created`` (published by RuleWorker for every alert,
+regardless of whether network indicators are present).  This ensures that
+non-network alerts (filesystem, process, privilege escalation…) reach the
+CorrelationWorker and subsequently the DecisionWorker.
+
 For each message, loads the alert from alert_repo, calls engine.process_alert,
 then stamps alert.incident_chain_id with the resulting incident's ID.
 Publishes ``analysis:correlated`` for the DecisionWorker.
 
-Message format consumed (alerts:enriched)::
+Message format consumed (alerts:created)::
 
     {
-        "alert_id": "<uuid>",
-        "ti_score": 75.0,
-        "malicious": true,
-        "tags": ["brute-force", "ssh"]
+        "alert_id": "<uuid>"
     }
 
 Message format published (analysis:correlated)::
@@ -38,8 +39,11 @@ if TYPE_CHECKING:
 
 _log = get_logger(__name__)
 
-CONSUME_TOPIC = "alerts:enriched"
+CONSUME_TOPIC = "alerts:created"
 PUBLISH_TOPIC = "analysis:correlated"
+
+# F-03: severity order used to detect escalation after process_alert().
+_SEVERITY_ORDER: dict[str, int] = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 class CorrelationWorker:
@@ -114,6 +118,18 @@ class CorrelationWorker:
 
         self._total_processed += 1
 
+        # F-03: snapshot the incident severity *before* process_alert() so we can
+        # detect escalation after the call.
+        incident_before_severity: str | None = None
+        if alert.incident_chain_id is not None:
+            # There may already be an incident for this alert; try to read it.
+            try:
+                existing = await self._engine.get_incident(alert.incident_chain_id)
+                if existing is not None:
+                    incident_before_severity = existing.severity
+            except Exception:  # noqa: BLE001
+                pass  # best-effort; missing snapshot only means we might re-notify
+
         try:
             incident = await self._engine.process_alert(alert)
         except Exception as exc:  # noqa: BLE001
@@ -151,11 +167,18 @@ class CorrelationWorker:
             severity=incident.severity,
         )
 
-        # F-04: only notify DecisionWorker when the incident is newly created
-        # (alert_count == 1).  Subsequent alerts that are linked to an existing
-        # incident do NOT trigger a new Decision — this prevents N alerts to the
-        # same incident from producing N duplicate ISOLATE commands.
-        if incident.alert_count != 1:
+        # F-03: notify DecisionWorker when:
+        #   1. The incident is newly created (alert_count == 1), OR
+        #   2. The incident's severity escalated (e.g. medium → critical).
+        # This ensures the pipeline is re-triggered on severity escalation while
+        # still preventing duplicate ISOLATE commands for non-escalating updates.
+        is_new = incident.alert_count == 1
+        severity_escalated = (
+            incident_before_severity is not None
+            and _SEVERITY_ORDER.get(incident.severity, -1)
+            > _SEVERITY_ORDER.get(incident_before_severity, -1)
+        )
+        if not is_new and not severity_escalated:
             return
 
         correlated_payload = json.dumps(
