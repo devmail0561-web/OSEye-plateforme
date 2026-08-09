@@ -176,12 +176,10 @@ oseye/
 │   │   │   ├── evaluator.py        # Évaluateur d'expressions + fenêtres temporelles
 │   │   │   └── builtin_rules/      # 30+ règles YAML intégrées
 │   │   ├── ml_engine/
-│   │   │   ├── engine.py           # MLEngine — orchestration
-│   │   │   ├── baseline.py         # IsolationForest online (River)
-│   │   │   ├── scorer.py           # Calcul du score comportemental (0-100)
-│   │   │   ├── mitre_classifier.py # Classifier MITRE ATT&CK
-│   │   │   ├── feature_extractor.py
-│   │   │   └── model_store.py      # Versioning + persistance des modèles
+│   │   │   ├── engine.py           # MLEngine — façade, score = 0.7×anomaly + 0.3×classifier
+│   │   │   ├── features.py         # FeatureExtractor — vecteur 10-dim [0,1] depuis UniversalEvent
+│   │   │   ├── anomaly.py          # EntityAnomalyDetector — HalfSpaceTrees River, LRU 10k modèles
+│   │   │   └── classifier.py       # MITREClassifier — LogisticRegression online par technique
 │   │   ├── threat_intel/
 │   │   │   ├── engine.py           # TIEngine — enrichissement events
 │   │   │   ├── cache.py            # Cache Redis/local
@@ -488,6 +486,12 @@ class NormalizerEngine:
 
 Chaque `BaseAdapter` implémente `parse(raw: RawEvent) -> UniversalEvent`.
 
+**Améliorations Phase 6 (2026-08-09) :**
+
+- **`register_package(package_path)`** — découverte automatique des adapters dans un package Python (scan du répertoire, import dynamique) ; permet d'enregistrer les adapters Windows/macOS sans les lister explicitement
+- **Dead-letter queue** — en cas d'échec `publish()`, l'event est envoyé sur le topic `events:dead_letter` plutôt que silencieusement ignoré
+- **Validation des champs** — `timestamp_ns` doit être >0, `bytes_sent`/`bytes_recv` doivent être ≥0, les ports doivent être dans [0, 65535] ; les events invalides sont rejetés avec un log structuré
+
 Le champ `raw.OS` détermine quelle famille d'adapters est utilisée :
 
 ```
@@ -531,10 +535,19 @@ class EventBus(Protocol):
 class RuleEngine:
     rules: list[Rule]           # hot-reloadées via watchdog fichier
     temporal_store: dict        # fenêtres temporelles en mémoire
+    _dispatch_index: dict       # index par catégorie → O(règles_catégorie) au lieu de O(total)
 
     async def evaluate(self, event: UniversalEvent) -> list[RuleMatch]:
         ...
 ```
+
+**Améliorations Phase 6 (2026-08-09) :**
+
+- **Hot-reload watchdog** : inotify avec fallback polling — rechargement des règles sans redémarrage
+- **Index de dispatch par `categories`** : chaque règle déclare ses catégories d'intérêt ; l'évaluation ne parcourt que les règles pertinentes — O(règles_catégorie) au lieu de O(total)
+- **Persistance fenêtres temporelles** : `save_temporal_state()` / `load_temporal_state()` — JSON atomique via `os.replace`, pas pickle (sécurité RCE). Redémarrage sans perte des fenêtres glissantes.
+- **`entity_key` stable** : `hostname:session_id:pid` ou `hostname:ppid:pid` comme fallback (PID reuse guard) — les règles temporelles ne confondent plus deux processus différents ayant eu le même PID
+- **Nouveau champ `categories`** dans `RuleDefinition` et le parser YAML
 
 **Format de règle YAML :**
 
@@ -556,18 +569,37 @@ explanation: "Tentative de lecture du fichier shadow hors root — vol de creden
 
 ### 3.5 ML Engine
 
+**Architecture (Phase 6, 2026-08-09) :**
+
 ```
-FeatureExtractor
- ↓  EntityFeatureVector (fréquences horaires, ratio catégories, network bytes...)
-River.IsolationForest (online, par entity_id)
- ↓  anomaly_score ∈ [0.0, 1.0]
-MITREClassifier (scikit-learn, entraîné offline)
- ↓  mitre_techniques: list[str]
-BehavioralScorer
- ↓  ml_score ∈ [0, 100]
+ml_engine/features.py — FeatureExtractor
+ ↓  vecteur 10 dimensions [0,1] depuis UniversalEvent
+    (ratio catégories, bytes réseau normalisés, uid==0, heure du jour, etc.)
+
+ml_engine/anomaly.py — EntityAnomalyDetector
+ ├── HalfSpaceTrees (River, online learning) — par hostname×category
+ ├── LRU cap : max_models=10 000 (_LRUStore) — borne mémoire
+ ├── window_size_by_category : override de la fenêtre par catégorie d'événement
+ ├── Decaying-max normalisation (decay 0.1%/event) — scores toujours en [0,1]
+ └── save() / load() pickle — persistance des baselines entre redémarrages
+
+ml_engine/classifier.py — MITREClassifier
+ ├── LogisticRegression online (River) — un modèle par technique MITRE
+ ├── Entraîné sur alertes confirmées (feedback loop)
+ └── Prédit les techniques les plus probables pour un vecteur de features
+
+ml_engine/engine.py — MLEngine (façade)
+ └── ml_score = 0.7 × anomaly_score + 0.3 × classifier_score
 ```
 
-Le score comportemental est persisté par événement et par entité. Checkpoint du modèle toutes les 15 minutes.
+**Câblage avec le Decision Engine :**
+
+- `DecisionEngine.__init__()` accepte un paramètre optionnel `ml_engine: MLEngine`
+- `DecisionEngine.decide()` accepte un paramètre `trigger_event: UniversalEvent | None`
+- Si `ml_engine` et `trigger_event` sont fournis, le score ML est calculé à la volée depuis l'event déclencheur
+- `DecisionWorker` charge le `trigger_event` depuis `event_repo` avant d'appeler `decide()`
+
+**35 tests dans `tests/unit/test_ml_engine.py`.**
 
 ### 3.6 Threat Intelligence Engine
 
@@ -596,10 +628,27 @@ CorrelationEngine
       → extrait IncidentChain (sous-graphe connexe) depuis un event racine
 ```
 
+**Améliorations Phase 6 (2026-08-09) :**
+
+- **Score-based linker** : chaque linker expose une méthode `score() → float [0,1]`. Le moteur retient l'incident avec le meilleur score (remplace le comportement "premier gagnant"). `SameHostLinker.score()` intègre un bonus en cas de chevauchement MITRE entre l'alerte et l'incident.
+- **Multi-incident par host** : `find_open_incidents_for_host()` retourne désormais plusieurs incidents ouverts pour un même hôte — une alerte peut être corrélée à l'incident le plus pertinent plutôt qu'au premier trouvé.
+- **Auto-close des incidents** : `close_stale_incidents()` ferme automatiquement les incidents sans activité depuis `auto_close_after_seconds` (configurable). Appelé périodiquement par le CorrelationWorker.
+- **Guard linkers vides** : `CorrelationEngine.__init__()` lève `ValueError` si `linkers=[]` — évite une erreur silencieuse à l'évaluation.
+- **`alert_ids.append()`** : lors du linkage d'une alerte à un incident existant, l'`alert_id` est correctement ajouté à `incident.alert_ids` (F-08 corrigé).
+
 ### 3.8 Decision Engine
 
 ```
-DecisionEngine.decide(correlated: CorrelatedIncident) → Decision
+DecisionEngine(ml_engine: MLEngine | None = None)
+
+DecisionEngine.decide(
+    correlated: CorrelatedIncident,
+    trigger_event: UniversalEvent | None = None
+) → Decision
+ │
+ ├── MLEngine (si fourni + trigger_event disponible)
+ │    ml_score calculé à la volée depuis l'event déclencheur
+ │    ml_score = 0.7 × anomaly_score + 0.3 × classifier_score
  │
  ├── WeightedScorer
  │    score = (rule_score × 0.4) + (ml_score × 0.3) + (ti_score × 0.2) + (correlation_depth × 0.1)
@@ -615,6 +664,8 @@ DecisionEngine.decide(correlated: CorrelatedIncident) → Decision
  │
 └── DecisionJournal  — append-only, hash chain BLAKE3, signé Ed25519
 ```
+
+Le `DecisionWorker` charge le `trigger_event` depuis `event_repo` (via `trigger_alert.trigger_event_id`) avant d'appeler `decide()`, afin que le score ML soit calculé sur l'événement réel et non estimé.
 
 ### 3.9 Storage — Repository Pattern
 
@@ -2070,16 +2121,20 @@ Chaque phase produit un artefact fonctionnel et testable avant de passer à la s
 
 ---
 
-### Phase 6 — ML Engine (Semaines 16–19)
+### Phase 6 — ML Engine (Semaines 16–19) `[~]` EN COURS
 **Objectif :** Baseline comportementale + scores d'anomalie augmentant la détection rule-based.
 
-- Pipeline d'extraction de features
-- IsolationForest online (River) — baseline par entité, apprentissage continu
-- Anomaly scorer alimentant le Decision Engine
-- Classifier MITRE ATT&CK (scikit-learn, dataset labellisé)
-- Score ML stocké par event, exposé dans le contexte d'alerte
+**Livré (2026-08-09) :**
+- Pipeline d'extraction de features — vecteur 10-dim [0,1] (`features.py`)
+- HalfSpaceTrees online (River) — baseline par entité hostname×category, LRU 10k modèles (`anomaly.py`)
+- MITREClassifier — LogisticRegression online par technique, entraîné sur alertes confirmées (`classifier.py`)
+- MLEngine façade — `ml_score = 0.7×anomaly + 0.3×classifier` (`engine.py`)
+- Câblage Decision Engine — paramètre `ml_engine` + `trigger_event`
+- 35 tests unitaires (`tests/unit/test_ml_engine.py`)
+
+**Restant :**
 - Versioning des modèles + stockage DB
-- Checkpoint toutes les 15 minutes
+- Checkpoint périodique (toutes les 15 minutes)
 - Framework A/B test (nouveau modèle vs. modèle courant)
 - Benchmarks : taux de FP sur workloads propres, recall sur scénarios d'attaque
 

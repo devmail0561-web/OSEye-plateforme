@@ -54,10 +54,15 @@ def _purge_old_windows() -> None:
             del _temporal_windows[k]
 
 
-def record_event_for_temporal(rule_id: str, event_dict: dict[str, Any]) -> None:
+def record_event_for_temporal(
+    rule_id: str,
+    event_dict: dict[str, Any],
+    entity_key: str | None = None,
+) -> None:
     """Append an event snapshot to the temporal window store."""
     global _record_count  # noqa: PLW0603
-    entity_key = f"{event_dict.get('hostname', '')}:{event_dict.get('pid', '')}"
+    if entity_key is None:
+        entity_key = f"{event_dict.get('hostname', '')}:{event_dict.get('pid', '')}"
     key = _window_key(rule_id, entity_key)
     cutoff = time.time() - _MAX_TTL
     with _temporal_windows_lock:
@@ -275,14 +280,23 @@ def _eval_expr(
 def evaluate(
     rule: RuleDefinition,
     event: UniversalEvent,
+    entity_key: str | None = None,
 ) -> bool:
     """Return True if *event* matches *rule*.
 
     For temporal rules, also records the event in the sliding window and
     checks the count threshold.
+
+    Parameters
+    ----------
+    entity_key:
+        Stable key for temporal window bucketing.  When provided by the
+        RuleEngine (which applies the PID reuse guard), that value is used.
+        Falls back to hostname:pid for callers that omit it.
     """
     event_dict = event.model_dump()
-    entity_key = f"{event.hostname}:{event.pid}"
+    if entity_key is None:
+        entity_key = f"{event.hostname}:{event.pid}"
 
     # Platform filter
     if rule.platforms and event_dict.get("os") not in rule.platforms:
@@ -300,8 +314,9 @@ def evaluate(
     if rule.timeframe is None:
         return True
 
-    # Temporal rule: record and check threshold
-    record_event_for_temporal(rule.id, event_dict)
+    # Temporal rule: record and check threshold — pass the stable entity_key so
+    # the window bucket matches what _count_events_in_window will query.
+    record_event_for_temporal(rule.id, event_dict, entity_key=entity_key)
     count = _count_events_in_window(rule.id, entity_key, rule.condition, rule.timeframe)
     threshold = rule.threshold if rule.threshold is not None else 1
     return count >= threshold

@@ -97,4 +97,6 @@ class StorageWriter:
             self._total_written += len(batch)
             _logger.info("storage_writer_flushed", count=len(batch))
         except Exception as exc:  # noqa: BLE001
-            _logger.error("storage_writer_flush_error", error=str(exc), dropped=len(batch))
+            # Restore batch so events are not permanently lost on transient DB errors
+            self._batch = batch + self._batch
+            _logger.error("storage_writer_flush_error", error=str(exc), requeued=len(batch))

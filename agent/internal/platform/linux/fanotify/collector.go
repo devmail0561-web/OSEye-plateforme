@@ -153,7 +153,13 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 
 		offset := 0
 		for offset < n {
+			if offset+fanotifyMetadataSize > n {
+				break
+			}
 			meta := (*unix.FanotifyEventMetadata)(unsafe.Pointer(&buf[offset]))
+			if meta.Event_len == 0 {
+				break
+			}
 			if meta.Vers != unix.FANOTIFY_METADATA_VERSION {
 				break
 			}

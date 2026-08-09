@@ -18,8 +18,11 @@ class WebSocketManager:
         self._lock: asyncio.Lock = asyncio.Lock()
 
     async def connect(self, ws: WebSocket) -> None:
-        """Accept the WebSocket and register it."""
-        await ws.accept()
+        """Register an already-accepted WebSocket connection.
+
+        The caller (ws_alerts) is responsible for calling ws.accept() before
+        this method — accepting here a second time would raise RuntimeError.
+        """
         async with self._lock:
             self._connections.add(ws)
         logger.debug("WebSocket connected — total=%d", len(self._connections))

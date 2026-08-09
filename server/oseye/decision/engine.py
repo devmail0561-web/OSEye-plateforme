@@ -25,8 +25,9 @@ from oseye.core.observability import get_logger
 from oseye.core.schema import Decision
 
 if TYPE_CHECKING:
-    from oseye.core.schema import Alert, Incident
+    from oseye.core.schema import Alert, Incident, UniversalEvent
     from oseye.decision.journal import DecisionJournal
+    from oseye.ml_engine.engine import MLEngine
 
 _log = get_logger(__name__)
 
@@ -125,27 +126,42 @@ class DecisionEngine:
         policy_overrides: PolicyOverrides | None = None,
         human_timeout_secs: int = 3600,
         policy_version: str = "v1.0",
+        ml_engine: MLEngine | None = None,
     ) -> None:
         self._journal = journal
         self._overrides = policy_overrides or PolicyOverrides()
         self._human_timeout_secs = human_timeout_secs
         self._policy_version = policy_version
         self._scorer = WeightedScorer()
+        self._ml_engine = ml_engine
         self._lock = asyncio.Lock()
 
     async def decide(
         self,
         incident: Incident,
         alert: Alert | None = None,
+        trigger_event: UniversalEvent | None = None,
     ) -> Decision:
         """Produce a Decision for the given incident.
 
         The journal lock is held during hash computation to ensure serial
         ordering of chain entries even under concurrent correlated incidents.
+
+        Parameters
+        ----------
+        incident:      Correlated incident to decide on.
+        alert:         Optional trigger alert (used for TI and MITRE signals).
+        trigger_event: Optional normalised event that triggered the alert.
+                       When provided, the ML engine scores it to produce
+                       ml_score; without it, ml_score falls back to 0.
         """
         # Derive signal scores from incident context
         rule_score = _SEVERITY_SCORE.get(incident.severity, 50.0)
-        ml_score = 0.0  # ML engine not yet wired; default neutral
+        ml_score = (
+            self._ml_engine.score_event(trigger_event)
+            if self._ml_engine is not None and trigger_event is not None
+            else 0.0
+        )
         ti_score = 100.0 if (alert and alert.ti_triggered) else 0.0
         correlation_depth = incident.alert_count
 

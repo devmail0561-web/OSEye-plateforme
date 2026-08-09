@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"time"
@@ -171,9 +172,10 @@ func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 
 		// Wait for all producers to finish, then close the output channel exactly once.
 		if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-			// Non-cancellation errors are silently swallowed here; callers detect
-			// shutdown via channel close. Structured logging can be added if needed.
-			_ = err
+			// Non-cancellation error: a perf reader crashed or returned an unexpected
+			// error. Log it so operators can distinguish a silent collection gap from
+			// a clean shutdown. The caller detects shutdown via channel close.
+			slog.Error("ebpf reader error", slog.String("error", err.Error()))
 		}
 		close(out)
 	}()
@@ -231,7 +233,7 @@ type execveKernelEvent struct {
 }
 
 func parseExecve(raw []byte) (EBPFEvent, bool) {
-	if len(raw) < 292 { // 8+4+4+4+4+16+256
+	if len(raw) < 296 { // 8+4+4+4+4+16+256 = 296
 		return EBPFEvent{}, false
 	}
 	var k execveKernelEvent

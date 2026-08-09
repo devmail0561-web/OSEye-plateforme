@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from oseye.decision.engine import DecisionEngine
     from oseye.storage.repositories.alerts import SQLAlertRepository
     from oseye.storage.repositories.decisions import SQLDecisionRepository
+    from oseye.storage.repositories.events import SQLEventRepository
     from oseye.storage.repositories.incidents import SQLIncidentRepository
 
 _log = get_logger(__name__)
@@ -45,10 +46,11 @@ class DecisionWorker:
     Parameters
     ----------
     bus:             EventBus instance.
-    engine:          DecisionEngine with journal + scorer.
+    engine:          DecisionEngine with journal + scorer + ML engine.
     decision_repo:   Persistence for Decision objects.
     incident_repo:   Load Incidents by ID.
     alert_repo:      Load trigger Alert by ID.
+    event_repo:      Load trigger UniversalEvent for ML scoring (optional).
     action_executor: Dispatches side-effects after persisting.
     stop_event:      Optional asyncio.Event — worker exits when set.
     """
@@ -61,6 +63,7 @@ class DecisionWorker:
         incident_repo: SQLIncidentRepository,
         alert_repo: SQLAlertRepository,
         action_executor: ActionExecutor,
+        event_repo: SQLEventRepository | None = None,
         stop_event: asyncio.Event | None = None,
     ) -> None:
         self._bus = bus
@@ -68,6 +71,7 @@ class DecisionWorker:
         self._decision_repo = decision_repo
         self._incident_repo = incident_repo
         self._alert_repo = alert_repo
+        self._event_repo = event_repo
         self._action_executor = action_executor
         self._stop_event = stop_event or asyncio.Event()
         self._total_processed = 0
@@ -139,10 +143,22 @@ class DecisionWorker:
                     error=str(exc),
                 )
 
+        # Load the trigger event for ML scoring when possible.
+        trigger_event = None
+        if self._event_repo is not None and alert is not None:
+            try:
+                trigger_event = await self._event_repo.get(alert.trigger_event_id)
+            except Exception as exc:  # noqa: BLE001
+                _log.debug(
+                    "decision_worker_event_load_error",
+                    alert_id=trigger_alert_id_str,
+                    error=str(exc),
+                )
+
         self._total_processed += 1
 
         try:
-            decision = await self._engine.decide(incident, alert=alert)
+            decision = await self._engine.decide(incident, alert=alert, trigger_event=trigger_event)
         except Exception as exc:  # noqa: BLE001
             _log.error(
                 "decision_worker_engine_error",

@@ -632,7 +632,6 @@ async def test_engine_adapter_exception_returns_none() -> None:
     bus = InMemoryEventBus()
     engine = NormalizerEngine(bus, _HOSTNAME)
 
-    # Register a broken adapter that always raises.
     def _broken(_raw: bytes, _host: str, _aid: str) -> None:  # type: ignore[return]
         raise RuntimeError("simulated adapter crash")
 
@@ -640,3 +639,159 @@ async def test_engine_adapter_exception_returns_none() -> None:
 
     result = await engine.process(b"{}", source="broken", os_name="linux", agent_id=_AGENT_ID)
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Corrections — nouveaux tests
+# ---------------------------------------------------------------------------
+
+
+# --- correction 1 : découverte dynamique ---
+
+@pytest.mark.asyncio
+async def test_engine_register_package_discovers_adapters() -> None:
+    """register_package() auto-discovers *Adapter classes from a module."""
+    import types
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    # Build a fake package with two adapter classes
+    fake_pkg = types.ModuleType("fake_adapters")
+    fake_pkg.ProcfsAdapter = ProcfsAdapter  # type: ignore[attr-defined]
+    fake_pkg.FanotifyAdapter = FanotifyAdapter  # type: ignore[attr-defined]
+    fake_pkg.NotAnAdapter = object  # type: ignore[attr-defined]
+
+    count = engine.register_package("linux", fake_pkg)
+    assert count == 2
+    assert ("linux", "procfs") in engine._adapters
+    assert ("linux", "fanotify") in engine._adapters
+
+
+# --- correction 2 : dead-letter queue ---
+
+@pytest.mark.asyncio
+async def test_engine_publishes_dead_letter_on_publish_failure() -> None:
+    """Dead-letter topic receives a message when bus.publish raises on normalized topic."""
+    from unittest.mock import AsyncMock as AM, patch
+
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    dlq_messages: list[bytes] = []
+
+    async def _collect_dlq(topic: str, msg: bytes) -> None:
+        if topic == "events:dead_letter":
+            dlq_messages.append(msg)
+
+    original_publish = bus.publish
+
+    async def _patched_publish(topic: str, msg: bytes) -> None:
+        if topic == "events:normalized":
+            raise OSError("bus down")
+        await _collect_dlq(topic, msg)
+
+    bus.publish = _patched_publish  # type: ignore[method-assign]
+
+    payload = _raw({"pid": 1, "ppid": 0, "name": "x", "exe": "/x", "uid": 0, "gid": 0})
+    result = await engine.process(payload, source="procfs", os_name="linux", agent_id=_AGENT_ID)
+
+    # Normalisation succeeded even though publish failed
+    assert result is not None
+    assert len(dlq_messages) == 1
+    import json
+    dlq = json.loads(dlq_messages[0])
+    assert dlq["reason"] == "bus_publish_failed"
+    assert dlq["source"] == "procfs"
+
+    bus.publish = original_publish  # type: ignore[method-assign]
+
+
+# --- correction 3 : validation des champs ---
+
+@pytest.mark.asyncio
+async def test_engine_rejects_negative_bytes_sent() -> None:
+    """Events with bytes_sent < 0 are rejected and sent to DLQ."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    dlq_messages: list[bytes] = []
+
+    async def _collect(topic: str, msg: bytes) -> None:
+        if topic == "events:dead_letter":
+            dlq_messages.append(msg)
+
+    bus.publish = _collect  # type: ignore[method-assign]
+
+    # Inject a custom adapter that produces an event with bytes_sent=-1
+    from oseye.normalizer.adapters.linux.netlink import NetlinkAdapter as NA
+    original_normalize = NA.normalize
+
+    def _bad_normalize(self: object, raw: bytes, host: str, aid: str) -> UniversalEvent:
+        ev = original_normalize(self, raw, host, aid)  # type: ignore[arg-type]
+        ev.bytes_sent = -1
+        return ev
+
+    engine._adapters[("linux", "netlink")] = lambda r, h, a: _bad_normalize(None, r, h, a)  # type: ignore[assignment]
+
+    payload = _raw({"event": "new", "local_addr": "1.2.3.4:1000", "remote_addr": "5.6.7.8:80", "proto": "tcp"})
+    result = await engine.process(payload, source="netlink", os_name="linux", agent_id=_AGENT_ID)
+
+    assert result is None
+    assert len(dlq_messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_engine_rejects_port_out_of_range() -> None:
+    """Events with dst_port > 65535 are rejected and sent to DLQ."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    dlq_messages: list[bytes] = []
+
+    async def _collect(topic: str, msg: bytes) -> None:
+        if topic == "events:dead_letter":
+            dlq_messages.append(msg)
+
+    bus.publish = _collect  # type: ignore[method-assign]
+
+    from oseye.normalizer.adapters.linux.netlink import NetlinkAdapter as NA
+    original_normalize = NA.normalize
+
+    def _bad_normalize(self: object, raw: bytes, host: str, aid: str) -> UniversalEvent:
+        ev = original_normalize(self, raw, host, aid)  # type: ignore[arg-type]
+        ev.dst_port = 99999
+        return ev
+
+    engine._adapters[("linux", "netlink")] = lambda r, h, a: _bad_normalize(None, r, h, a)  # type: ignore[assignment]
+
+    payload = _raw({"event": "new", "local_addr": "1.2.3.4:1000", "remote_addr": "5.6.7.8:80"})
+    result = await engine.process(payload, source="netlink", os_name="linux", agent_id=_AGENT_ID)
+
+    assert result is None
+    assert len(dlq_messages) == 1
+
+
+@pytest.mark.asyncio
+async def test_engine_valid_event_not_sent_to_dlq() -> None:
+    """A well-formed event is NOT sent to the dead-letter queue."""
+    bus = InMemoryEventBus()
+    engine = NormalizerEngine(bus, _HOSTNAME)
+
+    dlq_messages: list[bytes] = []
+    original_publish = bus.publish
+
+    async def _spy(topic: str, msg: bytes) -> None:
+        if topic == "events:dead_letter":
+            dlq_messages.append(msg)
+        else:
+            await original_publish(topic, msg)
+
+    bus.publish = _spy  # type: ignore[method-assign]
+
+    payload = _raw({"pid": 42, "ppid": 1, "name": "ls", "exe": "/bin/ls", "uid": 1000, "gid": 1000})
+    result = await engine.process(payload, source="procfs", os_name="linux", agent_id=_AGENT_ID)
+
+    assert result is not None
+    assert len(dlq_messages) == 0
+
+    bus.publish = original_publish  # type: ignore[method-assign]

@@ -17,6 +17,13 @@ from oseye.storage.models import ApiKeyRow
 
 
 _HMAC_SECRET: bytes = os.getenv("OSEYE_SECRET_KEY", "dev-secret-key").encode()
+import logging as _logging
+_log_keys = _logging.getLogger(__name__)
+if not os.getenv("OSEYE_SECRET_KEY"):
+    _log_keys.critical(
+        "OSEYE_SECRET_KEY not set — using insecure default 'dev-secret-key'. "
+        "All API key HMACs are forgeable. Set this env var before production deployment."
+    )
 
 
 def _hash_key(raw: str) -> str:

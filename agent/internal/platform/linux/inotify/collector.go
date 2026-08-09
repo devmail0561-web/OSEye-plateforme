@@ -219,9 +219,13 @@ func (c *InotifyCollector) readLoop(ctx context.Context, out chan<- collector.Ra
 		for offset < n {
 			event := (*unix.InotifyEvent)(unsafe.Pointer(&buf[offset]))
 
-			name := ""
+				name := ""
 			if event.Len > 0 {
-				nameBytes := buf[offset+unix.SizeofInotifyEvent : offset+unix.SizeofInotifyEvent+int(event.Len)]
+				end := offset + unix.SizeofInotifyEvent + int(event.Len)
+				if end > n {
+					break
+				}
+				nameBytes := buf[offset+unix.SizeofInotifyEvent : end]
 				name = string(bytes.TrimRight(nameBytes, "\x00"))
 			}
 

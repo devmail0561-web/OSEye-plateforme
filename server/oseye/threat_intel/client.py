@@ -78,6 +78,7 @@ class ThreatIntelClient:
                     malicious=bool(cast(Any, raw.get("malicious", cached.malicious))),
                     providers=cast(list[str], raw.get("providers", [])),
                     tags=cast(list[str], raw.get("tags", cached.tags)),
+                    ti_unavailable=bool(cast(Any, raw.get("ti_unavailable", False))),
                     reports=[],
                     queried_at=cached.cached_at,
                 )
@@ -141,6 +142,7 @@ class ThreatIntelClient:
                 "malicious": aggregated.malicious,
                 "providers": aggregated.providers,
                 "tags": aggregated.tags,
+                "ti_unavailable": aggregated.ti_unavailable,
             },
             cached_at=aggregated.queried_at,
         )

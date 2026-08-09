@@ -17,7 +17,9 @@ from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.normalizer.engine import NormalizerEngine
 from oseye.storage.backends.sqlite import SQLiteBackend
+from oseye.storage.repositories.alerts import SQLAlertRepository
 from oseye.storage.repositories.events import SQLEventRepository
+from oseye.workers.rule_worker import RuleWorker
 from oseye.workers.storage_writer import StorageWriter
 
 _logger = get_logger(__name__)
@@ -38,6 +40,8 @@ async def run_workers(settings: Settings) -> None:
         flush_interval_ms=settings.batch_flush_interval_ms,
         batch_max_size=settings.batch_max_size,
     )
+    alert_repo = SQLAlertRepository(backend.session_factory)
+    rule_worker = RuleWorker(bus=bus, alert_repo=alert_repo, hot_reload=False)
 
     stop = asyncio.Event()
     _logger.info("workers_starting")
@@ -61,6 +65,7 @@ async def run_workers(settings: Settings) -> None:
         await asyncio.gather(
             _normalizer_loop(),
             writer.run(stop_event=stop),
+            rule_worker.run(),
         )
     except asyncio.CancelledError:
         stop.set()

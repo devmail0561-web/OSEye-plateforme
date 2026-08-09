@@ -196,3 +196,44 @@ class SQLIncidentRepository:
                 return None
             alerts = await _load_alerts(session, row.incident_id)
             return _to_domain(row, alerts)
+
+    async def find_open_incidents_for_host(
+        self, hostname: str, since: datetime
+    ) -> list[Incident]:
+        """Return ALL open incidents for *hostname* created after *since*.
+
+        Used by the CorrelationEngine to select the best match across multiple
+        concurrent incidents on the same host.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(IncidentRow)
+                .where(IncidentRow.hostname == hostname)
+                .where(IncidentRow.status == "open")
+                .where(IncidentRow.created_at >= since.isoformat())
+                .order_by(IncidentRow.created_at.desc())
+                .limit(20)  # safety cap — a host shouldn't have hundreds of open incidents
+            )
+            rows = result.scalars().all()
+            incidents = []
+            for row in rows:
+                alerts = await _load_alerts(session, row.incident_id)
+                incidents.append(_to_domain(row, alerts))
+            return incidents
+
+    async def close_stale(self, cutoff: datetime) -> int:
+        """Set status='resolved' on open incidents not updated since *cutoff*.
+
+        Returns the number of incidents closed.
+        """
+        async with self._session_factory() as session:
+            async with session.begin():
+                result = await session.execute(
+                    select(IncidentRow)
+                    .where(IncidentRow.status == "open")
+                    .where(IncidentRow.updated_at < cutoff.isoformat())
+                )
+                rows = result.scalars().all()
+                for row in rows:
+                    row.status = "resolved"
+                return len(rows)

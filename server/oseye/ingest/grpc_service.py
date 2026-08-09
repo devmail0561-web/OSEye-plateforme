@@ -123,11 +123,17 @@ class AgentServiceServicer:
                 all_errors.extend(result.errors[:10])
 
             # [HIGH-1] build rejected-index set once — O(M) — instead of O(N×M)
-            rejected_indices: set[int] = {
-                int(err.split(" ")[1].rstrip(":"))
-                for err in result.errors
-                if err.startswith("event ")
-            }
+            rejected_indices: set[int] = set()
+            for err in result.errors:
+                if not err.startswith("event "):
+                    continue
+                parts = err.split(" ")
+                if len(parts) < 2:
+                    continue
+                try:
+                    rejected_indices.add(int(parts[1].rstrip(":")))
+                except ValueError:
+                    pass
 
             normalized_topic = "events:normalized"
             for event_index, pb_event in enumerate(request.events):

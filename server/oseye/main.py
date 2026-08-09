@@ -271,7 +271,9 @@ def main() -> None:
 
 
 # Expose `app` for `uvicorn oseye.main:app` invocation (Docker CMD).
-app = create_app(get_settings(), lifespan=_build_lifespan(get_settings()))
+# Guard prevents double lifespan construction when main() is also called.
+if __name__ != "__main__":
+    app = create_app(get_settings(), lifespan=_build_lifespan(get_settings()))
 
 
 if __name__ == "__main__":

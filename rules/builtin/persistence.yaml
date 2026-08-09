@@ -27,7 +27,10 @@
     event.category == "file"
     and (event.type == "modify" or event.type == "close_write")
     and (event.resource contains "/etc/systemd/system/" or event.resource contains "/usr/lib/systemd/system/")
-    and event.uid != 0
+    and not (event.process_name == "dpkg" or event.process_name == "rpm"
+             or event.process_name == "apt" or event.process_name == "apt-get"
+             or event.process_name == "dnf" or event.process_name == "yum"
+             or event.process_name == "pacman")
   timeframe: null
   threshold: null
   actions: [ALERT]

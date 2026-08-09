@@ -21,6 +21,7 @@ class RuleDefinition:
     tags: list[str]
     mitre: list[str]
     platforms: list[str]  # empty = all platforms
+    categories: list[str]  # empty = all categories (used for index-based fast dispatch)
     explanation: str
     source: str  # builtin | custom
 

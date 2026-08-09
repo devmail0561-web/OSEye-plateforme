@@ -8,9 +8,10 @@ Elle collecte les événements système en temps réel (eBPF, auditd, procfs, r�
 
 - **9 collecteurs Linux** — eBPF, auditd, fanotify, inotify, procfs, netlink, journald, udev, syslog
 - **Détection rule-based** — 30+ règles YAML MITRE ATT&CK, hot-reload, timeframes
-- **ML comportemental** — IsolationForest online (River), baseline par entité
+- **ML comportemental** — HalfSpaceTrees online (River), baseline par entité, classifieur MITRE online
 - **Threat Intelligence** — AbuseIPDB, VirusTotal, MISP, STIX/TAXII
 - **Corrélation** — reconstruction de chaînes d'incidents multi-events
+- **ML Engine** — Phase 6 en cours : extraction features, détection anomalie par entité, classifieur MITRE online
 - **Decision Engine** — 8 types de décisions, matrice risque, journal immutable
 - **Forensics** — gestion de cas, custody log, exports PDF/MISP/TheHive
 - **Plugin SDK** — extensions Python sandboxées, signées Ed25519
@@ -57,11 +58,15 @@ curl http://localhost:8000/api/v1/health
 |-----------|-------------|
 | Agent | Go 1.23, eBPF (cilium/ebpf), gRPC |
 | Server | Python 3.12, FastAPI, SQLAlchemy 2.0 |
-| ML | River (online learning), scikit-learn |
+| ML | River (HalfSpaceTrees), scikit-learn, LogisticRegression online |
 | Bus | Redis Streams (dev) / Kafka (prod) |
 | Stockage | SQLite (dev) / PostgreSQL + ClickHouse (prod) |
 | UI | React 18, TypeScript, Vite, Tailwind |
 | Déploiement | Docker, Helm (K8s), Ansible |
+
+## Qualité
+
+**292 tests Python** (unit + integration + scénarios), **20 packages Go** — tout vert.
 
 ## Cibles de performance
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -8,7 +9,6 @@ import httpx
 
 from oseye.threat_intel.breaker import AsyncCircuitBreaker, CircuitOpenError
 from oseye.threat_intel.models import ThreatIntelReport
-from oseye.threat_intel.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -99,45 +99,45 @@ class VirusTotalProvider:
         if not self._api_key:
             return None
         url = f"{_VT_BASE_URL}/ip_addresses/{ip}"
-
-        async def _with_retry() -> ThreatIntelReport | None:
-            return await retry_async(
-                lambda: self._do_lookup(url, ip, "ip"),
-                attempts=3,
-                base_delay=0.5,
-                label=f"virustotal:ip:{ip}",
-            )
-
-        try:
-            return await self._breaker.call(_with_retry)
-        except CircuitOpenError:
-            logger.warning("VirusTotal circuit open — skipping lookup for %s", ip)
-            return None
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("VirusTotal lookup_ip failed for %s: %s", ip, exc)
-            return None
+        delay = 0.5
+        for attempt in range(1, 4):
+            try:
+                result = await self._breaker.call(lambda: self._do_lookup(url, ip, "ip"))
+                return result
+            except CircuitOpenError:
+                logger.warning("VirusTotal circuit open — skipping lookup for %s", ip)
+                return None
+            except Exception as exc:  # noqa: BLE001
+                if attempt == 3:
+                    logger.warning("VirusTotal lookup_ip failed for %s: %s", ip, exc)
+                    return None
+                logger.debug("VirusTotal retry attempt=%d for %s: %s", attempt, ip, exc)
+            await asyncio.sleep(delay)
+            delay *= 2
+        return None
 
     async def lookup_hash(self, hash_value: str) -> ThreatIntelReport | None:
         if not self._api_key:
             return None
         url = f"{_VT_BASE_URL}/files/{hash_value}"
-
-        async def _with_retry() -> ThreatIntelReport | None:
-            return await retry_async(
-                lambda: self._do_lookup(url, hash_value, "hash"),
-                attempts=3,
-                base_delay=0.5,
-                label=f"virustotal:hash:{hash_value}",
-            )
-
-        try:
-            return await self._breaker.call(_with_retry)
-        except CircuitOpenError:
-            logger.warning("VirusTotal circuit open — skipping hash lookup for %s", hash_value)
-            return None
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("VirusTotal lookup_hash failed for %s: %s", hash_value, exc)
-            return None
+        delay = 0.5
+        for attempt in range(1, 4):
+            try:
+                result = await self._breaker.call(
+                    lambda: self._do_lookup(url, hash_value, "hash")
+                )
+                return result
+            except CircuitOpenError:
+                logger.warning("VirusTotal circuit open — skipping hash lookup for %s", hash_value)
+                return None
+            except Exception as exc:  # noqa: BLE001
+                if attempt == 3:
+                    logger.warning("VirusTotal lookup_hash failed for %s: %s", hash_value, exc)
+                    return None
+                logger.debug("VirusTotal retry attempt=%d for %s: %s", attempt, hash_value, exc)
+            await asyncio.sleep(delay)
+            delay *= 2
+        return None
 
     async def close(self) -> None:
         if self._owns_client:

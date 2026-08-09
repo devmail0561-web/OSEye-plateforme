@@ -30,6 +30,7 @@ def _rule(
     timeframe: int | None = None,
     threshold: int | None = None,
     platforms: list[str] | None = None,
+    categories: list[str] | None = None,
 ) -> RuleDefinition:
     return RuleDefinition(
         id=rule_id,
@@ -43,6 +44,7 @@ def _rule(
         tags=[],
         mitre=[],
         platforms=platforms or [],
+        categories=categories or [],
         explanation="test",
         source="custom",
     )
@@ -313,6 +315,95 @@ class TestRuleEngine:
         await engine.start_hot_reload()
         await asyncio.sleep(0.1)
         await engine.stop()
+
+    # --- correction 2 : index de dispatch par catégorie ---
+
+    def test_engine_category_index_only_evaluates_relevant_rules(self, tmp_path: Path) -> None:
+        from oseye.rule_engine.engine import RuleEngine
+        builtin = tmp_path / "builtin"
+        builtin.mkdir()
+        # Règle scoped "network" uniquement
+        (builtin / "net.yaml").write_text(
+            "id: net_rule\nname: Net\nenabled: true\nseverity: medium\n"
+            "condition: event.dst_port == 4444\ncategories: [network]\nactions: [ALERT]\n"
+        )
+        # Règle sans filtre catégorie (tous les events)
+        (builtin / "all.yaml").write_text(
+            "id: all_rule\nname: All\nenabled: true\nseverity: low\n"
+            "condition: event.uid == 0\nactions: [ALERT]\n"
+        )
+        engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
+
+        # Un event "process" ne doit matcher que all_rule (pas net_rule)
+        ev_process = _event(category="process", uid=0, dst_port=4444)
+        matches = engine.evaluate(ev_process)
+        rule_ids = {m.rule_id for m in matches}
+        assert "all_rule" in rule_ids
+        assert "net_rule" not in rule_ids
+
+        # Un event "network" peut matcher les deux
+        ev_network = _event(category="network", uid=0, dst_port=4444)
+        matches_net = engine.evaluate(ev_network)
+        rule_ids_net = {m.rule_id for m in matches_net}
+        assert "net_rule" in rule_ids_net
+        assert "all_rule" in rule_ids_net
+
+    # --- correction 3 : persistance des fenêtres temporelles ---
+
+    def test_temporal_state_save_and_load(self, tmp_path: Path) -> None:
+        import tempfile, os
+        from oseye.rule_engine.engine import RuleEngine
+        from oseye.rule_engine import evaluator as ev_mod
+
+        builtin = tmp_path / "builtin"
+        builtin.mkdir()
+        engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
+
+        # Inject a fake temporal window entry
+        with ev_mod._temporal_windows_lock:
+            from collections import deque
+            ev_mod._temporal_windows["fake::key"] = deque([(time.time(), {"hostname": "h"})])
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as f:
+            path = f.name
+        try:
+            engine.save_temporal_state(path)
+            # Clear windows
+            with ev_mod._temporal_windows_lock:
+                ev_mod._temporal_windows.clear()
+            engine.load_temporal_state(path)
+            with ev_mod._temporal_windows_lock:
+                assert "fake::key" in ev_mod._temporal_windows
+        finally:
+            os.unlink(path)
+            with ev_mod._temporal_windows_lock:
+                ev_mod._temporal_windows.pop("fake::key", None)
+
+    def test_load_temporal_state_missing_file_is_noop(self, tmp_path: Path) -> None:
+        from oseye.rule_engine.engine import RuleEngine
+        (tmp_path / "builtin").mkdir()
+        engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
+        # Should not raise
+        engine.load_temporal_state(tmp_path / "nonexistent.pkl")
+
+    # --- correction 4 : entity_key stable ---
+
+    def test_stable_entity_key_uses_session_id(self) -> None:
+        from oseye.rule_engine.engine import _stable_entity_key
+        ev = _event(hostname="h", pid=100, ppid=1, session_id=999)
+        assert _stable_entity_key(ev) == "h:999:100"
+
+    def test_stable_entity_key_falls_back_to_ppid(self) -> None:
+        from oseye.rule_engine.engine import _stable_entity_key
+        ev = _event(hostname="h", pid=100, ppid=5)
+        # session_id defaults to None in _event() helper
+        assert _stable_entity_key(ev) == "h:5:100"
+
+    def test_different_ppids_produce_different_keys(self) -> None:
+        from oseye.rule_engine.engine import _stable_entity_key
+        ev1 = _event(hostname="h", pid=100, ppid=1)
+        ev2 = _event(hostname="h", pid=100, ppid=2)
+        assert _stable_entity_key(ev1) != _stable_entity_key(ev2)
 
 
 # ---------------------------------------------------------------------------

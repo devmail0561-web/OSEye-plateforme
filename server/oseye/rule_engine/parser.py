@@ -44,6 +44,10 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
         platforms: list[str] = [
             str(p) for p in (platforms_raw if isinstance(platforms_raw, list) else [])
         ]
+        categories_raw = data.get("categories", [])
+        categories: list[str] = [
+            str(c) for c in (categories_raw if isinstance(categories_raw, list) else [])
+        ]
         explanation = str(data.get("explanation", ""))
         return RuleDefinition(
             id=rule_id,
@@ -57,6 +61,7 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
             tags=tags,
             mitre=mitre,
             platforms=platforms,
+            categories=categories,
             explanation=explanation,
             source=source,
         )

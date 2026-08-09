@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.7
-**Dernière mise à jour :** 2026-08-08
+**Version :** 2.8
+**Dernière mise à jour :** 2026-08-09
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 5 — Decision Engine `[x]` COMPLÈTE
+**Phase courante :** Phase 6 — ML Engine `[~]` EN COURS
 
 ---
 
@@ -72,6 +72,25 @@
 
 ---
 
+### Phase 6 — ML Engine `[~]` EN COURS
+
+| # | Module | Statut | Tests | Notes |
+|---|--------|--------|-------|-------|
+| M29 | MLEngine — features.py, anomaly.py, classifier.py, engine.py | `[~]` En cours | 35 py | HalfSpaceTrees River, LRU 10 000 modèles, MITREClassifier online, score = 0.7×anomaly + 0.3×classifier |
+
+**Composants livrés (M29) :**
+
+- `ml_engine/features.py` — extraction vecteur 10-dim [0,1] depuis UniversalEvent
+- `ml_engine/anomaly.py` — EntityAnomalyDetector (HalfSpaceTrees River, par hostname×category, LRU 10 000 modèles, window adaptative, decaying-max normalisation, save/load pickle)
+- `ml_engine/classifier.py` — MITREClassifier (LogisticRegression online par technique, entraîné sur alertes confirmées)
+- `ml_engine/engine.py` — MLEngine façade : `ml_score = 0.7×anomaly + 0.3×classifier`
+- Câblage `decision/engine.py` — paramètre `ml_engine` + `trigger_event`
+- Câblage `workers/decision_worker.py` — charge le trigger_event depuis event_repo
+
+**35 nouveaux tests dans `tests/unit/test_ml_engine.py`.**
+
+---
+
 ### Phase 4 — Intelligence `[x]` COMPLÈTE
 
 | # | Module | Branche | Statut | Tests |
@@ -100,8 +119,8 @@
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **251/251** | 100% | ✅ |
-| Tests Go | **133 tests / 21 packages** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **292/292** | 100% | ✅ |
+| Tests Go | **133 tests / 20 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy (rule_engine, workers, api, main — 23 fichiers) | **0 erreur** | 0 | ✅ |
 | golangci-lint (agent) | **0 erreur** | 0 | ✅ |
@@ -113,7 +132,7 @@
 
 | Répertoire | Tests | Ce qui est testé |
 |------------|-------|-----------------|
-| `tests/unit/` | 179 | Composants isolés (bus, schema, storage, API×3, ingest, normalizer×2, workers, rule_engine) |
+| `tests/unit/` | 214 | Composants isolés (bus, schema, storage, API×3, ingest, normalizer×2, workers, rule_engine, ml_engine) |
 | `tests/integration/` | 13 | Interaction entre modules (normalizer→bus, storage_writer→DB, gRPC mTLS réel) |
 | `tests/scenarios/` | 4 | Scénarios bout-en-bout (agent→gRPC→bus→DB→API) |
 
@@ -271,6 +290,79 @@ Audit ciblé sur les modules M27/M28. **6 findings confirmés → 6 corrigés.**
 | P5-F05 | MEDIUM | `storage/repositories/decisions.py:112` | `requires_human=False` ignoré (`if filters.get(...)` falsy) → `is not None` |
 | P5-F06 | LOW | `workers/decision_worker.py:127` | `str(None)='None'` contourne guard alert_id → `raw_alert_id is not None` avant `str()` |
 
+---
+
+## Audit code — Full Audit Engines (2026-08-09)
+
+Audit complet tous modules (Rule Engine, ML Engine, Correlation Engine, Normalizer, Go agent, Règles YAML).
+**59 findings totaux, 23 CRITICAL/HIGH → 21 confirmés et corrigés.**
+
+### Findings CRITICAL/HIGH résolus
+
+| ID | Sévérité | Fichier | Fix |
+|----|----------|---------|-----|
+| F-02/SEC-003 | CRITICAL | `rule_engine/engine.py:192` | pickle.load() → JSON atomique dans save/load_temporal_state |
+| TI-CRIT-001 | CRITICAL | `threat_intel/providers/abuseipdb.py` + `virustotal.py` | Circuit breaker wrape chaque tentative individuelle, plus le batch |
+| RULE-001 | CRITICAL | `rules/builtin/credential_access.yaml:90` | `event.result == "denied"` (était "failed" + auth_result inexistant) |
+| GO-001 | CRITICAL | `agent/ebpf/loader.go:234` | guard `< 292` → `< 296` (off-by-4 parseExecve) |
+| F-01 | CRITICAL | `rule_engine/evaluator.py:60` | `record_event_for_temporal()` accepte entity_key stable en paramètre — règles temporelles fonctionnelles |
+| SEC-001/SEC-KEY-001 | HIGH | `storage/repositories/api_keys.py:19` | logger.critical() si OSEYE_SECRET_KEY absent |
+| SEC-002/SEC-AUTH-002 | HIGH | `api/routers/auth.py:132` | Refresh re-vérifie _USERS, rôles non réutilisés depuis JWT |
+| BUG-001 | HIGH | `ingest/grpc_service.py:127` | try/except ValueError autour du int() |
+| BUG-002 | HIGH | `main.py:274` | guard `if __name__ != "__main__"` contre double lifespan |
+| GO-002 | HIGH | `agent/fanotify/collector.go:155` | guard bounds + guard Event_len==0 (OOB + infinite loop) |
+| GO-003 | HIGH | `agent/inotify/collector.go:224` | end>n avant slice nameBytes |
+| GO-004 | HIGH | `agent/ebpf/loader.go:173` | slog.Error() au lieu de `_ = err` silencieux |
+| SEC-WS-001 | HIGH | `api/ws/manager.py:22` | Suppression double ws.accept() (DoS ws/alerts) |
+| F-03 | HIGH | `workers/storage_writer.py:93` | batch restauré avant log erreur (plus de perte) |
+| F-04 | HIGH | `workers/runner.py:61` | RuleWorker câblé dans asyncio.gather |
+| TI-HIGH-001 | HIGH | `threat_intel/client.py:132` | ti_unavailable persisté et restauré depuis cache |
+| RULE-002 | HIGH | `rules/builtin/privilege_escalation.yaml:15` | rule_suid_execution : conditions per-binary sans filtre -exec global |
+| RULE-003 | HIGH | `rules/builtin/privilege_escalation.yaml:71` | event.syscall → event.type == "ptrace" |
+| RULE-004 | HIGH | `rules/builtin/lateral_movement.yaml:13` | contains → starts_with pour IPs RFC1918 |
+| RULE-005 | HIGH | `rules/builtin/persistence.yaml:30` | uid!=0 supprimé, exclusion package managers |
+| RULE-006 | HIGH | `rules/builtin/defense_evasion.yaml:49` | rule_timestomp : uid!=0 supprimé |
+
+### Findings MEDIUM/LOW ouverts (sprint suivant)
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| GO-005 | MEDIUM | `config.go:84` | Validate() jamais appelé |
+| GO-006 | MEDIUM | `watchdog.go:145` | uint64 underflow CPU delta |
+| GO-007 | MEDIUM | `fanotify/collector.go` | race fd Stop()/readLoop() |
+| GO-008 | LOW | `journald/collector.go` | itoa() → strconv.Itoa |
+| GO-009 | LOW | `procfs/collector.go` | mutex → atomic |
+| BUG-003 | MEDIUM | `api/routers/auth.py:33` | _refresh_rate_store unbounded |
+| BUG-004 | MEDIUM | `storage/repositories/incidents.py:152` | N+1 query list() |
+| BUG-005 | MEDIUM | `normalizer/adapters/procfs.py` + `auditd.py` | server timestamp au lieu agent timestamp |
+| BUG-006 | MEDIUM | `api/routers/decisions.py:177` | sort by string created_at |
+| BUG-007 | MEDIUM | `rule_engine/engine.py:185` | load_temporal_state exception handling partiel |
+| BUG-008 | MEDIUM | `api/routers/rules.py:77` | accès direct _lock/_rules |
+| BUG-009 | MEDIUM | `ingest/grpc_service.py:147` | ensure_future sans error handler |
+| BUG-010 | LOW | `normalizer/adapters/netlink.py:51` | empty string au lieu de None pour src_ip/dst_ip |
+| BUG-011 | LOW | `workers/storage_writer.py:52` | timer flush ignore stop_event jusqu'au flush |
+| SEC-004 | MEDIUM | `threat_intel/ti.py:54` | no format validation ip/hash |
+| SEC-DOS-001 | MEDIUM | `api/routers/auth.py:33` | _refresh_rate_store DoS |
+| SEC-DOS-002 | MEDIUM | `api/ws/manager.py:17` | WebSocket pool unbounded |
+| SEC-RATELIMIT-001 | MEDIUM | `api/app.py:31` | no rate limiting expensive endpoints |
+| SEC-JWT-001 | MEDIUM | `api/auth/jwt.py:55` | no JWT revocation |
+| SEC-INFO-001 | LOW | `api/routers/rules.py:118` | /validate leaks exception messages |
+| SEC-INPUT-001 | LOW | `api/routers/incidents.py:35` | no max_length on filter params |
+| F-05 | MEDIUM | `correlation/linkers/same_host.py:50` | severity hardcodée |
+| F-06 | MEDIUM | `rule_engine/engine.py:124` | eval exceptions loguées DEBUG |
+| F-07 | MEDIUM | `correlation/engine.py:102` | couplage fragile _timeframe linkers[0] |
+| TI-MED-001 | MEDIUM | `threat_intel/providers/virustotal.py:101` | path traversal URL |
+| TI-MED-002 | MEDIUM | `threat_intel/providers/misp.py:22` | URL MISP loguée WARNING |
+| TI-LOW-001 | LOW | `threat_intel/retry.py:36` | retry amplification |
+| RULE-007 | MEDIUM | `rules/builtin/defense_evasion.yaml:65` | rule_disable_selinux_apparmor : category=process + resource fichier |
+| RULE-008 | MEDIUM | `rules/builtin/discovery.yaml:53` | rule_process_discovery threshold=10 trop élevé |
+| RULE-009 | MEDIUM | `rules/builtin/impact_c2.yaml:98` | rule_outbound_c2_beaconing ports C2 liste trop étroite |
+| RULE-010 | MEDIUM | `rules/builtin/persistence.yaml:83` | rule_ld_preload_abuse LD_LIBRARY_PATH FP massifs |
+| RULE-011 | MEDIUM | `rules/builtin/lateral_movement.yaml:39` | rule_port_scan FP massifs sur trafic TCP légitime |
+| RULE-012 | LOW | `rules/builtin/discovery.yaml:88` | rule_sudo_discovery tag MITRE incorrect + pas de threshold |
+
+---
+
 ### Audit Phase 4 — ancienne section (2026-08-08)
 
 Audit partiel réalisé sur les modules M25-M26 + corrections auth (F1/F2 ouverts depuis audit Phase 3).
@@ -368,6 +460,11 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | SEC-FULL-006 | `threat_intel/breaker.py` : race HALF_OPEN — probes concurrentes | ✅ Corrigé — flag atomique |
 | SEC-P5-001 | `decision/human_queue.py` : TOCTOU approve/reject — double update concurrent possible | ✅ Corrigé — WHERE human_decision IS NULL atomique |
 | SEC-P5-002 | `workers/correlation_worker.py` : flooding décisions — N commandes ISOLATE sur même hôte | ✅ Corrigé — publication unique à la création d'incident |
+| SEC-ENG-001 | `rule_engine/engine.py` : pickle.load() pour temporal state — RCE si fichier compromis | ✅ Corrigé — JSON atomique via os.replace |
+| SEC-ENG-002 | `threat_intel/providers/abuseipdb.py` + `virustotal.py` : circuit breaker insuffisant — probes individuelles non protégées | ✅ Corrigé — circuit breaker par tentative individuelle |
+| SEC-ENG-003 | `storage/repositories/api_keys.py` : OSEYE_SECRET_KEY absent silencieux | ✅ Corrigé — logger.critical() au démarrage |
+| SEC-ENG-004 | `api/ws/manager.py` : double ws.accept() — DoS WebSocket /ws/alerts | ✅ Corrigé — suppression double accept |
+| SEC-ENG-005 | `api/routers/auth.py:132` : refresh réutilise rôles JWT sans re-vérifier — escalade possible | ✅ Corrigé — re-vérification _USERS |
 
 ---
 
@@ -422,6 +519,27 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | BUG-045 | `correlation_worker.py` : N alertes → N décisions ISOLATE pour le même incident (flooding) | fix/audit-phase5 |
 | BUG-046 | `decisions.py` repo : `requires_human=False` ignoré (`if filters.get(...)` falsy) | fix/audit-phase5 |
 | BUG-047 | `decision_worker.py` : `str(None)='None'` contourne le guard `trigger_alert_id` | fix/audit-phase5 |
+| BUG-048 | `rule_engine/engine.py` : pickle.load() pour temporal state → RCE potentiel | 2026-08-09 |
+| BUG-049 | `threat_intel/providers/abuseipdb.py` + `virustotal.py` : circuit breaker ne wrape pas chaque tentative individuelle | 2026-08-09 |
+| BUG-050 | `rules/builtin/credential_access.yaml:90` : `event.result == "failed"` + auth_result inexistant — règle morte | 2026-08-09 |
+| BUG-051 | `agent/ebpf/loader.go:234` : guard off-by-4 parseExecve (`< 292` au lieu de `< 296`) — panic possible | 2026-08-09 |
+| BUG-052 | `rule_engine/evaluator.py:60` : entity_key instable dans record_event_for_temporal — règles temporelles non fonctionnelles | 2026-08-09 |
+| BUG-053 | `storage/repositories/api_keys.py:19` : OSEYE_SECRET_KEY absent silencieux — pas d'avertissement critique | 2026-08-09 |
+| BUG-054 | `api/routers/auth.py:132` : refresh réutilise les rôles du JWT sans re-vérifier _USERS | 2026-08-09 |
+| BUG-055 | `ingest/grpc_service.py:127` : int() sans try/except ValueError — crash sur payload invalide | 2026-08-09 |
+| BUG-056 | `main.py:274` : double lifespan possible si importé comme module | 2026-08-09 |
+| BUG-057 | `agent/fanotify/collector.go:155` : OOB + boucle infinie si Event_len==0 | 2026-08-09 |
+| BUG-058 | `agent/inotify/collector.go:224` : slice hors-bornes nameBytes si end>n | 2026-08-09 |
+| BUG-059 | `agent/ebpf/loader.go:173` : erreur sysfs ignorée silencieusement (`_ = err`) | 2026-08-09 |
+| BUG-060 | `api/ws/manager.py:22` : double ws.accept() → DoS WebSocket /ws/alerts | 2026-08-09 |
+| BUG-061 | `workers/storage_writer.py:93` : batch perdu avant log d'erreur | 2026-08-09 |
+| BUG-062 | `workers/runner.py:61` : RuleWorker non câblé dans asyncio.gather | 2026-08-09 |
+| BUG-063 | `threat_intel/client.py:132` : ti_unavailable non persisté — perdu entre redémarrages | 2026-08-09 |
+| BUG-064 | `rules/builtin/privilege_escalation.yaml:15` : rule_suid_execution — filtre -exec global trop large | 2026-08-09 |
+| BUG-065 | `rules/builtin/privilege_escalation.yaml:71` : event.syscall inexistant — règle ptrace morte | 2026-08-09 |
+| BUG-066 | `rules/builtin/lateral_movement.yaml:13` : contains au lieu de starts_with pour IPs RFC1918 | 2026-08-09 |
+| BUG-067 | `rules/builtin/persistence.yaml:30` : uid!=0 incorrect — bloque les persistances root | 2026-08-09 |
+| BUG-068 | `rules/builtin/defense_evasion.yaml:49` : rule_timestomp uid!=0 — bloque les timestomps root | 2026-08-09 |
 
 ---
 
@@ -440,8 +558,41 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | DETTE-008 | Limite longueur champs string adapters Python absente (DoS) | 🟡 Ouvert |
 | DETTE-009 | `MaxCollectors: 9` incorrect dans driver.go (max réel = 8) | 🟡 Ouvert |
 | DETTE-010 | `_Severity` Literal dupliqué dans journald.py et syslog.py | 🟡 Ouvert |
+| DETTE-011 | GO-005 — `config.go:84` : Validate() jamais appelé | 🟡 Ouvert |
+| DETTE-012 | GO-006 — `watchdog.go:145` : uint64 underflow CPU delta | 🟡 Ouvert |
+| DETTE-013 | GO-007 — fanotify : race fd Stop()/readLoop() | 🟡 Ouvert |
+| DETTE-014 | GO-008 — journald : itoa() → strconv.Itoa | 🟡 Ouvert |
+| DETTE-015 | GO-009 — procfs : mutex → atomic | 🟡 Ouvert |
+| DETTE-016 | BUG-003 — `auth.py:33` : _refresh_rate_store unbounded | 🟡 Ouvert |
+| DETTE-017 | BUG-004 — `incidents.py:152` : N+1 query list() | 🟡 Ouvert |
+| DETTE-018 | BUG-005 — procfs+auditd : server timestamp au lieu agent timestamp | 🟡 Ouvert |
+| DETTE-019 | BUG-006 — `decisions.py:177` : sort by string created_at | 🟡 Ouvert |
+| DETTE-020 | BUG-007 — `rule_engine/engine.py:185` : load_temporal_state exception partielle | 🟡 Ouvert |
+| DETTE-021 | BUG-008 — `routers/rules.py:77` : accès direct _lock/_rules | 🟡 Ouvert |
+| DETTE-022 | BUG-009 — `grpc_service.py:147` : ensure_future sans error handler | 🟡 Ouvert |
+| DETTE-023 | BUG-010 — `netlink.py:51` : empty string au lieu de None pour src_ip/dst_ip | 🟡 Ouvert |
+| DETTE-024 | BUG-011 — `storage_writer.py:52` : timer flush ignore stop_event | 🟡 Ouvert |
+| DETTE-025 | SEC-004 — `ti.py:54` : no format validation ip/hash | 🟡 Ouvert |
+| DETTE-026 | SEC-DOS-001 — `auth.py:33` : _refresh_rate_store DoS | 🟡 Ouvert |
+| DETTE-027 | SEC-DOS-002 — `ws/manager.py:17` : WebSocket pool unbounded | 🟡 Ouvert |
+| DETTE-028 | SEC-RATELIMIT-001 — `api/app.py:31` : no rate limiting expensive endpoints | 🟡 Ouvert |
+| DETTE-029 | SEC-JWT-001 — `api/auth/jwt.py:55` : no JWT revocation | 🟡 Ouvert |
+| DETTE-030 | SEC-INFO-001 — `routers/rules.py:118` : /validate leaks exception messages | 🟡 Ouvert |
+| DETTE-031 | SEC-INPUT-001 — `routers/incidents.py:35` : no max_length on filter params | 🟡 Ouvert |
+| DETTE-032 | F-05 — `correlation/linkers/same_host.py:50` : severity hardcodée | 🟡 Ouvert |
+| DETTE-033 | F-06 — `rule_engine/engine.py:124` : eval exceptions loguées DEBUG | 🟡 Ouvert |
+| DETTE-034 | F-07 — `correlation/engine.py:102` : couplage fragile _timeframe linkers[0] | 🟡 Ouvert |
+| DETTE-035 | TI-MED-001 — `virustotal.py:101` : path traversal URL | 🟡 Ouvert |
+| DETTE-036 | TI-MED-002 — `misp.py:22` : URL MISP loguée WARNING | 🟡 Ouvert |
+| DETTE-037 | TI-LOW-001 — `retry.py:36` : retry amplification | 🟡 Ouvert |
+| DETTE-038 | RULE-007 — `defense_evasion.yaml:65` : rule_disable_selinux_apparmor : category=process + resource fichier | 🟡 Ouvert |
+| DETTE-039 | RULE-008 — `discovery.yaml:53` : rule_process_discovery threshold=10 trop élevé | 🟡 Ouvert |
+| DETTE-040 | RULE-009 — `impact_c2.yaml:98` : rule_outbound_c2_beaconing ports C2 trop étroits | 🟡 Ouvert |
+| DETTE-041 | RULE-010 — `persistence.yaml:83` : rule_ld_preload_abuse FP massifs venv/Conda | 🟡 Ouvert |
+| DETTE-042 | RULE-011 — `lateral_movement.yaml:39` : rule_port_scan FP trafic TCP légitime | 🟡 Ouvert |
+| DETTE-043 | RULE-012 — `discovery.yaml:88` : rule_sudo_discovery tag MITRE incorrect + pas de threshold | 🟡 Ouvert |
 
-**8/11 dettes résolues.**
+**8/11 dettes résolues (+ 33 nouvelles dettes identifiées audit 2026-08-09).**
 
 ---
 

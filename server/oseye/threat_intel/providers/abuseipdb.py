@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -8,7 +9,6 @@ import httpx
 
 from oseye.threat_intel.breaker import AsyncCircuitBreaker, CircuitOpenError
 from oseye.threat_intel.models import ThreatIntelReport
-from oseye.threat_intel.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -61,23 +61,22 @@ class AbuseIPDBProvider:
     async def lookup_ip(self, ip: str) -> ThreatIntelReport | None:
         if not self._api_key:
             return None
-
-        async def _with_retry() -> ThreatIntelReport | None:
-            return await retry_async(
-                lambda: self._do_lookup_ip(ip),
-                attempts=3,
-                base_delay=0.5,
-                label=f"abuseipdb:ip:{ip}",
-            )
-
-        try:
-            return await self._breaker.call(_with_retry)
-        except CircuitOpenError:
-            logger.warning("AbuseIPDB circuit open — skipping lookup for %s", ip)
-            return None
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("AbuseIPDB lookup_ip failed for %s: %s", ip, exc)
-            return None
+        delay = 0.5
+        for attempt in range(1, 4):
+            try:
+                result = await self._breaker.call(lambda: self._do_lookup_ip(ip))
+                return result
+            except CircuitOpenError:
+                logger.warning("AbuseIPDB circuit open — skipping lookup for %s", ip)
+                return None
+            except Exception as exc:  # noqa: BLE001
+                if attempt == 3:
+                    logger.warning("AbuseIPDB lookup_ip failed for %s: %s", ip, exc)
+                    return None
+                logger.debug("AbuseIPDB retry attempt=%d for %s: %s", attempt, ip, exc)
+            await asyncio.sleep(delay)
+            delay *= 2
+        return None
 
     def _parse(self, ip: str, data: dict[str, Any]) -> ThreatIntelReport:
         confidence_score: float = float(data.get("abuseConfidenceScore", 0))

@@ -9,11 +9,16 @@
     event.category == "process"
     and event.type == "exec"
     and event.uid != 0
-    and (event.executable contains "find" or event.executable contains "vim"
-         or event.executable contains "python" or event.executable contains "perl"
-         or event.executable contains "nmap" or event.executable contains "less"
-         or event.executable contains "more" or event.executable contains "awk")
-    and event.cmdline contains "-exec"
+    and (
+      (event.executable contains "find" and event.cmdline contains "-exec")
+      or (event.executable contains "vim" and (event.cmdline contains "-c" or event.cmdline contains ":!"))
+      or (event.executable contains "python" and event.cmdline contains "-c")
+      or (event.executable contains "perl" and (event.cmdline contains "-e" or event.cmdline contains "-c"))
+      or (event.executable contains "nmap" and event.cmdline contains "--script")
+      or (event.executable contains "less" and event.cmdline contains "!")
+      or (event.executable contains "more" and event.cmdline contains "!")
+      or (event.executable contains "awk" and event.cmdline contains "system")
+    )
   timeframe: null
   threshold: null
   actions: [ALERT]
@@ -68,7 +73,7 @@
   condition: |
     event.category == "process"
     and (
-      event.syscall == "ptrace"
+      event.type == "ptrace"
       or (
         (event.executable contains "gdb" or event.executable contains "strace")
         and (event.cmdline contains "--pid" or event.cmdline contains "-p ")

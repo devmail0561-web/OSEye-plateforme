@@ -130,6 +130,8 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
     handler = request.app.state.jwt_handler
     payload = handler.verify_token(token)
     subject: str = str(payload.get("sub", ""))
-    roles: list[str] = list(payload.get("roles", []))
+    if subject not in _USERS:
+        raise HTTPException(status_code=401, detail="User no longer exists")
+    roles = list(_USERS[subject].get("roles", []))
     new_token = handler.create_token(subject=subject, roles=roles)
     return {"access_token": new_token, "token_type": "bearer"}

@@ -1,4 +1,27 @@
-"""Normalizer engine — routes RawEvent payloads to the correct adapter."""
+"""Normalizer engine — routes RawEvent payloads to the correct adapter.
+
+Corrections vs initial version
+--------------------------------
+
+1. Découverte dynamique des adapters
+   Les 9 adapters Linux étaient enregistrés en dur dans __init__.  Ajouter un
+   nouveau collecteur nécessitait de modifier le code.  Les adapters sont
+   maintenant découverts automatiquement depuis un package Python via
+   register_package() — tout module qui expose une classe *Adapter avec une
+   méthode normalize() est enregistré sans modification de l'engine.
+   Les adapters hardcodés restent comme fallback de démarrage.
+
+2. Dead-letter queue sur publish failure
+   Si bus.publish() échouait, l'event était perdu sans retry ni alerte.
+   On publie maintenant sur le topic "events:dead_letter" en cas d'échec,
+   avec le payload original + la raison, pour permettre un rejeu ultérieur.
+
+3. Validation des champs après normalisation
+   L'adapter produisait un UniversalEvent sans vérifier la cohérence.
+   On valide : timestamp_ns > 0, bytes_sent/recv >= 0, dst_port dans [0, 65535],
+   src_port dans [0, 65535].  Un event invalide est rejeté et envoyé en DLQ
+   plutôt que d'être propagé au rule engine avec des valeurs corrompues.
+"""
 
 from __future__ import annotations
 
@@ -21,12 +44,32 @@ from oseye.normalizer.adapters.linux.udev import UdevAdapter
 
 logger = logging.getLogger(__name__)
 
+_DEAD_LETTER_TOPIC = "events:dead_letter"
+
+# Port range valid for TCP/UDP
+_MAX_PORT = 65535
+
+
+def _validate_event(event: UniversalEvent) -> str | None:
+    """Return an error message if *event* has invalid field values, else None."""
+    if event.timestamp_ns <= 0:
+        return f"invalid timestamp_ns={event.timestamp_ns}"
+    if event.bytes_sent is not None and event.bytes_sent < 0:
+        return f"negative bytes_sent={event.bytes_sent}"
+    if event.bytes_recv is not None and event.bytes_recv < 0:
+        return f"negative bytes_recv={event.bytes_recv}"
+    if event.dst_port is not None and not (0 <= event.dst_port <= _MAX_PORT):
+        return f"dst_port={event.dst_port} out of range [0, {_MAX_PORT}]"
+    if event.src_port is not None and not (0 <= event.src_port <= _MAX_PORT):
+        return f"src_port={event.src_port} out of range [0, {_MAX_PORT}]"
+    return None
+
 
 class NormalizerEngine:
-    """Dispatche les RawEvent vers le bon adapter selon (os, collector).
+    """Dispatches RawEvent payloads to the correct adapter by (os, collector).
 
-    Les ``UniversalEvent`` normalisés sont publiés sur le topic
-    ``"events:normalized"`` du bus.
+    Normalized ``UniversalEvent`` objects are published on ``"events:normalized"``.
+    Events that fail validation or publish are forwarded to ``"events:dead_letter"``.
     """
 
     def __init__(self, bus: EventBus, hostname: str) -> None:
@@ -35,7 +78,7 @@ class NormalizerEngine:
         # Registry: (os_name, source) → normalize callable
         self._adapters: dict[tuple[str, str], Callable[..., Any]] = {}
 
-        # Register Linux adapters by default
+        # Correction 1 — hardcoded adapters remain the default set
         self.register_adapter("linux", "procfs", ProcfsAdapter())
         self.register_adapter("linux", "auditd", AuditdAdapter())
         self.register_adapter("linux", "ebpf", EBPFAdapter())
@@ -47,8 +90,30 @@ class NormalizerEngine:
         self.register_adapter("linux", "udev", UdevAdapter())
 
     def register_adapter(self, os_name: str, source: str, adapter: object) -> None:
-        """Enregistre *adapter* pour la paire (*os_name*, *source*)."""
+        """Register *adapter* for the (os_name, source) pair."""
         self._adapters[(os_name.lower(), source.lower())] = getattr(adapter, "normalize")
+
+    def register_package(self, os_name: str, package: object) -> int:
+        """Correction 1 — discover and register all adapters in *package*.
+
+        Scans every attribute of *package* for classes named *Adapter that
+        expose a ``normalize`` method.  The source name is derived from the
+        class name: ``FanotifyAdapter`` → ``"fanotify"``.
+
+        Returns the number of adapters registered.
+        """
+        import inspect
+        registered = 0
+        for name, obj in inspect.getmembers(package, inspect.isclass):
+            if name.endswith("Adapter") and hasattr(obj, "normalize"):
+                source = name.replace("Adapter", "").lower()
+                try:
+                    instance = obj()
+                    self.register_adapter(os_name, source, instance)
+                    registered += 1
+                except Exception:
+                    logger.warning("adapter_auto_register_failed", extra={"name": name})
+        return registered
 
     async def process(
         self,
@@ -57,11 +122,11 @@ class NormalizerEngine:
         os_name: str,
         agent_id: str,
     ) -> UniversalEvent | None:
-        """Normalise *raw_payload* et le publie sur ``events:normalized``.
+        """Normalise *raw_payload* and publish it on ``events:normalized``.
 
         Returns the normalised :class:`UniversalEvent`, or ``None`` when no
-        adapter is registered for the given (*os_name*, *source*) pair or when
-        any error occurs during normalisation.
+        adapter is registered, or when normalisation / validation fails.
+        Failed events are forwarded to ``events:dead_letter``.
         """
         key = (os_name.lower(), source.lower())
         adapter = self._adapters.get(key)
@@ -74,7 +139,7 @@ class NormalizerEngine:
             )
             return None
 
-        # H8/F10 fix: validate agent_id as UUID once here, before dispatching.
+        # Validate agent_id as UUID once before dispatching (H8/F10 fix)
         try:
             parsed_agent_id = str(uuid.UUID(agent_id))
         except (ValueError, AttributeError):
@@ -85,8 +150,7 @@ class NormalizerEngine:
             )
             return None
 
-        # C1/F12 fix: catch all adapter exceptions so one bad payload cannot
-        # crash the normalizer coroutine or drop subsequent valid events.
+        # C1/F12: catch all adapter exceptions
         try:
             event: UniversalEvent = adapter(raw_payload, self._hostname, parsed_agent_id)
         except Exception:
@@ -97,10 +161,48 @@ class NormalizerEngine:
             )
             return None
 
+        # Correction 3 — validate field values before propagating downstream
+        validation_error = _validate_event(event)
+        if validation_error:
+            logger.warning(
+                "Event validation failed source=%r: %s — forwarding to DLQ",
+                source,
+                validation_error,
+            )
+            await self._send_dead_letter(raw_payload, source, os_name, agent_id, validation_error)
+            return None
+
         try:
             await self._bus.publish("events:normalized", event.model_dump_json().encode())
         except Exception:
             logger.exception("Bus publish failed for event_id=%s", event.event_id)
-            # Return the event even if publish failed — normalisation succeeded.
+            # Correction 2 — forward to dead-letter queue on publish failure
+            await self._send_dead_letter(
+                raw_payload, source, os_name, agent_id, "bus_publish_failed"
+            )
+            # Return the event — normalisation succeeded even if publish failed
+            return event
 
         return event
+
+    async def _send_dead_letter(
+        self,
+        raw_payload: bytes,
+        source: str,
+        os_name: str,
+        agent_id: str,
+        reason: str,
+    ) -> None:
+        """Publish to the dead-letter topic.  Silently swallow publish errors."""
+        import json
+        try:
+            dlq_msg = json.dumps({
+                "reason": reason,
+                "source": source,
+                "os_name": os_name,
+                "agent_id": agent_id,
+                "payload_hex": raw_payload.hex(),
+            }).encode()
+            await self._bus.publish(_DEAD_LETTER_TOPIC, dlq_msg)
+        except Exception:
+            logger.debug("dead_letter_publish_failed", exc_info=True)
