@@ -3,7 +3,7 @@
 **Version :** 2.8
 **Dernière mise à jour :** 2026-08-09
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 7 — Forensics `[~]` EN COURS
+**Phase courante :** Phase 7 — Forensics `[x]` COMPLÈTE (P7.01-P7.02 agent Go reportés Phase 10)
 
 ---
 
@@ -93,6 +93,31 @@
 **311 tests verts (35 ml_engine + 7 ml_worker + 12 quality + 257 existants).**
 
 **Phase 6 ML Engine COMPLÈTE.**
+
+---
+
+### Phase 7 — Forensics `[x]` COMPLÈTE
+
+| # | Module | Statut | Tests | Notes |
+|---|--------|--------|-------|-------|
+| M30 | Forensics serveur — CaseManager, Snapshot, Timeline, Exporters, API | `[x]` Mergé | 23 py | P7.03-P7.12 livrés ; P7.01-P7.02 (agent Go snapshot.go) reportés Phase 10 |
+
+**Composants livrés (M30) :**
+
+- `forensic/case_manager.py` — CRUD ForensicCase + custody log BLAKE2b chaîné + append-only
+- `forensic/snapshot.py` — AgentSnapshot, diff_snapshots() (processus + connexions), SQLSnapshotRepository
+- `forensic/timeline.py` — build_timeline() — event/alert/custody triés par timestamp_ns
+- `forensic/exporter/json_export.py` — bundle JSON complet
+- `forensic/exporter/html_report.py` — rapport HTML autonome dark theme, XSS-safe
+- `forensic/exporter/pdf_report.py` — PDF via WeasyPrint (graceful si absent)
+- `forensic/exporter/misp_export.py` — MISP v2.4 (threat_level, IPs, techniques MITRE)
+- `forensic/exporter/thehive_export.py` — TheHive 5 /api/v1/case
+- `api/routers/cases.py` — CRUD + notes + evidence + close + timeline + custody + 5 exports
+- `api/routers/snapshots.py` — POST/GET snapshot + diff
+- `core/schema.py` — +ProcessInfo, ConnectionInfo, AgentSnapshot
+- `storage/models.py` — +SnapshotRow
+
+**Phase 7 Forensics COMPLÈTE — 315 tests verts.**
 
 ---
 
