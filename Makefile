@@ -14,23 +14,48 @@ export GOROOT
 export GOPATH
 export VENV_PYTHON := $(PYTHON)
 
-.PHONY: help setup proto test test-go test-py lint audit dev-up dev-down run-server run-agent run-workers dev-certs
+.PHONY: help setup proto \
+        test test-go test-py \
+        test-unit test-integration test-scenarios test-bench \
+        test-fast test-slow test-ml \
+        lint lint-py lint-go typecheck \
+        audit dev-up dev-down \
+        run-server run-agent run-workers dev-certs
+
+# Variables de contrôle
+PYTEST_OPTS ?=
+PYTEST_WORKERS ?= auto
+OSEYE_SECRET_KEY ?= dev-secret-key-local-testing-only
 
 help:
 	@echo ""
-	@echo "  setup        — installer toutes les dépendances (Go + Python + protoc)"
-	@echo "  proto        — générer les stubs Go et Python depuis proto/event.proto"
-	@echo "  test         — lancer tous les tests (Go + Python)"
-	@echo "  test-go      — tests Go uniquement"
-	@echo "  test-py      — tests Python uniquement"
-	@echo "  lint         — ruff + mypy (Python)"
-	@echo "  audit        — scanner de sécurité interne (tools/audit/)"
-	@echo "  dev-up       — docker compose up (Redis + Postgres)"
-	@echo "  dev-down     — docker compose down"
+	@echo "Tests"
+	@echo "  test              — tous les tests Go + Python (unité + intégration + scénarios)"
+	@echo "  test-fast         — unit uniquement (rapide, sans ML quality)"
+	@echo "  test-unit         — tests unitaires Python"
+	@echo "  test-integration  — tests intégration Python (requiert serveur actif)"
+	@echo "  test-scenarios    — tests scénarios end-to-end"
+	@echo "  test-ml           — tests ML quality (lents ~5min)"
+	@echo "  test-go           — tests Go avec -race"
+	@echo "  test-bench        — benchmarks Python"
 	@echo ""
-	@echo "  run-server   — lancer le serveur FastAPI en local (SQLite, port 8000)"
-	@echo "  run-workers  — lancer les workers background (normalizer + storage_writer)"
-	@echo "  run-agent    — lancer l'agent en local (procfs collector, buffer SQLite)"
+	@echo "Qualité"
+	@echo "  lint              — ruff + go vet"
+	@echo "  lint-py           — ruff check server/"
+	@echo "  lint-go           — go vet ./..."
+	@echo "  typecheck         — mypy --strict server/oseye/"
+	@echo ""
+	@echo "Infrastructure"
+	@echo "  setup             — installer toutes les dépendances (Go + Python + protoc)"
+	@echo "  proto             — générer les stubs depuis proto/event.proto"
+	@echo "  dev-up            — docker compose up (Redis + Postgres)"
+	@echo "  dev-down          — docker compose down"
+	@echo "  dev-certs         — générer le PKI dev (CA + server + agent + JWT)"
+	@echo ""
+	@echo "Lancement local"
+	@echo "  run-server        — serveur FastAPI (SQLite + InMemoryBus, port 8000)"
+	@echo "  run-workers       — workers background"
+	@echo "  run-agent         — agent (buffer SQLite, sans TLS)"
 	@echo ""
 
 # ── Setup ────────────────────────────────────────────────────────────────────
@@ -54,17 +79,60 @@ proto:
 
 test: test-go test-py
 
+# Go — race detector activé
 test-go:
-	cd agent && $(GOBIN)/go test -race ./...
+	cd agent && OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) $(GOBIN)/go test -race -count=1 ./... $(PYTEST_OPTS)
 
+# Python — tous les tests (unité + intégration + scénarios), ML quality inclus
 test-py:
-	cd server && $(PYTEST) tests/ -v --tb=short
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/ -v --tb=short $(PYTEST_OPTS)
+
+# Rapide : unité seulement, ML quality et intégration exclus (~5min → ~1min)
+test-fast:
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/unit/ -q --tb=short \
+	    --ignore=tests/unit/test_ml_quality.py \
+	    $(PYTEST_OPTS)
+
+# Tests unitaires uniquement
+test-unit:
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/unit/ -v --tb=short $(PYTEST_OPTS)
+
+# Tests ML quality (lents — ~5min, River HalfSpaceTrees)
+test-ml:
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/unit/test_ml_quality.py tests/unit/test_ml_worker.py \
+	    -v --tb=short $(PYTEST_OPTS)
+
+# Tests intégration (requiert Redis ou SQLite)
+test-integration:
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/integration/ -v --tb=short $(PYTEST_OPTS)
+
+# Tests scénarios end-to-end
+test-scenarios:
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/scenarios/ -v --tb=short $(PYTEST_OPTS)
+
+# Benchmarks (affiche les résultats sans assertion)
+test-bench:
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	  cd server && $(PYTEST) tests/benchmarks/ -v --tb=short -s $(PYTEST_OPTS)
 
 # ── Lint ──────────────────────────────────────────────────────────────────────
 
-lint:
-	$(RUFF) check server/
+lint: lint-py lint-go
+
+lint-py:
+	$(RUFF) check server/oseye/ sdk/oseye_sdk/
+
+lint-go:
 	cd agent && $(GOBIN)/go vet ./...
+
+typecheck:
+	cd server && $(VENV)/bin/mypy --strict oseye/ --ignore-missing-imports
 
 # ── Audit engine ──────────────────────────────────────────────────────────────
 
