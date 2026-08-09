@@ -76,18 +76,19 @@
 
 | # | Module | Statut | Tests | Notes |
 |---|--------|--------|-------|-------|
-| M29 | MLEngine — features.py, anomaly.py, classifier.py, engine.py | `[~]` En cours | 35 py | HalfSpaceTrees River, LRU 10 000 modèles, MITREClassifier online, score = 0.7×anomaly + 0.3×classifier |
+| M29 | MLEngine — features.py, anomaly.py, classifier.py, engine.py, ml_worker.py | `[~]` En cours | 42 py | HalfSpaceTrees River, LRU 10 000 modèles, MITREClassifier online, score = 0.7×anomaly + 0.3×classifier, worker asyncio + checkpoint pickle |
 
 **Composants livrés (M29) :**
 
 - `ml_engine/features.py` — extraction vecteur 10-dim [0,1] depuis UniversalEvent
 - `ml_engine/anomaly.py` — EntityAnomalyDetector (HalfSpaceTrees River, par hostname×category, LRU 10 000 modèles, window adaptative, decaying-max normalisation, save/load pickle)
 - `ml_engine/classifier.py` — MITREClassifier (LogisticRegression online par technique, entraîné sur alertes confirmées)
-- `ml_engine/engine.py` — MLEngine façade : `ml_score = 0.7×anomaly + 0.3×classifier`
+- `ml_engine/engine.py` — MLEngine façade : `ml_score = 0.7×anomaly + 0.3×classifier` + `save_checkpoint()` / `load_checkpoint()`
+- `workers/ml_worker.py` — consomme `events:normalized`, publie `analysis:ml`, checkpoint automatique sur arrêt + chargement au démarrage (P6.06 ✓)
 - Câblage `decision/engine.py` — paramètre `ml_engine` + `trigger_event`
 - Câblage `workers/decision_worker.py` — charge le trigger_event depuis event_repo
 
-**35 nouveaux tests dans `tests/unit/test_ml_engine.py`.**
+**35 tests dans `tests/unit/test_ml_engine.py` + 7 tests dans `tests/unit/test_ml_worker.py` — 299 tests totaux.**
 
 ---
 
