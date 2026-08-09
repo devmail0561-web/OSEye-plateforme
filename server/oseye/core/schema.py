@@ -318,3 +318,37 @@ class Incident(BaseModel):
     correlation_rule: str = "same_host_timeframe"
     timeframe_seconds: int = 300
     alert_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Agent Snapshot
+# ---------------------------------------------------------------------------
+
+class ProcessInfo(BaseModel):
+    pid: int
+    ppid: int
+    name: str
+    exe: str
+    cmdline: str
+    uid: int
+    status: str  # "running", "sleeping", "zombie", etc.
+
+
+class ConnectionInfo(BaseModel):
+    proto: str   # "tcp", "udp"
+    local_addr: str
+    local_port: int
+    remote_addr: str
+    remote_port: int
+    state: str   # "ESTABLISHED", "LISTEN", etc.
+    pid: int
+
+
+class AgentSnapshot(BaseModel):
+    snapshot_id: UUID
+    agent_id: UUID
+    hostname: str
+    taken_at: datetime
+    processes: list[ProcessInfo] = Field(default_factory=list)
+    connections: list[ConnectionInfo] = Field(default_factory=list)
+    case_id: UUID | None = None  # optionally linked to a ForensicCase

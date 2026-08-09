@@ -267,6 +267,18 @@ class IncidentAlertRow(Base):
     mitre_techniques: Mapped[str] = mapped_column(Text, default="[]")  # JSON
 
 
+class SnapshotRow(Base):
+    __tablename__ = "snapshots"
+
+    snapshot_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    hostname: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    taken_at: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    processes: Mapped[str] = mapped_column(Text, nullable=False, default="[]")    # JSON
+    connections: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON
+    case_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+
+
 class EntityHourlyStatsRow(Base):
     """Pre-aggregated per-entity stats used as ML feature inputs.
 
