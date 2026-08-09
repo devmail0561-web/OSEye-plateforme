@@ -3,7 +3,7 @@
 **Version :** 2.8
 **Dernière mise à jour :** 2026-08-09
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 7 — Forensics `[x]` COMPLÈTE (P7.01-P7.02 agent Go reportés Phase 10)
+**Phase courante :** Phase 9 — Dashboard UI `[~]` EN COURS
 
 ---
 
@@ -93,6 +93,28 @@
 **311 tests verts (35 ml_engine + 7 ml_worker + 12 quality + 257 existants).**
 
 **Phase 6 ML Engine COMPLÈTE.**
+
+---
+
+### Phase 8 — Policy Engine + Plugin SDK `[x]` COMPLÈTE
+
+| # | Module | Statut | Tests | Notes |
+|---|--------|--------|-------|-------|
+| M31 | Policy Engine + Plugin SDK | `[x]` Mergé | 18 py | P8.01-P8.15 livrés ; P8.04 agent Go reporté Phase 10 |
+
+**Composants livrés (M31) :**
+
+- `policy/profiles/` — 6 profils YAML (workstation, server, investigation, minimal, compliance, stealth)
+- `policy/engine.py` — PolicyEngine : load_profiles(), push_to_agent(), push_to_all()
+- `sdk/oseye_sdk/` — Plugin SDK : Event (frozen), Plugin/Analyzer/Exporter/Collector ABC, IPCClient/Server NDJSON Unix socket
+- `plugin/verifier.py` — signature Ed25519 (cryptography)
+- `plugin/sandbox.py` — subprocess + rlimit + cgroups v2 fallback
+- `plugin/manager.py` — lifecycle install/enable/disable/delete + asyncio.Lock
+- `plugin/examples/` — notifier_pagerduty.py, exporter_s3.py (stubs)
+- `api/routers/policies.py` + `api/routers/plugins.py` — API REST complète
+- `sdk/pyproject.toml` — SDK installable (`pip install -e sdk/`)
+
+**Phase 8 Policy Engine + Plugin SDK COMPLÈTE — 333 tests verts.**
 
 ---
 
