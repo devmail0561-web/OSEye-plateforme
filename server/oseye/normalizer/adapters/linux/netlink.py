@@ -48,6 +48,8 @@ class NetlinkAdapter:
         src_ip, src_port = _split_addr(str(data.get("local_addr", "")))
         dst_ip, dst_port = _split_addr(str(data.get("remote_addr", "")))
 
+        # BUG-010: use None instead of empty string for absent IP fields so that
+        # downstream components can distinguish "no address" from "address=''".
         return UniversalEvent(
             event_id=uuid.uuid4(),
             timestamp_ns=agent_ts(data),
@@ -58,9 +60,9 @@ class NetlinkAdapter:
             severity="info",
             collector="netlink",
             os="linux",
-            src_ip=src_ip,
-            src_port=src_port,
-            dst_ip=dst_ip,
-            dst_port=dst_port,
-            protocol=str(data.get("proto", "")),
+            src_ip=src_ip if src_ip else None,
+            src_port=src_port if src_port else None,
+            dst_ip=dst_ip if dst_ip else None,
+            dst_port=dst_port if dst_port else None,
+            protocol=str(data.get("proto", "")) or None,
         )

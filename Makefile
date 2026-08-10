@@ -15,12 +15,13 @@ export GOPATH
 export VENV_PYTHON := $(PYTHON)
 
 .PHONY: help setup proto \
-        test test-go test-py \
+        test test-go test-py test-ui \
         test-unit test-integration test-scenarios test-bench \
         test-fast test-slow test-ml \
         lint lint-py lint-go typecheck \
         audit dev-up dev-down \
-        run-server run-agent run-workers dev-certs
+        run-server run-agent run-workers dev-certs \
+        ui-dev ui-build ui-test ui-lint
 
 # Variables de contrôle
 PYTEST_OPTS ?=
@@ -77,7 +78,7 @@ proto:
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
-test: test-go test-py
+test: test-go test-py test-ui
 
 # Go — race detector activé
 test-go:
@@ -167,6 +168,28 @@ dev-certs:
 	@echo "==> Génération du PKI dev (CA + server + agent-dev + JWT)"
 	bash scripts/generate_certs.sh
 	@echo "==> Certs prêts dans infra/certs/"
+
+# ── UI ────────────────────────────────────────────────────────────────────────
+
+UI_DIR := $(CURDIR)/ui
+
+ui-dev:
+	@echo "==> Lancement du dashboard UI (port 5173)"
+	cd $(UI_DIR) && npm run dev
+
+ui-build:
+	@echo "==> Build de production UI → ui/dist/"
+	cd $(UI_DIR) && npm ci --ignore-scripts && npm run build
+
+ui-test:
+	@echo "==> Tests unitaires UI (Vitest, couverture → ui/coverage/lcov.info)"
+	cd $(UI_DIR) && npm test -- --coverage
+
+test-ui: ui-test
+
+ui-lint:
+	@echo "==> Lint TypeScript/ESLint (zero warnings)"
+	cd $(UI_DIR) && npm run lint
 
 run-agent-mtls:
 	@echo "==> Lancement de l'agent avec mTLS (requiert make dev-certs)"

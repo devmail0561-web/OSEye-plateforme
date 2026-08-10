@@ -31,17 +31,19 @@ type procEvent struct {
 
 // ProcfsCollector scans /proc for active processes and emits one RawEvent per process.
 type ProcfsCollector struct {
-	throttle    float64
 	stopCh      chan struct{}
 	mu          sync.Mutex
 	running     bool
+	lastErr     string
+	throttle    atomic.Value // float64 — replaces mutex-protected float (GO-009)
 	errCount    atomic.Int64
 	eventsTotal atomic.Int64
-	lastErr     string
 }
 
 func New() *ProcfsCollector {
-	return &ProcfsCollector{throttle: 1.0, stopCh: make(chan struct{})}
+	c := &ProcfsCollector{stopCh: make(chan struct{})}
+	c.throttle.Store(1.0)
+	return c
 }
 
 func (c *ProcfsCollector) Name() string { return "procfs" }
@@ -63,9 +65,7 @@ func (c *ProcfsCollector) Start(ctx context.Context, out chan<- collector.RawEve
 	}()
 
 	for {
-		c.mu.Lock()
-		throttle := c.throttle
-		c.mu.Unlock()
+		throttle, _ := c.throttle.Load().(float64)
 
 		if throttle <= 0.0 {
 			select {
@@ -226,15 +226,14 @@ func (c *ProcfsCollector) Stop() error {
 }
 
 func (c *ProcfsCollector) SetThrottle(f float64) {
-	c.mu.Lock()
-	c.throttle = f
-	c.mu.Unlock()
+	c.throttle.Store(f)
 }
 
 func (c *ProcfsCollector) Health() collector.CollectorHealth {
 	c.mu.Lock()
-	running, throttle, lastErr := c.running, c.throttle, c.lastErr
+	running, lastErr := c.running, c.lastErr
 	c.mu.Unlock()
+	throttle, _ := c.throttle.Load().(float64)
 	return collector.CollectorHealth{
 		Running:     running,
 		ErrorCount:  c.errCount.Load(),

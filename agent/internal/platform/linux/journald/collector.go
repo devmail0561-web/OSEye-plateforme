@@ -6,9 +6,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"os/exec"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -201,5 +201,5 @@ func strVal(m map[string]interface{}, key string) string {
 }
 
 func itoa(n int) string {
-	return fmt.Sprintf("%d", n)
+	return strconv.Itoa(n)
 }

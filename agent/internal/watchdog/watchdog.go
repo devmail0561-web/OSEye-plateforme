@@ -142,7 +142,13 @@ func (w *Watchdog) readCPUPercent() (float64, error) {
 		return 0, nil
 	}
 
-	delta := now - w.prevCPUJiffies
+	// GO-006: guard against counter wrap-around (uint64 underflow).
+	// If the kernel resets counters (e.g. after a checkpoint/restore) treat
+	// the delta as zero so we don't report a huge spurious CPU spike.
+	var delta uint64
+	if now >= w.prevCPUJiffies {
+		delta = now - w.prevCPUJiffies
+	}
 	w.prevCPUJiffies = now
 
 	intervalSec := w.interval.Seconds()

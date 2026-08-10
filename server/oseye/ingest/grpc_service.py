@@ -172,12 +172,32 @@ class AgentServiceServicer:
                 coro = self._bus.publish(normalized_topic, payload)
                 try:
                     running_loop = asyncio.get_running_loop()
-                    asyncio.ensure_future(coro, loop=running_loop)
+                    # BUG-009: attach a done callback to log publish errors
+                    # instead of silently discarding them.
+                    task = asyncio.ensure_future(coro, loop=running_loop)
+                    task.add_done_callback(
+                        lambda t: _logger.error(
+                            "bus_publish_failed",
+                            topic=normalized_topic,
+                            error=str(t.exception()),
+                        )
+                        if not t.cancelled() and t.exception() is not None
+                        else None
+                    )
                 except RuntimeError:
                     # No running loop — we are in a sync thread
                     loop = self._loop
                     if loop is not None and loop.is_running():
-                        asyncio.run_coroutine_threadsafe(coro, loop)
+                        future = asyncio.run_coroutine_threadsafe(coro, loop)
+                        future.add_done_callback(
+                            lambda f: _logger.error(
+                                "bus_publish_failed",
+                                topic=normalized_topic,
+                                error=str(f.exception()),
+                            )
+                            if f.exception() is not None
+                            else None
+                        )
                     else:
                         try:
                             asyncio.run(coro)

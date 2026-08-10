@@ -7,11 +7,16 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_analyst
 from oseye.core.schema import UniversalEvent
 
 router = APIRouter(prefix="/api/v1", tags=["events"])
+
+# SEC-RATELIMIT-001: list events is expensive (full-table scan with filters).
+_limiter = Limiter(key_func=get_remote_address)
 
 # ---------------------------------------------------------------------------
 # Query parameter dataclasses
@@ -75,6 +80,7 @@ def _get_event_repo(request: Request) -> Any:
 
 
 @router.get("/events")
+@_limiter.limit("60/minute")
 async def list_events(
     request: Request,
     hostname: str | None = Query(default=None),

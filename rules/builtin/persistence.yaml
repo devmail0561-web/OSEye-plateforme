@@ -89,13 +89,25 @@
   tags: [persistence, defense_evasion, ld_preload]
   mitre: [T1574.006]
   platforms: [linux]
+  # RULE-010: LD_LIBRARY_PATH est massivement utilisé par les venvs Python,
+  # Conda, et de nombreux build systems légitimes. On limite la détection à
+  # LD_PRELOAD (injection directe d'une .so) et on exclut les paths /usr/lib,
+  # /lib, /opt/conda, /home/*/.venv pour réduire drastiquement les FP.
   condition: |
     event.category == "process"
-    and (event.cmdline contains "LD_PRELOAD" or event.cmdline contains "LD_LIBRARY_PATH")
+    and event.cmdline contains "LD_PRELOAD"
     and event.uid != 0
+    and not (event.cmdline contains "/usr/lib"
+             or event.cmdline contains "/lib/x86_64"
+             or event.cmdline contains "/lib/aarch64"
+             or event.cmdline contains "/opt/conda"
+             or event.cmdline contains ".venv/lib"
+             or event.cmdline contains "site-packages")
   timeframe: null
   threshold: null
   actions: [ALERT]
   explanation: >
     Utilisation de LD_PRELOAD pour injecter une bibliothèque partagée.
     Permet le hooking de fonctions système et la persistance furtive.
+    NOTE: LD_LIBRARY_PATH exclu (trop de FP venv/Conda). Exclusions sur
+    chemins système et venv Python appliquées.

@@ -71,12 +71,28 @@ def _hash(pw: str) -> str:
 _ADMIN_PW_RAW = os.getenv("OSEYE_ADMIN_PASSWORD") or "admin123"
 _ANALYST_PW_RAW = os.getenv("OSEYE_ANALYST_PASSWORD") or "analyst123"
 
+# C-1: in production, weak/missing passwords are a fatal misconfiguration.
+_OSEYE_ENV = os.getenv("OSEYE_ENV", "development").lower()
+_is_production = _OSEYE_ENV == "production"
+
 if _ADMIN_PW_RAW in _WEAK_DEFAULTS:
+    if _is_production:
+        raise RuntimeError(
+            "FATAL: OSEYE_ADMIN_PASSWORD is not set or uses the dev default 'admin123'. "
+            "Set a strong password via the OSEYE_ADMIN_PASSWORD environment variable before "
+            "running in production (OSEYE_ENV=production)."
+        )
     logger.critical(
         "OSEYE_ADMIN_PASSWORD is missing or uses a weak dev default — "
         "set a strong password before deploying to production"
     )
 if _ANALYST_PW_RAW in _WEAK_DEFAULTS:
+    if _is_production:
+        raise RuntimeError(
+            "FATAL: OSEYE_ANALYST_PASSWORD is not set or uses the dev default 'analyst123'. "
+            "Set a strong password via the OSEYE_ANALYST_PASSWORD environment variable before "
+            "running in production (OSEYE_ENV=production)."
+        )
     logger.critical(
         "OSEYE_ANALYST_PASSWORD is missing or uses a weak dev default — "
         "set a strong password before deploying to production"
@@ -170,5 +186,22 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
     if subject not in _USERS:
         raise HTTPException(status_code=401, detail="User no longer exists")
     roles = list(_USERS[subject].get("roles", []))
+    # SEC-JWT-001: revoke the old token before issuing a new one so that both
+    # tokens cannot be used concurrently (token rotation).
+    handler.revoke_token(token)
     new_token = handler.create_token(subject=subject, roles=roles)
     return {"access_token": new_token, "token_type": "bearer"}
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    request: Request,
+    token: str = Body(..., embed=True),
+) -> None:
+    """Revoke the supplied access token immediately.
+
+    SEC-JWT-001: adds the token's jti to the in-memory blocklist until its
+    natural expiry so it cannot be reused after logout.
+    """
+    handler = request.app.state.jwt_handler
+    handler.revoke_token(token)

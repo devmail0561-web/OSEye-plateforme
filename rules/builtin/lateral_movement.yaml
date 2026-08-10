@@ -27,29 +27,31 @@
     Peut indiquer un mouvement latéral depuis une machine compromise vers d'autres cibles.
 
 - id: rule_port_scan
-  name: "Scan de ports (>50 connexions TCP new/30s)"
+  name: "Scan de ports (>100 connexions TCP new/30s, uid!=0)"
   enabled: true
   severity: high
   tags: [lateral_movement, discovery, port_scan]
   mitre: [T1046]
   platforms: [linux]
-  # YAML-007: le rule engine ne supporte pas count_distinct nativement.
-  # La règle compte toutes les connexions TCP new, pas les IPs distinctes.
-  # Le threshold a été augmenté à 50 pour réduire les faux positifs immédiats.
+  # RULE-011: filtre uid!=0 ajouté — les outils réseau système légitimes (nagios,
+  # monitoring, etc.) tournent souvent en root. Un scan offensif tourne quasi
+  # toujours en non-root. Threshold augmenté à 100 pour réduire les FP trafic
+  # TCP légitime (serveurs web multi-connexions).
+  # YAML-007: compte toutes les connexions TCP new, pas les IPs distinctes.
   known_limitation: "counts all TCP new connections, not distinct destination IPs"
   condition: |
     event.category == "network"
     and event.protocol == "tcp"
     and event.type == "new"
+    and event.uid != 0
   timeframe: 30
-  threshold: 50
+  threshold: 100
   actions: [ALERT]
   explanation: >
-    Plus de 50 connexions TCP new en 30 secondes depuis le même host.
-    Pattern typique d'un scan de ports (nmap, masscan).
-    NOTE (YAML-007): cette règle compte toutes les connexions TCP new (pas
-    nécessairement vers des IPs distinctes) — le rule engine ne supporte pas
-    count_distinct nativement. Threshold augmenté à 50 pour réduire les faux positifs.
+    Plus de 100 connexions TCP new en 30 secondes depuis un utilisateur non-root.
+    Pattern typique d'un scan de ports offensif (nmap, masscan).
+    NOTE (YAML-007): compte toutes les connexions TCP new (pas nécessairement
+    vers des IPs distinctes) — count_distinct non supporté nativement.
 
 - id: rule_rsync_scp_large_transfer
   name: "Transfert de données volumineux via rsync/scp"

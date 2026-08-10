@@ -61,17 +61,24 @@
   tags: [defense_evasion, impair_defenses]
   mitre: [T1562.001]
   platforms: [linux]
+  # RULE-007: split into two separate conditions — process commands and file writes —
+  # so that both category=="process" and category=="file" cases are handled correctly
+  # without mixing categories in a single AND chain.
   condition: |
-    event.category == "process"
-    and (event.cmdline contains "setenforce 0" or event.cmdline contains "aa-teardown"
-         or event.cmdline contains "systemctl disable apparmor"
-         or event.cmdline contains "systemctl stop apparmor"
-         or event.resource contains "/etc/selinux/config")
+    (event.category == "process"
+     and (event.cmdline contains "setenforce 0"
+          or event.cmdline contains "aa-teardown"
+          or event.cmdline contains "systemctl disable apparmor"
+          or event.cmdline contains "systemctl stop apparmor"))
+    or (event.category == "file"
+        and (event.type == "modify" or event.type == "close_write")
+        and event.resource contains "/etc/selinux/config")
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Tentative de désactivation du module de sécurité Linux (SELinux/AppArmor).
+    Tentative de désactivation du module de sécurité Linux (SELinux/AppArmor)
+    via commande système ou modification directe de /etc/selinux/config.
     Réduit significativement la posture de sécurité du système.
 
 - id: rule_rootkit_detection

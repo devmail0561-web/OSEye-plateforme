@@ -24,6 +24,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, StringConstraints
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
@@ -38,6 +40,9 @@ router = APIRouter(prefix="/api/v1/cases", tags=["cases"])
 _require_reader = require_role("analyst", "admin")
 _require_analyst = require_role("analyst", "admin")
 _require_admin = require_role("admin")
+
+# SEC-RATELIMIT-001: exports are expensive (full case load + render).
+_limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +302,7 @@ async def _load_case_bundle(
 
 
 @router.get("/{case_id}/export/json")
+@_limiter.limit("20/minute")
 async def export_json(
     case_id: UUID,
     request: Request,
@@ -314,6 +320,7 @@ async def export_json(
 
 
 @router.get("/{case_id}/export/html")
+@_limiter.limit("10/minute")
 async def export_html(
     case_id: UUID,
     request: Request,
@@ -333,6 +340,7 @@ async def export_html(
 
 
 @router.get("/{case_id}/export/pdf")
+@_limiter.limit("5/minute")
 async def export_pdf(
     case_id: UUID,
     request: Request,
@@ -358,6 +366,7 @@ async def export_pdf(
 
 
 @router.get("/{case_id}/export/misp")
+@_limiter.limit("10/minute")
 async def export_misp(
     case_id: UUID,
     request: Request,
@@ -370,6 +379,7 @@ async def export_misp(
 
 
 @router.get("/{case_id}/export/thehive")
+@_limiter.limit("10/minute")
 async def export_thehive(
     case_id: UUID,
     request: Request,

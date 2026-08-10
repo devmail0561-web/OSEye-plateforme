@@ -13,6 +13,8 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
@@ -24,6 +26,9 @@ router = APIRouter(prefix="/api/v1/snapshots", tags=["snapshots"])
 
 _require_reader = require_role("analyst", "admin")
 _require_writer = require_role("analyst", "admin")
+
+# SEC-RATELIMIT-001: snapshot creation and diff are expensive operations.
+_limiter = Limiter(key_func=get_remote_address)
 
 
 def _get_snapshot_repo(request: Request) -> Any:
@@ -37,6 +42,7 @@ def _get_snapshot_repo(request: Request) -> Any:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
+@_limiter.limit("30/minute")
 async def create_snapshot(
     snapshot: AgentSnapshot,
     request: Request,
@@ -73,6 +79,7 @@ async def list_agent_snapshots(
 
 
 @router.post("/diff")
+@_limiter.limit("20/minute")
 async def diff_snapshots(
     request: Request,
     before_id: UUID,

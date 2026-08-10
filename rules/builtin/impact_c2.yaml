@@ -90,15 +90,21 @@
   tags: [c2, command_and_control]
   mitre: [T1071.001]
   platforms: [linux]
+  # RULE-009: ports C2 étendus — ajout de 8443, 8080, 2222, 31337, 12345, 54321
+  # qui sont courants dans les frameworks C2 modernes (Cobalt Strike, Sliver, Havoc).
   condition: >-
     event.category == "network"
     and event.protocol == "tcp"
     and event.type == "new"
     and not (event.dst_ip starts_with "10." or event.dst_ip starts_with "192.168." or event.dst_ip starts_with "172.16." or event.dst_ip starts_with "172.17." or event.dst_ip starts_with "172.18." or event.dst_ip starts_with "172.19." or event.dst_ip starts_with "172.20." or event.dst_ip starts_with "172.21." or event.dst_ip starts_with "172.22." or event.dst_ip starts_with "172.23." or event.dst_ip starts_with "172.24." or event.dst_ip starts_with "172.25." or event.dst_ip starts_with "172.26." or event.dst_ip starts_with "172.27." or event.dst_ip starts_with "172.28." or event.dst_ip starts_with "172.29." or event.dst_ip starts_with "172.30." or event.dst_ip starts_with "172.31." or event.dst_ip starts_with "127.")
-    and (event.dst_port == 4444 or event.dst_port == 1337 or event.dst_port == 6666 or event.dst_port == 9001)
+    and (event.dst_port == 4444 or event.dst_port == 1337 or event.dst_port == 6666
+         or event.dst_port == 9001 or event.dst_port == 8443 or event.dst_port == 8080
+         or event.dst_port == 2222 or event.dst_port == 31337 or event.dst_port == 12345
+         or event.dst_port == 54321)
   timeframe: 300
   threshold: 5
   actions: [ALERT, INVESTIGATE]
   explanation: >
     Connexions répétées vers la même IP externe (hors RFC1918/loopback) sur des ports
-    C2 courants (4444 Metasploit, 1337, 6666, 9001 Tor). Pattern de beaconing C2.
+    C2 courants (4444 Metasploit, 1337, 6666, 9001 Tor, 8443/8080 Cobalt Strike,
+    2222, 31337, 12345, 54321). Pattern de beaconing C2.

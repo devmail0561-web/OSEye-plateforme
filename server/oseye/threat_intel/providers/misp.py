@@ -17,10 +17,11 @@ class MISPProvider:
         self._api_key = api_key or ""
 
         if self._misp_url:
+            # TI-MED-002: log only that MISP is configured, never the URL itself
+            # (which may contain an internal hostname or embedded credentials).
             logger.warning(
-                "MISP URL is configured (%s) but the MISP provider is not yet "
-                "implemented. Threat intelligence lookups via MISP will return None.",
-                self._misp_url,
+                "MISP URL is configured but the MISP provider is not yet "
+                "implemented. Threat intelligence lookups via MISP will return None."
             )
 
     async def lookup_ip(self, ip: str) -> ThreatIntelReport | None:

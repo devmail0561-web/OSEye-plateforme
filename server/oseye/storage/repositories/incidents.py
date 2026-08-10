@@ -149,11 +149,27 @@ class SQLIncidentRepository:
                 )
             ).scalars().all()
 
-            items: list[Incident] = []
-            for row in rows:
-                alerts = await _load_alerts(session, row.incident_id)
-                items.append(_to_domain(row, alerts))
+            # DETTE-017: batch-load all alert rows in a single IN query instead
+            # of one SELECT per incident row (N+1 → 2 queries total).
+            incident_ids = [row.incident_id for row in rows]
+            alerts_by_incident: dict[str, list[IncidentAlertRow]] = {
+                iid: [] for iid in incident_ids
+            }
+            if incident_ids:
+                alert_rows = (
+                    await session.execute(
+                        select(IncidentAlertRow).where(
+                            IncidentAlertRow.incident_id.in_(incident_ids)
+                        )
+                    )
+                ).scalars().all()
+                for ar in alert_rows:
+                    alerts_by_incident.setdefault(ar.incident_id, []).append(ar)
 
+            items = [
+                _to_domain(row, alerts_by_incident.get(row.incident_id, []))
+                for row in rows
+            ]
             return PageResult(items=items, total=total, limit=page_size, offset=offset)
 
     async def add_alert(self, incident_id: UUID, event: IncidentEvent) -> None:

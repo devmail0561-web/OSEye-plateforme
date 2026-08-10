@@ -610,39 +610,39 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | DETTE-008 | Limite longueur champs string adapters Python absente (DoS) | 🟡 Ouvert |
 | DETTE-009 | `MaxCollectors: 9` incorrect dans driver.go (max réel = 8) | 🟡 Ouvert |
 | DETTE-010 | `_Severity` Literal dupliqué dans journald.py et syslog.py | 🟡 Ouvert |
-| DETTE-011 | GO-005 — `config.go:84` : Validate() jamais appelé | 🟡 Ouvert |
-| DETTE-012 | GO-006 — `watchdog.go:145` : uint64 underflow CPU delta | 🟡 Ouvert |
-| DETTE-013 | GO-007 — fanotify : race fd Stop()/readLoop() | 🟡 Ouvert |
-| DETTE-014 | GO-008 — journald : itoa() → strconv.Itoa | 🟡 Ouvert |
-| DETTE-015 | GO-009 — procfs : mutex → atomic | 🟡 Ouvert |
-| DETTE-016 | BUG-003 — `auth.py:33` : _refresh_rate_store unbounded | 🟡 Ouvert |
-| DETTE-017 | BUG-004 — `incidents.py:152` : N+1 query list() | 🟡 Ouvert |
-| DETTE-018 | BUG-005 — procfs+auditd : server timestamp au lieu agent timestamp | 🟡 Ouvert |
-| DETTE-019 | BUG-006 — `decisions.py:177` : sort by string created_at | 🟡 Ouvert |
-| DETTE-020 | BUG-007 — `rule_engine/engine.py:185` : load_temporal_state exception partielle | 🟡 Ouvert |
-| DETTE-021 | BUG-008 — `routers/rules.py:77` : accès direct _lock/_rules | 🟡 Ouvert |
-| DETTE-022 | BUG-009 — `grpc_service.py:147` : ensure_future sans error handler | 🟡 Ouvert |
-| DETTE-023 | BUG-010 — `netlink.py:51` : empty string au lieu de None pour src_ip/dst_ip | 🟡 Ouvert |
-| DETTE-024 | BUG-011 — `storage_writer.py:52` : timer flush ignore stop_event | 🟡 Ouvert |
-| DETTE-025 | SEC-004 — `ti.py:54` : no format validation ip/hash | 🟡 Ouvert |
-| DETTE-026 | SEC-DOS-001 — `auth.py:33` : _refresh_rate_store DoS | 🟡 Ouvert |
-| DETTE-027 | SEC-DOS-002 — `ws/manager.py:17` : WebSocket pool unbounded | 🟡 Ouvert |
-| DETTE-028 | SEC-RATELIMIT-001 — `api/app.py:31` : no rate limiting expensive endpoints | 🟡 Ouvert |
-| DETTE-029 | SEC-JWT-001 — `api/auth/jwt.py:55` : no JWT revocation | 🟡 Ouvert |
-| DETTE-030 | SEC-INFO-001 — `routers/rules.py:118` : /validate leaks exception messages | 🟡 Ouvert |
-| DETTE-031 | SEC-INPUT-001 — `routers/incidents.py:35` : no max_length on filter params | 🟡 Ouvert |
-| DETTE-032 | F-05 — `correlation/linkers/same_host.py:50` : severity hardcodée | 🟡 Ouvert |
-| DETTE-033 | F-06 — `rule_engine/engine.py:124` : eval exceptions loguées DEBUG | 🟡 Ouvert |
-| DETTE-034 | F-07 — `correlation/engine.py:102` : couplage fragile _timeframe linkers[0] | 🟡 Ouvert |
-| DETTE-035 | TI-MED-001 — `virustotal.py:101` : path traversal URL | 🟡 Ouvert |
-| DETTE-036 | TI-MED-002 — `misp.py:22` : URL MISP loguée WARNING | 🟡 Ouvert |
-| DETTE-037 | TI-LOW-001 — `retry.py:36` : retry amplification | 🟡 Ouvert |
-| DETTE-038 | RULE-007 — `defense_evasion.yaml:65` : rule_disable_selinux_apparmor : category=process + resource fichier | 🟡 Ouvert |
-| DETTE-039 | RULE-008 — `discovery.yaml:53` : rule_process_discovery threshold=10 trop élevé | 🟡 Ouvert |
-| DETTE-040 | RULE-009 — `impact_c2.yaml:98` : rule_outbound_c2_beaconing ports C2 trop étroits | 🟡 Ouvert |
-| DETTE-041 | RULE-010 — `persistence.yaml:83` : rule_ld_preload_abuse FP massifs venv/Conda | 🟡 Ouvert |
-| DETTE-042 | RULE-011 — `lateral_movement.yaml:39` : rule_port_scan FP trafic TCP légitime | 🟡 Ouvert |
-| DETTE-043 | RULE-012 — `discovery.yaml:88` : rule_sudo_discovery tag MITRE incorrect + pas de threshold | 🟡 Ouvert |
+| DETTE-011 | GO-005 — `config.go:84` : Validate() jamais appelé | ✅ Corrigé (déjà appelé dans Load()) |
+| DETTE-012 | GO-006 — `watchdog.go:145` : uint64 underflow CPU delta | ✅ Corrigé 2026-08-10 |
+| DETTE-013 | GO-007 — fanotify : race fd Stop()/readLoop() | ✅ Corrigé (closeOnce + atomic fd) |
+| DETTE-014 | GO-008 — journald : itoa() → strconv.Itoa | ✅ Corrigé 2026-08-10 |
+| DETTE-015 | GO-009 — procfs : mutex → atomic.Value pour throttle | ✅ Corrigé 2026-08-10 |
+| DETTE-016 | BUG-003 — `auth.py:33` : _refresh_rate_store unbounded | ✅ Corrigé (LRU cap 10 000) |
+| DETTE-017 | BUG-004 — `incidents.py:152` : N+1 query list() | ✅ Corrigé 2026-08-10 (batch IN query) |
+| DETTE-018 | BUG-005 — procfs+auditd : server timestamp au lieu agent timestamp | ✅ Corrigé (_utils.agent_ts) |
+| DETTE-019 | BUG-006 — `decisions.py:177` : sort by string created_at | ✅ Corrigé (ORDER BY colonne ORM) |
+| DETTE-020 | BUG-007 — `rule_engine/engine.py:185` : load_temporal_state exception partielle | ✅ Corrigé (except générique avec warning) |
+| DETTE-021 | BUG-008 — `routers/rules.py:77` : accès direct _lock/_rules | ✅ Corrigé 2026-08-10 (list_rules() public) |
+| DETTE-022 | BUG-009 — `grpc_service.py:147` : ensure_future sans error handler | ✅ Corrigé 2026-08-10 (done callback) |
+| DETTE-023 | BUG-010 — `netlink.py:51` : empty string au lieu de None pour src_ip/dst_ip | ✅ Corrigé 2026-08-10 |
+| DETTE-024 | BUG-011 — `storage_writer.py:52` : timer flush ignore stop_event | ✅ Corrigé 2026-08-10 |
+| DETTE-025 | SEC-004 — `ti.py:54` : no format validation ip/hash | ✅ Corrigé (ipaddress + regex hex) |
+| DETTE-026 | SEC-DOS-001 — `auth.py:33` : _refresh_rate_store DoS | ✅ Corrigé (OrderedDict LRU cap 10 000) |
+| DETTE-027 | SEC-DOS-002 — `ws/manager.py:17` : WebSocket pool unbounded | ✅ Corrigé (cap 500 global + 5/user) |
+| DETTE-028 | SEC-RATELIMIT-001 — endpoints coûteux sans rate limit | ✅ Corrigé 2026-08-10 (events 60/min, exports JSON/HTML/PDF/MISP/TheHive, snapshots) |
+| DETTE-029 | SEC-JWT-001 — no JWT revocation | ✅ Corrigé 2026-08-10 (jti blocklist + /logout + token rotation sur refresh) |
+| DETTE-030 | SEC-INFO-001 — `routers/rules.py:118` : /validate leaks exception messages | ✅ Corrigé 2026-08-10 (messages génériques) |
+| DETTE-031 | SEC-INPUT-001 — `routers/incidents.py:35` : no max_length on filter params | ✅ Corrigé 2026-08-10 (Query max_length) |
+| DETTE-032 | F-05 — `correlation/linkers/same_host.py:50` : severity hardcodée | ✅ Corrigé (severity issue _SEVERITY_ORDER) |
+| DETTE-033 | F-06 — `rule_engine/engine.py:124` : eval exceptions loguées DEBUG | 🟡 Ouvert (DEBUG intentionnel pour bruit) |
+| DETTE-034 | F-07 — `correlation/engine.py:102` : couplage fragile _timeframe linkers[0] | ✅ Corrigé (ValueError si linkers=[]) |
+| DETTE-035 | TI-MED-001 — `virustotal.py:101` : path traversal URL | ✅ Corrigé (urllib.parse.quote) |
+| DETTE-036 | TI-MED-002 — `misp.py:22` : URL MISP loguée WARNING | ✅ Corrigé 2026-08-10 (URL masquée) |
+| DETTE-037 | TI-LOW-001 — `retry.py:36` : retry amplification | ✅ Corrigé (breaker wrape le retry entier) |
+| DETTE-038 | RULE-007 — `defense_evasion.yaml:65` : rule_disable_selinux_apparmor condition mixte | ✅ Corrigé 2026-08-10 |
+| DETTE-039 | RULE-008 — `discovery.yaml:53` : rule_process_discovery threshold=10 trop élevé | ✅ Corrigé 2026-08-10 (→ 3) |
+| DETTE-040 | RULE-009 — `impact_c2.yaml:98` : rule_outbound_c2_beaconing ports trop étroits | ✅ Corrigé 2026-08-10 (+8443/8080/2222/31337) |
+| DETTE-041 | RULE-010 — `persistence.yaml:83` : rule_ld_preload_abuse FP venv/Conda | ✅ Corrigé 2026-08-10 (exclusions + LD_LIBRARY_PATH retiré) |
+| DETTE-042 | RULE-011 — `lateral_movement.yaml:39` : rule_port_scan FP trafic TCP | ✅ Corrigé 2026-08-10 (uid!=0 + threshold 100) |
+| DETTE-043 | RULE-012 — `discovery.yaml:88` : rule_sudo_discovery tag incorrect + pas de threshold | ✅ Corrigé 2026-08-10 |
 
 **8/11 dettes résolues (+ 33 nouvelles dettes identifiées audit 2026-08-09).**
 

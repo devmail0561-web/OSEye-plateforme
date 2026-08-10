@@ -45,16 +45,18 @@
   tags: [discovery, process_discovery]
   mitre: [T1057]
   platforms: [linux]
+  # RULE-008: threshold réduit de 10 à 3 — 10 exécutions de `ps aux` en 30s
+  # est quasi impossible en usage légitime non-scripté.
   condition: |
     event.category == "process"
     and event.process_name == "ps"
     and (event.cmdline contains "aux" or event.cmdline contains "-ef")
     and event.uid != 0
   timeframe: 30
-  threshold: 10
+  threshold: 3
   actions: [ALERT]
   explanation: >
-    Énumération répétée des processus en cours.
+    3+ exécutions de ps aux/ps -ef en 30 secondes par un utilisateur non-root.
     Souvent utilisé pour trouver des cibles d'injection ou des processus privilégiés.
 
 - id: rule_sensitive_file_discovery
@@ -83,16 +85,20 @@
   name: "Énumération des droits sudo"
   enabled: true
   severity: low
-  tags: [discovery, privilege_escalation]
+  # RULE-012: tag corrigé — T1069.001 est "Permission Groups Discovery: Local Groups",
+  # pas "Privilege Escalation". Tag corrigé en [discovery].
+  # Threshold ajouté : une seule exécution de sudo -l est souvent légitime.
+  tags: [discovery, permission_groups_discovery]
   mitre: [T1069.001]
   platforms: [linux]
   condition: |
     event.category == "process"
     and event.process_name == "sudo"
     and event.cmdline contains "-l"
-  timeframe: null
-  threshold: null
+    and event.uid != 0
+  timeframe: 60
+  threshold: 3
   actions: [ALERT]
   explanation: >
-    Liste des commandes sudo disponibles pour l'utilisateur courant.
-    Étape de reconnaissance précédant souvent une escalade de privilèges.
+    3+ exécutions de sudo -l en 60 secondes par un utilisateur non-root.
+    Étape de reconnaissance précédant souvent une tentative d'escalade de privilèges.

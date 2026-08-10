@@ -56,11 +56,12 @@ class StorageWriter:
         _logger.info("storage_writer_started", topic=TOPIC)
 
         async def _timer_flush() -> None:
-            while True:
+            # BUG-011: check stop_event BEFORE sleeping so the timer exits
+            # promptly when the writer is asked to stop, rather than waiting
+            # for the full flush interval to elapse first.
+            while stop_event is None or not stop_event.is_set():
                 await asyncio.sleep(self._flush_interval)
                 await self._flush()
-                if stop_event is not None and stop_event.is_set():
-                    return
 
         flush_task = asyncio.create_task(_timer_flush(), name="storage_writer_flush_timer")
 

@@ -402,8 +402,9 @@ def test_netlink_normalize_missing_fields() -> None:
     adapter = NetlinkAdapter()
     event = adapter.normalize(b"{}", _HOSTNAME, _AGENT_ID)
     assert event.category == "network"
-    assert event.src_ip == ""
-    assert event.dst_ip == ""
+    # BUG-010: absent IPs are now None instead of empty string
+    assert event.src_ip is None
+    assert event.dst_ip is None
 
 
 # ---------------------------------------------------------------------------

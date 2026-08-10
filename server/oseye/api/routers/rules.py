@@ -74,8 +74,8 @@ async def list_rules(
 ) -> dict[str, Any]:
     """List all loaded rules."""
     engine = _get_engine(request)
-    with engine._lock:
-        rules = list(engine._rules)
+    # BUG-008: use the public list_rules() method instead of accessing _lock/_rules.
+    rules: list[RuleDefinition] = engine.list_rules()
     if enabled_only:
         rules = [r for r in rules if r.enabled]
     return {
@@ -115,7 +115,18 @@ async def validate_rule(
         _eval_expr(body.condition, dummy, rule_id="__validate__")
         return RuleValidateResponse(valid=True)
     except Exception as exc:  # noqa: BLE001
-        return RuleValidateResponse(valid=False, error=str(exc))
+        # SEC-INFO-001: return a generic error category, not the raw exception
+        # message, to avoid leaking internal evaluator details to callers.
+        msg = str(exc)
+        if "SyntaxError" in type(exc).__name__ or "syntax" in msg.lower():
+            safe_error = "Syntax error in condition expression"
+        elif "NameError" in type(exc).__name__ or "not allowed" in msg.lower():
+            safe_error = "Forbidden expression or identifier in condition"
+        elif "TypeError" in type(exc).__name__:
+            safe_error = "Type error in condition expression"
+        else:
+            safe_error = "Invalid condition expression"
+        return RuleValidateResponse(valid=False, error=safe_error)
 
 
 @router.post("/rules/reload", status_code=status.HTTP_200_OK)

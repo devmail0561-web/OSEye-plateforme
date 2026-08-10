@@ -151,6 +151,11 @@ class RuleEngine:
         _log.info("rule_engine_reloaded", count=len(rules))
         return len(rules)
 
+    def list_rules(self) -> list[RuleDefinition]:
+        """Return a thread-safe snapshot of all loaded rules."""
+        with self._lock:
+            return list(self._rules)
+
     @property
     def rule_count(self) -> int:
         with self._lock:

@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.params import Annotated
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
@@ -32,8 +33,10 @@ def _get_incident_repo(request: Request) -> Any:
 @router.get("")
 async def list_incidents(
     request: Request,
-    hostname: str | None = None,
-    status: str | None = None,
+    # SEC-INPUT-001: max_length on filter string params to prevent DoS.
+    # F12: rename param to incident_status to avoid shadowing fastapi.status.
+    hostname: Annotated[str | None, Query(max_length=253)] = None,
+    incident_status: Annotated[str | None, Query(alias="status", max_length=50)] = None,
     page: int = 1,
     page_size: int = 20,
     _: dict[str, Any] = Depends(_require_incident_reader),
@@ -53,7 +56,7 @@ async def list_incidents(
     repo = _get_incident_repo(request)
     return cast(PageResult[Incident], await repo.list_incidents(
         hostname=hostname,
-        status=status,
+        status=incident_status,
         page=page,
         page_size=page_size,
     ))
