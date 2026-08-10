@@ -1,0 +1,79 @@
+# nfpm v2 — oseye-agent package configuration
+# Usage: VERSION=0.1.0 nfpm package --config packaging/nfpm-agent.yaml --target dist/
+name: oseye-agent
+arch: amd64
+platform: linux
+version: "${VERSION}"
+version_schema: semver
+maintainer: "OSEye Project <contact@oseye.io>"
+description: |
+  OSEye EDR Agent — eBPF-based Linux telemetry collector.
+  Monitors process, file, network, and authentication events and forwards
+  them to the OSEye server over mTLS-secured gRPC.
+homepage: "https://github.com/oseye/oseye"
+license: "Apache-2.0"
+
+# The agent binary is statically linked (CGO_ENABLED=0).
+# No runtime dependencies required on Debian or RPM targets.
+
+contents:
+  # Agent binary
+  - src: dist/oseye-agent
+    dst: /usr/bin/oseye-agent
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  # Systemd unit
+  - src: packaging/systemd/oseye-agent.service
+    dst: /usr/lib/systemd/system/oseye-agent.service
+    file_info:
+      mode: 0644
+      owner: root
+      group: root
+
+  # Config template — installed as .example so operator can review before use
+  - src: packaging/config/agent.env.example
+    dst: /etc/oseye/agent.env.example
+    type: config|noreplace
+    file_info:
+      mode: 0640
+      owner: oseye
+      group: oseye
+
+  # Enrollment script — available post-install for reference
+  - src: scripts/enroll-agent.sh
+    dst: /usr/share/doc/oseye-agent/enroll-agent.sh
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  # Certs directory (empty, populated by enroll-agent.sh)
+  - dst: /etc/oseye/certs/
+    type: dir
+    file_info:
+      mode: 0700
+      owner: oseye
+      group: oseye
+
+  # Offline buffer directory
+  - dst: /var/lib/oseye/
+    type: dir
+    file_info:
+      mode: 0750
+      owner: oseye
+      group: oseye
+
+scripts:
+  preinstall: packaging/scripts/preinst
+  postinstall: packaging/scripts/postinst
+
+deb:
+  fields:
+    Installed-Size: "20000"
+
+rpm:
+  group: "System Environment/Daemons"
+  summary: "OSEye EDR Agent"

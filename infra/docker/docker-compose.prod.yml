@@ -1,0 +1,115 @@
+name: oseye-prod
+
+# Production deployment — requires init-server.sh to have been run first.
+#
+# Start:  docker compose -f infra/docker/docker-compose.prod.yml up -d
+# Stop:   docker compose -f infra/docker/docker-compose.prod.yml down
+#
+# Config files expected on the host:
+#   /etc/oseye/server.env    (copy from packaging/config/server.env.example)
+#   /etc/oseye/secrets.env   (copy from packaging/config/secrets.env.example)
+#   /etc/oseye/certs/        (populated by scripts/init-server.sh)
+#   /etc/oseye/enrollment_tokens/  (populated by scripts/init-server.sh)
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+        --save 60 1
+        --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oseye-backend
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oseye
+      POSTGRES_USER: oseye
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oseye"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - oseye-backend
+
+  oseye-server:
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - /etc/oseye/server.env
+      - /etc/oseye/secrets.env
+    volumes:
+      # Certs read-only — CA key accessible for enrollment signing
+      - /etc/oseye/certs:/etc/oseye/certs:ro
+      # Enrollment tokens read-write (tokens created by init-server.sh, consumed by enrollment endpoint)
+      - /etc/oseye/enrollment_tokens:/etc/oseye/enrollment_tokens
+    ports:
+      - "8000:8000"
+      - "50051:50051"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - oseye-backend
+      - oseye-frontend
+
+  # All background workers run inside oseye-server (lifespan context manager).
+  # A separate oseye-workers service is intentionally omitted to avoid
+  # double-execution. See server/oseye/main.py _build_lifespan().
+
+  oseye-ui:
+    build:
+      context: ../../ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "443:5173"
+    depends_on:
+      oseye-server:
+        condition: service_healthy
+    networks:
+      - oseye-frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+
+secrets:
+  db_password:
+    # Single-line file containing the database password (no trailing newline).
+    # Must match OSEYE_DB_PASSWORD in /etc/oseye/secrets.env.
+    file: /etc/oseye/db_password.txt
+
+networks:
+  oseye-backend:
+    driver: bridge
+  oseye-frontend:
+    driver: bridge

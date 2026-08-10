@@ -21,7 +21,8 @@ export VENV_PYTHON := $(PYTHON)
         lint lint-py lint-go typecheck \
         audit dev-up dev-down \
         run-server run-agent run-workers dev-certs \
-        ui-dev ui-build ui-test ui-lint
+        ui-dev ui-build ui-test ui-lint \
+        package-agent package-server package-all init-server
 
 # Variables de contrôle
 PYTEST_OPTS ?=
@@ -57,6 +58,12 @@ help:
 	@echo "  run-server        — serveur FastAPI (SQLite + InMemoryBus, port 8000)"
 	@echo "  run-workers       — workers background"
 	@echo "  run-agent         — agent (buffer SQLite, sans TLS)"
+	@echo ""
+	@echo "Packaging & déploiement"
+	@echo "  package-agent     — build .deb + .rpm pour oseye-agent (requiert nfpm)"
+	@echo "  package-server    — build images Docker serveur + UI"
+	@echo "  package-all       — package-agent + package-server"
+	@echo "  init-server       — initialiser PKI prod + token enrollment"
 	@echo ""
 
 # ── Setup ────────────────────────────────────────────────────────────────────
@@ -200,6 +207,47 @@ run-agent-mtls:
 	  OSEYE_TLS_CA=$(CURDIR)/infra/certs/ca.crt \
 	  OSEYE_BUFFER_PATH=/tmp/oseye_dev_buffer.db \
 	  $(GOBIN)/go run ./cmd/oseye-agent
+
+# ── Packaging ─────────────────────────────────────────────────────────────────
+
+VERSION  ?= 0.1.0
+DIST_DIR := $(CURDIR)/dist
+NFPM     := nfpm
+
+# Build the static agent binary
+$(DIST_DIR)/oseye-agent:
+	@echo "==> Build agent Go statique (CGO_ENABLED=0)"
+	mkdir -p $(DIST_DIR)
+	cd agent && CGO_ENABLED=0 GOOS=linux \
+	  $(GOBIN)/go build \
+	  -ldflags "-s -w -X main.version=$(VERSION)" \
+	  -o $(DIST_DIR)/oseye-agent \
+	  ./cmd/oseye-agent
+
+# Build .deb + .rpm packages for the agent
+package-agent: $(DIST_DIR)/oseye-agent
+	@echo "==> Packaging oseye-agent $(VERSION) (.deb + .rpm)"
+	mkdir -p $(DIST_DIR)
+	VERSION=$(VERSION) $(NFPM) package \
+	  --config packaging/nfpm-agent.yaml \
+	  --target $(DIST_DIR)
+	@echo "==> Packages:"
+	@ls -lh $(DIST_DIR)/oseye-agent_* 2>/dev/null || true
+
+# Build production Docker images for the server stack
+package-server:
+	@echo "==> Build image oseye-server:$(VERSION)"
+	docker build -t oseye-server:$(VERSION) server/
+	@echo "==> Build image oseye-ui:$(VERSION)"
+	docker build -t oseye-ui:$(VERSION) ui/
+	@echo "==> Images prêtes. Compose de prod: infra/docker/docker-compose.prod.yml"
+
+package-all: package-agent package-server
+
+# First-run server initialization (PKI + enrollment token)
+init-server:
+	@echo "==> Initialisation du serveur OSEye (PKI prod + token enrollment)"
+	sudo bash scripts/init-server.sh
 
 run-server-mtls:
 	@echo "==> Lancement du serveur avec mTLS (requiert make dev-certs)"

@@ -77,3 +77,9 @@ class Settings(BaseSettings):
     decision_human_timeout_secs: int = 3600
     decision_human_poll_interval: int = 30
     decision_policy_version: str = "v1.0"
+
+    # PKI — CA private key (used by enrollment endpoint to sign agent certs)
+    tls_ca_key_file: str = Field(default="/etc/oseye/certs/ca.key")
+
+    # Enrollment token directory (one file per token, TTL 24h)
+    enrollment_token_dir: str = Field(default="/etc/oseye/enrollment_tokens")

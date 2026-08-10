@@ -32,7 +32,7 @@ from oseye.decision.journal import DecisionJournal
 from oseye.ingest.server import create_grpc_server
 from oseye.normalizer.engine import NormalizerEngine
 from oseye.rule_engine import RuleEngine
-from oseye.storage.backends.sqlite import SQLiteBackend
+from oseye.storage.backends.factory import create_backend
 from oseye.storage.repositories.alerts import SQLAlertRepository
 from oseye.storage.repositories.api_keys import SQLApiKeyRepository
 from oseye.storage.repositories.decisions import SQLDecisionRepository
@@ -66,7 +66,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
     @asynccontextmanager
     async def lifespan(app: object) -> AsyncGenerator[None, None]:  # noqa: ARG001
         bus = create_bus(settings)
-        backend = SQLiteBackend(settings.db_url)
+        backend = create_backend(settings)
         await backend.init()
         repo = SQLEventRepository(backend.session_factory)
         alert_repo = SQLAlertRepository(backend.session_factory)
@@ -227,6 +227,9 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         _logger.info("workers_started", count=len(tasks))
 
         # Expose shared state to API routers
+        from oseye.enrollment_store import EnrollmentStore
+        app.state.enrollment_store = EnrollmentStore(settings)  # type: ignore[attr-defined]
+
         app.state.jwt_handler = JWTHandler(  # type: ignore[attr-defined]
             private_key_path=settings.jwt_private_key_path,
             public_key_path=settings.jwt_public_key_path,
