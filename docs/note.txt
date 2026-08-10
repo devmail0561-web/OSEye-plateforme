@@ -4,31 +4,85 @@ Depuis la racine du projet :
 
     make setup      — vérifier que l'environnement est prêt (Go + Python + protoc)
     make proto      — régénérer les stubs Go et Python depuis proto/event.proto
-    make test       — tous les tests (Go + Python)
-    make test-go    — go test -race ./...
-    make test-py    — pytest server/tests/ -v
+
+    — Tests —
+    make test             — tous les tests (Go + Python + UI)
+    make test-go          — go test -race ./...
+    make test-py          — pytest server/tests/ -v
+    make test-unit        — tests unitaires Python seulement
+    make test-fast        — unit sans ML quality (~1 min)
+    make test-integration — tests intégration Python
+    make test-scenarios   — scénarios end-to-end
+    make test-ml          — tests ML quality (lents ~5 min)
+    make test-bench       — benchmarks Python
+    make test-ui          — vitest (couverture → ui/coverage/)
+
+    — Qualité —
     make lint       — ruff (Python) + go vet (Go)
+    make lint-py    — ruff check server/oseye/ sdk/
+    make lint-go    — go vet ./...
+    make ui-lint    — ESLint TypeScript
+    make typecheck  — mypy --strict server/oseye/
     make audit      — scanner de sécurité interne (tools/audit/)
-    make dev-up          — démarrer Redis + Postgres via Docker Compose
-    make dev-down        — arrêter les services Docker
-    make dev-certs       — générer le PKI dev (CA + server + agent-dev + JWT) dans infra/certs/
-    make run-server      — lancer le serveur FastAPI + gRPC en local (SQLite, insecure)
-    make run-server-mtls — lancer le serveur avec mTLS (requiert make dev-certs)
-    make run-workers     — lancer les workers background (normalizer + storage_writer)
-    make run-agent       — lancer l'agent en local (procfs, buffer SQLite, sans certs)
-    make run-agent-mtls  — lancer l'agent avec mTLS (requiert make dev-certs)
+
+    — Infrastructure —
+    make dev-up           — démarrer Redis + Postgres via Docker Compose
+    make dev-down         — arrêter les services Docker
+    make dev-certs        — générer le PKI dev (CA + server + agent-dev + JWT) dans infra/certs/
+
+    — Lancement local —
+    make run-server       — serveur FastAPI + gRPC (SQLite, insecure, port 8000)
+    make run-server-mtls  — serveur avec mTLS (requiert make dev-certs)
+    make run-workers      — workers background (normalizer + storage_writer)
+    make run-agent        — agent en local (procfs, buffer SQLite, sans certs)
+    make run-agent-mtls   — agent avec mTLS (requiert make dev-certs)
+    make ui-dev           — dashboard React/Vite (port 5173)
+    make ui-build         — build de production → ui/dist/
+
+    — Packaging et déploiement (Phase 10) —
+    make package-agent VERSION=x.y.z  — build .deb + .rpm pour oseye-agent (requiert nfpm)
+    make package-server VERSION=x.y.z — build images Docker serveur + UI
+    make package-all VERSION=x.y.z    — package-agent + package-server
+    make init-server                  — initialiser PKI prod + token enrollment (sudo)
+
+Lancer le serveur en dev (avec les variables d'environnement nécessaires) :
+
+    cd server && \
+      PYTHONPATH=/chemin/vers/OSEye_project \
+      OSEYE_SECRET_KEY=dev-secret-key-local-testing-only \
+      OSEYE_JWT_PRIVATE_KEY_PATH=$(pwd)/../infra/certs/jwt_private.pem \
+      OSEYE_JWT_PUBLIC_KEY_PATH=$(pwd)/../infra/certs/jwt_public.pem \
+      OSEYE_TLS_CA_CERT_FILE=$(pwd)/../infra/certs/ca.crt \
+      OSEYE_TLS_CA_KEY_FILE=$(pwd)/../infra/certs/ca.key \
+      OSEYE_ENROLLMENT_TOKEN_DIR=/tmp/oseye-dev/tokens \
+      python -m oseye.main
+
+    # Puis dans un second terminal :
+    cd ui && VITE_API_URL=http://localhost:8000 npm run dev
+
+    Identifiants dev : admin / admin123  (ou analyst / analyst123)
 
 Tests d'interaction (depuis server/) :
     pytest tests/integration/              — interaction modules (bus, normalizer, storage, API)
     pytest tests/integration/test_grpc_*   — communication gRPC réelle mTLS (PKI in-memory)
     pytest tests/scenarios/                — scénarios bout-en-bout (agent→gRPC→bus→DB→API)
-    pytest tests/                          — toute la suite (97 tests)
+    pytest tests/                          — toute la suite (385 tests)
 
 Prérequis installés :
     Go 1.23.8       → ~/go/bin/go
     Python 3.12     → .venv/bin/python3.12  (venv à la racine du projet)
     protoc 29.3     → ~/.local/bin/protoc
+    Node 20+        → node / npm (pour l'UI)
+    nfpm            → pour générer les packages .deb/.rpm (installer séparément)
     Activer le venv : source .venv/bin/activate
+
+Déploiement production :
+    1. make dev-certs                       — PKI dev uniquement
+    2. sudo make init-server                — PKI prod + token enrollment
+    3. Configurer /etc/oseye/server.env     — copier packaging/config/server.env.example
+    4. Configurer /etc/oseye/secrets.env    — copier packaging/config/secrets.env.example
+    5. docker compose -f infra/docker/docker-compose.prod.yml up -d
+    6. Sur chaque agent : OSEYE_SERVER=addr:8000 OSEYE_TOKEN=xxx sudo bash scripts/enroll-agent.sh
 
 ---
 
