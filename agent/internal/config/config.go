@@ -21,6 +21,9 @@ type Config struct {
 	TLSKeyFile  string
 	CACertFile  string
 
+	// Ed25519 signing key for batch integrity (separate from the mTLS key)
+	Ed25519KeyFile string
+
 	// Local offline buffer
 	BufferPath string
 
@@ -43,6 +46,9 @@ type Config struct {
 	JournaldPriority string
 	JournaldUnits    []string
 	SyslogAddr       string
+
+	// Response engine
+	QuarantineDir string // OSEYE_QUARANTINE_DIR, default /var/lib/oseye/quarantine
 }
 
 // InotifyWatch represents an inotify watch configuration.
@@ -56,9 +62,10 @@ type InotifyWatch struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		GRPCAddr:     getenv("OSEYE_GRPC_ADDR", "localhost:50051"),
-		TLSCertFile:  getenv("OSEYE_TLS_CERT", "/etc/oseye/certs/agent.crt"),
-		TLSKeyFile:   getenv("OSEYE_TLS_KEY", "/etc/oseye/certs/agent.key"),
-		CACertFile:   getenv("OSEYE_TLS_CA", "/etc/oseye/certs/ca.crt"),
+		TLSCertFile:    getenv("OSEYE_TLS_CERT", "/etc/oseye/certs/agent.crt"),
+		TLSKeyFile:     getenv("OSEYE_TLS_KEY", "/etc/oseye/certs/agent.key"),
+		CACertFile:     getenv("OSEYE_TLS_CA", "/etc/oseye/certs/ca.crt"),
+		Ed25519KeyFile: getenv("OSEYE_ED25519_SIGNING_KEY", "/etc/oseye/certs/agent.ed25519.key"),
 		BufferPath:   getenv("OSEYE_BUFFER_PATH", "/var/lib/oseye/buffer.db"),
 		AgentID:      getenv("OSEYE_AGENT_ID", ""),
 		BatchSize:    getenvInt("OSEYE_BATCH_SIZE", 1000),
@@ -75,7 +82,8 @@ func Load() (*Config, error) {
 		JournaldUnits: parseCSV(
 			getenv("OSEYE_JOURNALD_UNITS", ""),
 		),
-		SyslogAddr: getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
+		SyslogAddr:    getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
+		QuarantineDir: getenv("OSEYE_QUARANTINE_DIR", "/var/lib/oseye/quarantine"),
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err

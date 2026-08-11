@@ -6,13 +6,15 @@ from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from oseye.api.routers import (
+    agents,
     alerts,
+    response_actions,
     api_keys,
     auth,
     cases,
@@ -101,6 +103,8 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     # -------------------------------------------------------------------
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(agents.router)
+    app.include_router(response_actions.router)
     app.include_router(events.router)
     app.include_router(alerts.router)
     app.include_router(rules.router)

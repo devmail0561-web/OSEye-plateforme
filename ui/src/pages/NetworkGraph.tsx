@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import * as d3 from 'd3'
+import { Network } from 'lucide-react'
 import { eventsApi } from '@/api/client'
+import { EmptyState } from '@/components/ui'
 
 interface Node {
   id: string
@@ -21,7 +23,7 @@ interface Link {
 
 const NODE_COLOR: Record<string, string> = {
   host: '#60a5fa',
-  ip: '#f97316',
+  ip:   '#f97316',
 }
 
 export default function NetworkGraph() {
@@ -48,9 +50,7 @@ export default function NetworkGraph() {
       const linksMap = new Map<string, Link>()
 
       const ensureNode = (id: string, type: 'host' | 'ip') => {
-        if (!nodesMap.has(id)) {
-          nodesMap.set(id, { id, type, label: id, count: 0 })
-        }
+        if (!nodesMap.has(id)) nodesMap.set(id, { id, type, label: id, count: 0 })
         nodesMap.get(id)!.count++
       }
 
@@ -83,8 +83,8 @@ export default function NetworkGraph() {
     const svg = d3.select(svgRef.current!)
     svg.selectAll('*').remove()
 
-    const width = svgRef.current!.clientWidth || 800
-    const height = svgRef.current!.clientHeight || 500
+    const width  = svgRef.current!.clientWidth || 800
+    const height = svgRef.current!.clientHeight || 520
 
     const g = svg.append('g')
 
@@ -105,17 +105,15 @@ export default function NetworkGraph() {
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide(18))
 
-    const link = g
-      .append('g')
+    const link = g.append('g')
       .selectAll('line')
       .data(links)
       .join('line')
-      .attr('stroke', '#374151')
-      .attr('stroke-opacity', 0.6)
+      .attr('stroke', '#4b5563')
+      .attr('stroke-opacity', 0.5)
       .attr('stroke-width', (d) => Math.max(1, (d.count / maxCount) * 4))
 
-    const node = g
-      .append('g')
+    const node = g.append('g')
       .selectAll<SVGCircleElement, Node>('circle')
       .data(nodes)
       .join('circle')
@@ -127,22 +125,18 @@ export default function NetworkGraph() {
         d3.drag<SVGCircleElement, Node>()
           .on('start', (event: d3.D3DragEvent<SVGCircleElement, Node, Node>, d) => {
             if (!event.active) sim.alphaTarget(0.3).restart()
-            d.fx = d.x
-            d.fy = d.y
+            d.fx = d.x; d.fy = d.y
           })
           .on('drag', (event: d3.D3DragEvent<SVGCircleElement, Node, Node>, d) => {
-            d.fx = event.x
-            d.fy = event.y
+            d.fx = event.x; d.fy = event.y
           })
           .on('end', (event: d3.D3DragEvent<SVGCircleElement, Node, Node>, d) => {
             if (!event.active) sim.alphaTarget(0)
-            d.fx = null
-            d.fy = null
+            d.fx = null; d.fy = null
           })
       )
 
-    const label = g
-      .append('g')
+    const label = g.append('g')
       .selectAll('text')
       .data(nodes)
       .join('text')
@@ -163,48 +157,43 @@ export default function NetworkGraph() {
       node.attr('cx', (d) => d.x ?? 0).attr('cy', (d) => d.y ?? 0)
       label.attr('x', (d) => d.x ?? 0).attr('y', (d) => d.y ?? 0)
     })
-
-    return () => sim.stop()
   }
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Graphe réseau</h1>
-        <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-400">
+        <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
           {loading && <span>Chargement…</span>}
-          {!loading && !error && (
+          {!loading && !error && nodeCount > 0 && (
             <>
               <span>{nodeCount} nœuds</span>
               <span>{linkCount} connexions</span>
             </>
           )}
           {error && <span className="text-red-400">{error}</span>}
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-blue-400" /> Hôte
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-orange-400" /> IP externe
-            </span>
-          </div>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Hôte
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" /> IP externe
+          </span>
         </div>
       </div>
 
-      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-        <svg
-          ref={svgRef}
-          className="w-full"
-          style={{ height: 520 }}
-        />
-        {!loading && nodeCount === 0 && !error && (
-          <p className="text-center text-gray-400 dark:text-gray-500 text-sm py-8 -mt-16">
-            Aucun événement réseau disponible
-          </p>
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden" style={{ height: 540 }}>
+        {!loading && nodeCount === 0 && !error ? (
+          <EmptyState
+            icon={Network}
+            title="Aucun événement réseau"
+            description="Les connexions réseau apparaîtront ici quand l'agent collecte des événements de type network"
+          />
+        ) : (
+          <svg ref={svgRef} className="w-full h-full" />
         )}
       </div>
 
-      <p className="text-xs text-gray-500 dark:text-gray-600">
+      <p className="text-xs text-gray-400 dark:text-gray-600">
         Basé sur les 250 derniers événements réseau · Glisser pour déplacer, molette pour zoomer
       </p>
     </div>

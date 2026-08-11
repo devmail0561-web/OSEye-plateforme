@@ -22,11 +22,12 @@ _logger = get_logger(__name__)
 class PolicyEngine:
     """Loads built-in YAML profiles, validates them, pushes to agents via bus."""
 
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, default_profile: str = "workstation") -> None:
         self._bus = bus
         self._profiles: dict[str, SurveillanceProfile] = {}
         # Track all agent IDs that have ever received a push
         self._known_agents: set[UUID] = set()
+        self._default_profile = default_profile
 
     # ------------------------------------------------------------------
     # Profile loading
@@ -75,6 +76,29 @@ class PolicyEngine:
     def list_profiles(self) -> list[SurveillanceProfile]:
         """Return all loaded profiles sorted by name."""
         return sorted(self._profiles.values(), key=lambda p: p.name)
+
+    def seed_known_agents(self, agent_ids: list[UUID]) -> None:
+        """Pre-populate the known-agents set from persisted data.
+
+        Called at startup with agent IDs reconstructed from the events table
+        so push_to_all() works after a server restart.
+        """
+        self._known_agents.update(agent_ids)
+
+    async def push_default_to_agent(self, agent_id: UUID) -> None:
+        """Push the default profile to a newly connected agent.
+
+        Called by grpc_service.ReceivePolicy when an agent opens the stream.
+        No-op if the default profile name is not loaded.
+        """
+        if self._default_profile in self._profiles:
+            await self.push_to_agent(agent_id, self._default_profile)
+        else:
+            _logger.warning(
+                "policy.default_profile_not_found",
+                default=self._default_profile,
+                loaded=[p.name for p in self.list_profiles()],
+            )
 
     # ------------------------------------------------------------------
     # Push to agents

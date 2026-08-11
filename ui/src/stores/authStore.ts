@@ -17,10 +17,31 @@ function decodeExpiry(token: string): number | null {
   }
 }
 
+function decodeRoles(token: string): string[] {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return []
+    const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))) as {
+      roles?: string[]
+    }
+    return Array.isArray(decoded.roles) ? decoded.roles : []
+  } catch {
+    return []
+  }
+}
+
+function initialRoles(): string[] {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const expires = Number(localStorage.getItem(EXPIRES_KEY)) || 0
+  if (!token || expires <= Date.now()) return []
+  return decodeRoles(token)
+}
+
 interface AuthState {
   accessToken: string | null
   expiresAt: number | null
   isAuthenticated: boolean
+  roles: string[]
   login: (username: string, password: string) => Promise<void>
   logout: () => void
   setToken: (token: string) => void
@@ -35,26 +56,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated:
     !!localStorage.getItem(TOKEN_KEY) &&
     (Number(localStorage.getItem(EXPIRES_KEY)) || 0) > Date.now(),
+  roles: initialRoles(),
 
   login: async (username, password) => {
     const data = await authApi.login(username, password)
     const expiresAt = decodeExpiry(data.access_token)
+    const roles = decodeRoles(data.access_token)
     localStorage.setItem(TOKEN_KEY, data.access_token)
     if (expiresAt) localStorage.setItem(EXPIRES_KEY, String(expiresAt))
-    set({ accessToken: data.access_token, expiresAt, isAuthenticated: true })
+    set({ accessToken: data.access_token, expiresAt, isAuthenticated: true, roles })
   },
 
   logout: () => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(EXPIRES_KEY)
-    set({ accessToken: null, expiresAt: null, isAuthenticated: false })
+    set({ accessToken: null, expiresAt: null, isAuthenticated: false, roles: [] })
   },
 
   setToken: (token: string) => {
     const expiresAt = decodeExpiry(token)
+    const roles = decodeRoles(token)
     localStorage.setItem(TOKEN_KEY, token)
     if (expiresAt) localStorage.setItem(EXPIRES_KEY, String(expiresAt))
-    set({ accessToken: token, expiresAt, isAuthenticated: true })
+    set({ accessToken: token, expiresAt, isAuthenticated: true, roles })
   },
 
   getToken: () => get().accessToken,

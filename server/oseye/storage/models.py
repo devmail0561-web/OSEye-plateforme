@@ -3,11 +3,14 @@
 Maps Pydantic schema models to SQL tables.
 - events, alerts, alert_notes, decisions, forensic_cases, custody_log, evidence_items, case_notes
 - incidents, incident_alerts
+- blocked_agents
 """
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, Float, Index, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -313,3 +316,43 @@ class EntityHourlyStatsRow(Base):
     network_event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     distinct_dst_ips: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     alert_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class BlockedAgentRow(Base):
+    """Persisted blocklist of revoked agent CNs.
+
+    Loaded at startup into AgentServiceServicer._blocked_cns so revocations
+    survive server restarts.
+    """
+
+    __tablename__ = "blocked_agents"
+
+    cn: Mapped[str] = mapped_column(String(253), primary_key=True)
+    blocked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ResponseActionRow(Base):
+    """Persistent record of a response action sent to an agent.
+
+    Stays in 'pending_report' until the agent confirms via ReportActions RPC.
+    Stays in 'executed' until the admin rolls it back (or it is auto-expired).
+    CIA — Disponibilité : this table is the authoritative source for the admin
+    dashboard — visible even if the agent is offline.
+    """
+
+    __tablename__ = "response_actions"
+
+    command_id:     Mapped[str]            = mapped_column(String(36),  primary_key=True)
+    decision_id:    Mapped[str]            = mapped_column(String(36),  nullable=False, index=True)
+    agent_cn:       Mapped[str]            = mapped_column(String(253), nullable=False, index=True)
+    command_type:   Mapped[str]            = mapped_column(String(32),  nullable=False)
+    payload:        Mapped[str]            = mapped_column(Text,        nullable=False, default="{}")
+    # status: pending_report | executed | failed | rolled_back
+    status:         Mapped[str]            = mapped_column(String(32),  nullable=False, default="pending_report")
+    created_at:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
+    executed_at:    Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_at: Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
+    error:          Mapped[str | None]     = mapped_column(Text, nullable=True)

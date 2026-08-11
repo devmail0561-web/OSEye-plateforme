@@ -13,21 +13,13 @@ import {
 } from 'recharts'
 import { useAlertStore } from '@/stores/alertStore'
 import { useEventStore } from '@/stores/eventStore'
-import { useAlertsWebSocket } from '@/hooks/useAlertsWebSocket'
 import { Link } from 'react-router-dom'
-
-const SEVERITY_COLORS: Record<string, string> = {
-  low: '#60a5fa',
-  medium: '#fbbf24',
-  high: '#f97316',
-  critical: '#ef4444',
-}
+import { SEVERITY_COLORS } from '@/lib/severityColors'
 
 export default function Dashboard() {
   const { fetchStats, stats, openCount } = useAlertStore()
   const { rateHistory, eventsPerSecond } = useEventStore()
   const { isDark } = useTheme()
-  useAlertsWebSocket()
 
   const tooltipStyle = isDark
     ? { backgroundColor: '#111827', border: '1px solid #374151', color: '#f9fafb', fontSize: 12 }
@@ -53,23 +45,23 @@ export default function Dashboard() {
         {/* KPI — Open alerts */}
         <Link
           to="/alerts?status=open"
-          className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-blue-300 dark:hover:border-blue-700 transition-colors group"
         >
-          <p className="text-sm text-gray-400 dark:text-gray-400">Alertes ouvertes</p>
-          <p className="text-4xl font-bold text-gray-900 dark:text-white mt-1">{openCount}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Voir toutes les alertes →</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Alertes ouvertes</p>
+          <p className="text-4xl font-bold text-gray-900 dark:text-white mt-2 tabular-nums">{openCount}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 group-hover:text-blue-500 transition-colors">Voir toutes →</p>
         </Link>
 
         {/* KPI — Events/s */}
-        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-          <p className="text-sm text-gray-400 dark:text-gray-400">Événements/s</p>
-          <p className="text-4xl font-bold text-gray-900 dark:text-white mt-1">{eventsPerSecond}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Fenêtre 60s</p>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Événements/s</p>
+          <p className="text-4xl font-bold text-gray-900 dark:text-white mt-2 tabular-nums">{eventsPerSecond}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Fenêtre 60s</p>
         </div>
 
         {/* Severity distribution */}
-        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-          <p className="text-sm text-gray-400 dark:text-gray-400 mb-2">Distribution sévérité</p>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">Distribution sévérité</p>
           {severityData.length > 0 ? (
             <ResponsiveContainer width="100%" height={100}>
               <PieChart>
@@ -89,14 +81,22 @@ export default function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-gray-400 dark:text-gray-500 text-xs">Aucune donnée</p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {(['critical','high','medium','low'] as const).map((sev) => (
+                <span key={sev} className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-500">
+                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: SEVERITY_COLORS[sev] }} />
+                  {sev}
+                </span>
+              ))}
+              <p className="w-full text-xs text-gray-400 dark:text-gray-600 mt-1">Aucune alerte</p>
+            </div>
           )}
         </div>
       </div>
 
       {/* Event rate chart */}
-      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-        <p className="text-sm text-gray-400 dark:text-gray-400 mb-3">Taux d'événements (60 dernières secondes)</p>
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">Taux d'événements (60 dernières secondes)</p>
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={rateHistory}>
             <XAxis dataKey="ts" tick={false} stroke={axisStroke} />

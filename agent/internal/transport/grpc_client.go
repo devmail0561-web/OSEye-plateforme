@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	gen "github.com/oseye/agent/gen"
+	"github.com/oseye/agent/internal/backoff"
 	"github.com/oseye/agent/internal/chain"
 	"github.com/oseye/agent/internal/config"
 )
@@ -100,16 +101,13 @@ func (c *GRPCClient) SendBatch(ctx context.Context, events []*gen.UniversalEvent
 		default:
 		}
 
-		// Exponential backoff with cap.
+		// Full-jitter backoff — avoids thundering herd on simultaneous restarts.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(delay):
 		}
-		delay *= 2
-		if delay > backoffMax {
-			delay = backoffMax
-		}
+		delay = backoff.Next(delay, backoffMax)
 	}
 }
 

@@ -14,6 +14,10 @@ const Incidents = lazy(() => import('@/pages/Incidents'))
 const IncidentDetail = lazy(() => import('@/pages/IncidentDetail'))
 const Rules = lazy(() => import('@/pages/Rules'))
 const NetworkGraph = lazy(() => import('@/pages/NetworkGraph'))
+const ApiKeys = lazy(() => import('@/pages/admin/ApiKeys'))
+const Plugins = lazy(() => import('@/pages/admin/Plugins'))
+const Policies = lazy(() => import('@/pages/admin/Policies'))
+const ResponseActions = lazy(() => import('@/pages/admin/ResponseActions'))
 
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
@@ -34,6 +38,15 @@ const router = createBrowserRouter([
           { path: '/incidents/:id', element: <Suspense fallback={null}><IncidentDetail /></Suspense> },
           { path: '/rules', element: <Suspense fallback={null}><Rules /></Suspense> },
           { path: '/network', element: <Suspense fallback={null}><NetworkGraph /></Suspense> },
+          {
+            element: <ProtectedRoute requiredRole="admin" />,
+            children: [
+              { path: '/admin/response-actions', element: <Suspense fallback={null}><ResponseActions /></Suspense> },
+              { path: '/admin/api-keys',         element: <Suspense fallback={null}><ApiKeys /></Suspense> },
+              { path: '/admin/plugins',          element: <Suspense fallback={null}><Plugins /></Suspense> },
+              { path: '/admin/policies',         element: <Suspense fallback={null}><Policies /></Suspense> },
+            ],
+          },
         ],
       },
     ],

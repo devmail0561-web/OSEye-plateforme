@@ -24,6 +24,7 @@ from oseye.bus.factory import create_bus
 from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.correlation.engine import CorrelationEngine
+from oseye.forensic.case_manager import CaseManager
 from oseye.correlation.linkers.same_host import SameHostLinker
 from oseye.decision.action_executor import ActionExecutor
 from oseye.decision.engine import DecisionEngine, PolicyOverrides
@@ -38,14 +39,23 @@ from oseye.storage.repositories.api_keys import SQLApiKeyRepository
 from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.storage.repositories.events import SQLEventRepository
 from oseye.storage.repositories.incidents import SQLIncidentRepository
+from oseye.storage.repositories.blocked_agents import SQLBlockedAgentsRepository
+from oseye.storage.repositories.cases import SQLCaseRepository
+from oseye.storage.repositories.response_actions import SQLResponseActionsRepository
 from oseye.storage.repositories.rule_versions import SQLRuleVersionRepository
 from oseye.threat_intel.cache import MemoryTICache, RedisTICache
 from oseye.threat_intel.client import ThreatIntelClient
 from oseye.threat_intel.providers.abuseipdb import AbuseIPDBProvider
 from oseye.threat_intel.providers.misp import MISPProvider
 from oseye.threat_intel.providers.virustotal import VirusTotalProvider
+from oseye.ml_engine.engine import MLEngine
+from oseye.plugin.manager import PluginManager
+from oseye.plugin.verifier import PluginVerifier
+from oseye.policy.engine import PolicyEngine
+from oseye_sdk.ipc import IPCServer
 from oseye.workers.correlation_worker import CorrelationWorker
 from oseye.workers.decision_worker import DecisionWorker
+from oseye.workers.ml_worker import MLWorker
 from oseye.workers.rule_worker import RuleWorker
 from oseye.workers.storage_writer import StorageWriter
 from oseye.workers.ti_worker import TIWorker
@@ -156,6 +166,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # ------------------------------------------------------------------
 
         decision_repo = SQLDecisionRepository(backend.session_factory)
+        case_repo = SQLCaseRepository(backend.session_factory)
+        case_manager = CaseManager(case_repo=case_repo)
         # F-02: restore last journal hash from DB so the chain survives restarts.
         _last_hash = await decision_repo.get_last_journal_hash()
         journal = DecisionJournal(last_hash=_last_hash) if _last_hash else DecisionJournal()
@@ -169,6 +181,75 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         human_queue = HumanApprovalQueue(
             decision_repo=decision_repo,
             poll_interval=settings.decision_human_poll_interval,
+            action_executor=action_executor,
+        )
+
+        # ------------------------------------------------------------------
+        # Policy Engine — charge les profils YAML et les pousse aux agents
+        # ------------------------------------------------------------------
+
+        policy_engine = PolicyEngine(
+            bus=bus,
+            default_profile=settings.default_surveillance_profile,
+        )
+        await policy_engine.load_profiles()
+        _agent_ids_for_policy = await repo.get_distinct_agent_ids()
+        policy_engine.seed_known_agents(_agent_ids_for_policy)
+        _logger.info(
+            "policy_engine_ready",
+            profiles=len(policy_engine.list_profiles()),
+            known_agents=len(_agent_ids_for_policy),
+        )
+
+        # ------------------------------------------------------------------
+        # ML Engine — scoring online + checkpointing périodique
+        # ------------------------------------------------------------------
+
+        ml_engine = MLEngine()
+        ml_worker = MLWorker(
+            bus=bus,
+            engine=ml_engine,
+            checkpoint_path=Path(settings.ml_checkpoint_path),
+            checkpoint_interval_s=settings.ml_checkpoint_interval_s,
+        )
+
+        # ------------------------------------------------------------------
+        # Plugin system — IPC socket + PluginManager
+        # ------------------------------------------------------------------
+
+        ipc_server = IPCServer(socket_path=settings.plugin_ipc_socket)
+        await ipc_server.start()
+        _logger.info("plugin_ipc_server_started", socket=settings.plugin_ipc_socket)
+
+        _plugin_verifier: PluginVerifier | None = None
+        _plugin_keys_dir = Path(settings.plugin_keys_dir)
+        if _plugin_keys_dir.is_dir():
+            _plugin_verifier = PluginVerifier(keys_dir=_plugin_keys_dir)
+            _logger.info("plugin_verifier_ready", keys_dir=str(_plugin_keys_dir))
+        else:
+            _logger.warning(
+                "plugin_keys_dir_missing",
+                path=str(_plugin_keys_dir),
+                note="plugin signature verification disabled",
+            )
+
+        plugin_manager = PluginManager(
+            plugins_dir=Path(settings.plugins_dir),
+            ipc_socket=settings.plugin_ipc_socket,
+            verifier=_plugin_verifier,
+            require_signature=settings.plugin_require_signature,
+        )
+        if settings.plugin_require_signature:
+            _logger.info("plugin_signature_required", keys_dir=settings.plugin_keys_dir)
+        else:
+            _logger.warning(
+                "plugin_signature_not_required",
+                note="Set OSEYE_PLUGIN_REQUIRE_SIGNATURE=true in production",
+            )
+        _logger.info(
+            "plugin_manager_ready",
+            plugins_dir=settings.plugins_dir,
+            discovered=len(plugin_manager.list()),
         )
 
         # ------------------------------------------------------------------
@@ -210,8 +291,27 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 if stop.is_set():
                     break
 
-        # gRPC server (mTLS if certs present, insecure otherwise)
-        grpc_server = await create_grpc_server(settings, bus)
+        # gRPC server — mTLS enforced (raises if certs missing and not dev mode)
+        grpc_server, grpc_servicer = await create_grpc_server(settings, bus)
+
+        # Load Ed25519 public keys for agent batch-signature verification
+        _keys_dir = Path(settings.agent_keys_dir)
+        if _keys_dir.is_dir():
+            for pub_file in sorted(_keys_dir.glob("*.pub")):
+                cn = pub_file.stem
+                grpc_servicer.register_agent_key(cn, pub_file.read_bytes())
+                _logger.info("agent_key_loaded", cn=cn)
+        else:
+            _logger.warning("agent_keys_dir_missing", path=str(_keys_dir))
+
+        # Load persisted agent blocklist so revocations survive restarts
+        blocked_agents_repo = SQLBlockedAgentsRepository(backend.session_factory)
+        _blocked_cns = await blocked_agents_repo.list_blocked()
+        for _cn in _blocked_cns:
+            grpc_servicer.block_agent(_cn)
+        if _blocked_cns:
+            _logger.info("blocked_agents_loaded", count=len(_blocked_cns))
+
         await grpc_server.start()
         _logger.info("grpc_server_started", port=settings.grpc_port)
 
@@ -223,6 +323,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             asyncio.create_task(correlation_worker.run(), name="correlation_worker"),
             asyncio.create_task(decision_worker.run(), name="decision_worker"),
             asyncio.create_task(human_queue.run(), name="human_queue"),
+            asyncio.create_task(ml_worker.run(), name="ml_worker"),
         ]
         _logger.info("workers_started", count=len(tasks))
 
@@ -244,6 +345,17 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         app.state.incident_repo = incident_repo  # type: ignore[attr-defined]
         app.state.decision_repo = decision_repo  # type: ignore[attr-defined]
         app.state.human_queue = human_queue  # type: ignore[attr-defined]
+        app.state.case_manager = case_manager  # type: ignore[attr-defined]
+        app.state.grpc_servicer = grpc_servicer  # type: ignore[attr-defined]
+        app.state.action_executor = action_executor  # type: ignore[attr-defined]
+        app.state.plugin_manager = plugin_manager  # type: ignore[attr-defined]
+        app.state.ml_engine = ml_engine  # type: ignore[attr-defined]
+        app.state.policy_engine = policy_engine  # type: ignore[attr-defined]
+        app.state.blocked_agents_repo = blocked_agents_repo  # type: ignore[attr-defined]
+        response_actions_repo = SQLResponseActionsRepository(backend.session_factory)
+        app.state.response_actions_repo = response_actions_repo  # type: ignore[attr-defined]
+        # Wire repo into the servicer so ReportActions RPC can persist reports
+        grpc_servicer._response_actions_repo = response_actions_repo  # noqa: SLF001
 
         yield  # server runs here
 
@@ -254,6 +366,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         await asyncio.gather(*tasks, return_exceptions=True)
         await ti_client.close()
         await http_client.aclose()
+        await ipc_server.stop()
         _logger.info("grpc_server_stopped")
         _logger.info("workers_stopped")
 

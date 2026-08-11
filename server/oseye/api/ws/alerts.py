@@ -32,24 +32,36 @@ async def ws_alerts(ws: WebSocket) -> None:
     try:
         token = await asyncio.wait_for(ws.receive_text(), timeout=5.0)
     except (TimeoutError, Exception):  # noqa: BLE001
-        await ws.close(code=4001)
+        try:
+            await ws.close(code=4001)
+        except Exception:  # noqa: BLE001
+            pass
         return
 
     if not token:
-        await ws.close(code=4001)
+        try:
+            await ws.close(code=4001)
+        except Exception:  # noqa: BLE001
+            pass
         return
 
     try:
         handler = ws.app.state.jwt_handler
         payload = handler.verify_token(token)
     except Exception:  # noqa: BLE001
-        await ws.close(code=4001)
+        try:
+            await ws.close(code=4001)
+        except Exception:  # noqa: BLE001
+            pass
         return
 
     # SEC-005: enforce role check
     roles: list[str] = list(payload.get("roles", []))
     if not _VALID_WS_ROLES.intersection(roles):
-        await ws.close(code=4003)
+        try:
+            await ws.close(code=4003)
+        except Exception:  # noqa: BLE001
+            pass
         return
 
     # SEC-WS-001: pass user_sub so the manager can enforce per-user connection cap

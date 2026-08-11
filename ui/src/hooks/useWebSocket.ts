@@ -65,7 +65,7 @@ export function useWebSocket({ url, onMessage, enabled = true }: UseWebSocketOpt
         connect()
       }, backoffRef.current)
     }
-  }, [url, onMessage, setStatus, getToken]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [url, onMessage, setStatus, getToken])
 
   useEffect(() => {
     if (!enabled) {

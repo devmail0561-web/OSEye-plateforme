@@ -292,7 +292,7 @@ oseye/
 │   ├── pyproject.toml
 │   └── Dockerfile
 │
-├── sdk/                            # Plugin SDK — publié sur PyPI
+├── sdk/                            # Plugin SDK — installable via pip install -e sdk/
 │   ├── oseye_sdk/
 │   │   ├── plugin.py               # Classes de base Plugin, Collector, Analyzer...
 │   │   ├── event.py                # Modèle Event exposé aux plugins
@@ -1102,24 +1102,31 @@ condition: |
 ### 5.1 PKI interne
 
 ```
-Root CA (offline, air-gapped)
- └── Intermediate CA (oseye-ca)
-      ├── server.crt        — API REST + gRPC (SAN: oseye-server, localhost)
-      ├── agent-{id}.crt    — un certificat par agent (CN = agent_id)
-      └── worker-*.crt      — workers internes
+CA (oseye-ca)
+  ├── server.crt        — gRPC server (SAN: hostname, localhost)
+  ├── agent-{cn}.crt    — un certificat RSA par agent (CN = hostname, durée 365 j)
+  └── jwt_private.pem   — clé RS256 pour les JWT API
 
-Durée de vie :
-  Intermediate CA : 5 ans
-  Server cert     : 1 an (rotation via cert-manager en K8s)
-  Agent cert      : 90 jours (renouvellement automatique à 80% de la durée)
+Enrollment agent (implémenté) :
+  1. Admin génère un token à usage unique via CLI (entropie 256 bits, TTL 24h)
+  2. Agent présente son CSR : POST /api/v1/enroll/{token} { csr_pem, hostname }
+  3. Server valide le token (regex hex-64, TTL), signe le CSR avec la CA RSA
+  4. Server retourne { cert_pem } et consomme le token (one-shot)
+  5. Agent dépose le cert dans /etc/oseye/certs/agent.crt
+  6. Toutes les connexions gRPC suivantes utilisent mTLS (CN = hostname vérifié)
 
-Enrollment agent :
-  1. Admin génère un OTP à usage unique (valable 15 min)
-  2. Agent génère une paire de clés Ed25519 + un CSR
-  3. Agent POST /api/v1/agents/enroll { csr_pem, otp }
-  4. Server valide l'OTP, signe le CSR avec l'intermediate CA
-  5. Server retourne { cert_pem, ca_cert_pem }
-  6. Toutes les connexions gRPC suivantes utilisent mTLS (CN vérifié = agent_id)
+Clé de signature batch (séparée du cert mTLS) :
+  - L'agent possède une clé Ed25519 dédiée : OSEYE_ED25519_SIGNING_KEY
+    (défaut /etc/oseye/certs/agent.ed25519.key)
+  - Séparée de la clé mTLS (qui est RSA selon la CA) — évite l'incompatibilité de type
+  - La clé publique correspondante est déposée en DER dans agent_keys_dir/{cn}.pub
+    sur le serveur (OSEYE_AGENT_KEYS_DIR, défaut /etc/oseye/agent_keys)
+  - Chargée au démarrage du serveur et enregistrée dans AgentServiceServicer
+
+mTLS strict :
+  - Le serveur refuse de démarrer si server.crt, server.key ou ca.crt sont absents
+  - Exception : OSEYE_GRPC_INSECURE_DEV=true autorise le mode insecure (dev uniquement)
+  - require_client_auth=True toujours actif quand la CA est présente
 ```
 
 ### 5.2 Authentification API
@@ -1127,18 +1134,16 @@ Enrollment agent :
 ```
 Flux JWT :
   POST /auth/token { username, password }
-    → access_token (RS256, exp: 15min) + refresh_token (HttpOnly cookie, exp: 7j)
-  POST /auth/refresh (cookie)
-    → nouveau access_token
+    → access_token (RS256, exp: 15min)
   
   Stockage :
-    Access token : mémoire client uniquement (pas localStorage)
-    Refresh token : HttpOnly Secure SameSite=Strict cookie
+    Access token : mémoire client uniquement (authStore Zustand, non persisté en roles)
+    Roles : décodés depuis le JWT à chaque chargement, jamais dupliqués en localStorage
 
 API Keys :
-  Format : oseye_{random_32_bytes_hex}
-  Stockage : BLAKE3(raw_key) en base, jamais la clé brute
-  Usage : header X-API-Key pour accès automatisé (CI/CD, webhooks entrants)
+  Format : osk_{random_32_bytes_hex}
+  Stockage : HMAC-SHA256 en base, jamais la clé brute
+  Usage : header X-API-Key pour accès automatisé (agents, CI/CD)
   Révocation : immédiate (lookup en base à chaque requête)
 ```
 
@@ -1146,41 +1151,73 @@ API Keys :
 
 | Rôle | Périmètre |
 |------|-----------|
-| `reader` | Lecture events, alerts, decisions, cases (tout en GET) |
-| `analyst` | + Acknowledge/annoter alerts, ajouter notes cases |
-| `senior_analyst` | + Créer/modifier règles, approuver/rejeter décisions humaines, whitelist entités |
-| `admin` | + Tout (agents, plugins, politiques, suppressions, rotate certs) |
+| `analyst` | Lecture events, alerts, decisions, cases, règles. Acknowledge/annoter/acquitter alertes, gérer cases |
+| `admin` | + Approuver/rejeter décisions humaines, recharger règles, gérer API Keys, plugins, policies, révoquer agents |
+
+> Note : `admin` hérite du rôle `analyst` — le token JWT contient `["admin", "analyst"]`.
 
 ### 5.4 Intégrité des événements
 
 ```
-Hash chain BLAKE3 (calculé dans l'agent) :
-  event.hash_chain = BLAKE3(
-      event_content_bytes || previous_event.hash_chain
-  )
+Hash chain BLAKE3 (calculé dans l'agent, par événement) :
+  event.hash_chain = BLAKE3(event_content_bytes || previous_event.hash_chain)
   Premier event : BLAKE3(event_content_bytes || agent_id_bytes)
 
-Signature des batches (Ed25519) :
+Signature des batches (Ed25519, clé dédiée séparée de mTLS) :
   batch_signature = Ed25519Sign(
-      private_key = agent_key,
-      message = BLAKE3(event_1.hash_chain || ... || event_N.hash_chain)
+      private_key = agent.ed25519_key  (OSEYE_ED25519_SIGNING_KEY)
+      message     = BLAKE3(event_1.hash_chain || ... || event_N.hash_chain)
   )
 
 Vérification côté server :
-  1. Vérifier signature Ed25519 avec la clé publique de l'agent (depuis son certificat)
-  2. Recalculer hash_chain pour chaque event et vérifier la chaîne
-  → Toute rupture = alerte "agent_tampered"
+  1. Lookup de la clé publique Ed25519 par CN dans AgentServiceServicer._agent_keys
+     (chargée depuis /etc/oseye/agent_keys/{cn}.pub au démarrage)
+  2. Vérification Ed25519 de batch_signature — batch entier rejeté si invalide
+  3. Recalcul hash_chain pour chaque event
+  → Si clé non enregistrée : WARNING loggué (mode dégradé, pas de rejet)
+  → Si signature invalide : batch rejeté, alerte "agent_tampered"
 
-Journal des décisions : même mécanisme, hash_chain BLAKE3,
-  signé avec la clé du server. Endpoint de vérification : GET /decisions/journal/verify
+Journal des décisions : hash_chain BLAKE3 append-only, signé côté server.
+  Vérification : GET /api/v1/decisions/journal/verify
 ```
 
 ### 5.5 Chiffrement
 
-- TLS 1.3 minimum sur toutes les interfaces (API REST, WebSocket, gRPC)
-- Chiffrement au repos : PostgreSQL tablespace chiffré (pgcrypto / LUKS au niveau OS)
-- ClickHouse : chiffrement natif activé
-- Secrets (clés JWT, mots de passe DB) : montés depuis Kubernetes Secrets ou HashiCorp Vault
+- **gRPC** : TLS 1.3 uniquement — `GRPC_SSL_CIPHER_SUITES` restreint aux suites
+  `TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384`, `TLS_CHACHA20_POLY1305_SHA256`
+- **Agent Go** : `MinVersion: tls.VersionTLS13` imposé côté client
+- **API REST / WebSocket** : TLS 1.3 via Uvicorn (production derrière reverse-proxy)
+- **Au repos** : PostgreSQL pgcrypto / LUKS OS ; ClickHouse chiffrement natif
+- **Secrets** : Kubernetes Secrets ou HashiCorp Vault en production
+
+### 5.6 Révocation d'agent
+
+```
+Révocation sélective par CN (hostname) :
+  DELETE /api/v1/agents/{cn}           [admin]  → effet immédiat sur flux gRPC actifs
+  POST   /api/v1/agents/{cn}/unblock   [admin]  → restauration d'accès
+  GET    /api/v1/agents/blocked        [admin]  → liste des agents révoqués
+
+Persistance : table blocked_agents (cn, blocked_at, reason) — rechargée au démarrage
+Mécanisme : AgentServiceServicer._blocked_cns (set thread-safe) vérifié dans _require_cn
+  → PERMISSION_DENIED immédiat sur IngestEvents, ReceivePolicy, StreamCommands
+```
+
+### 5.7 Disponibilité — Reconnexion agent
+
+```
+Transport batch (grpc_client.go) :
+  Retry : backoff full-jitter dans [0, min(delay*2, 30s)], max 15 tentatives
+  Fallback : buffer SQLite local — aucun événement perdu en cas de coupure
+
+Streams Policy / Commands (policy/client.go, commands/client.go) :
+  Reconnexion infinie avec backoff full-jitter [0, min(delay*2, 30s)]
+  Push profil par défaut (OSEYE_DEFAULT_SURVEILLANCE_PROFILE) à chaque reconnexion
+
+Full jitter (vs backoff exponentiel pur) : distribue les reconnexions uniformément
+  sur [0, delay_max] — élimine les pics de charge synchronisés (thundering herd)
+  lors de redémarrages serveur groupés.
+```
 
 ### 5.6 Audit Log API
 
@@ -1669,12 +1706,14 @@ POST   /policies/{profile_name}/apply → { applied_to: [...] }  [admin]  { host
 ### Agents
 
 ```
-GET    /agents                      → [ AgentInfo ]
-GET    /agents/{agent_id}           → AgentInfo
-GET    /agents/{agent_id}/status    → { online, last_seen, cpu_pct, mem_mb, events_per_sec }
-POST   /agents/enroll               → { cert_pem, ca_cert_pem }  { csr_pem, otp }
-POST   /agents/{agent_id}/renew-cert → { cert_pem }  (mTLS requis)
-DELETE /agents/{agent_id}           → 204  [admin]
+# Enrollment (POST consomme le token — one-shot)
+GET    /enroll/{token}              → CA cert PEM  (récupération CA avant enrollment)
+POST   /enroll/{token}             → { cert: "..." }  { csr_pem, hostname }
+
+# Révocation (admin uniquement, effet immédiat sur flux gRPC)
+GET    /agents/blocked              → [ cn ]  [admin]
+DELETE /agents/{cn}                 → 204  [admin]  (révoque et persiste)
+POST   /agents/{cn}/unblock         → 204  [admin]  (restaure l'accès)
 ```
 
 ### Plugins
@@ -2158,45 +2197,62 @@ Chaque phase produit un artefact fonctionnel et testable avant de passer à la s
 
 ---
 
-### Phase 8 — Policy Engine + Plugin SDK (Semaines 23–25)
+### Phase 8 — Policy Engine + Plugin SDK (Semaines 23–25) `[x]` COMPLÈTE
 **Objectif :** Profils de surveillance hot-swap, écosystème de plugins extensible.
 
-- Policy engine : `SurveillanceProfile`, schéma YAML
-- 6 profils intégrés (webserver, database, workstation, fileserver, container, investigation)
-- Push de profil vers agents via event bus
-- Agent : réception profil → activation/désactivation réelle des collectors
-- SDK (package `sdk/`) publié sur PyPI
-- Plugin manager : load/unload, vérification signature, isolation subprocess
-- Limites de ressources plugins via cgroups v2
-- Plugins exemple : notifier PagerDuty, exporteur S3
-- CLI : `oseye plugin install <name>`
+- PolicyEngine : 6 profils YAML intégrés (workstation, server, investigation, minimal, compliance, stealth)
+- Push de profil aux agents au démarrage + push automatique à la connexion d'un agent
+- `seed_known_agents()` reconstruit la liste agents depuis la table `events` au redémarrage
+- Plugin manager : upload `.py` via dashboard, vérification signature Ed25519, isolation subprocess (RLIMIT + cgroup v2)
+- `OSEYE_PLUGIN_REQUIRE_SIGNATURE=true` pour enforcement strict en production
+- Socket IPC Unix (NDJSON) pour communication serveur↔plugin
+- 3 types de plugin : AnalyzerPlugin, ExporterPlugin, CollectorPlugin
+- SDK installable via `pip install -e sdk/` (PyPI non prévu pour l'instant)
+- Plugins exemple : `notifier_pagerduty.py`, `exporter_s3.py`
+- MLEngine + MLWorker câblés au démarrage — scoring online toutes les `events:normalized`, checkpoint toutes les 5 min
 
-**Livrable :** Basculer de `workstation` à `investigation` double la verbosité de collecte en < 2 secondes. Plugin tiers tourne en sandbox isolé.
-
----
-
-### Phase 9 — Dashboard UI (Semaines 26–29)
-**Objectif :** Interface web production-grade pour tous les workflows analyste.
-
-- Flux auth : login, refresh JWT, logout
-- Page Dashboard : taux d'events en temps réel, compteur alertes, heatmap de risque
-- Page Events : timeline searchable avec filtres avancés
-- Page Alerts : queue avec workflow acknowledge/faux-positif
-- Page Decisions : journal + cartes d'approbation humaine avec compte à rebours
-- Page Cases : liste, détail, vue timeline, export
-- Page Entities : profils de risque, visualisation arbre de processus
-- Page Rules : liste, éditeur YAML create/edit, enable/disable
-- Graphe de corrélation : force-directed D3 des events liés
-- Intégration WebSocket pour mises à jour live sur toutes les pages
+**Livrable :** PolicyEngine, PluginManager, IPCServer, MLWorker démarrés dans le lifespan FastAPI. 8 workers actifs.
 
 ---
 
-### Phase 10 — Hardening + Distribution (Semaines 30–33)
-**Objectif :** Packaging production-grade, validation des performances.
+### Phase 9 — Dashboard UI (Semaines 26–29) `[x]` COMPLÈTE
+**Objectif :** Interface web production-grade pour tous les workflows analyste et admin.
 
-- Action ISOLATE réelle : SIGSTOP / cgroup freeze avec timer de rollback configurable
-- Enforcement mTLS sur toute la communication agent↔server
-- Enforcement TLS 1.3 sur l'API REST
+**Stack :** React 18 + TypeScript + Vite + Tailwind + Lucide + Recharts + D3.
+
+**Composants UI (`src/components/ui/`) :** Badge, Button, EmptyState, Spinner, Input, Select. Sub-composants extraits : decisions/, cases/, rules/. CaseTimeline avec connecteur vertical.
+
+**Pages analyste :** Dashboard (KPIs, graphe temps-réel), Events (filtres URL params, expand JSON), Alerts (acknowledge/FP), Incidents + IncidentDetail (timeline MITRE), Cases (création, tabs), Decisions (PendingCard + approval), Rules (éditeur YAML), NetworkGraph (D3 force).
+
+**Pages admin :** API Keys (création + bannière clé brute + clipboard), Plugins (upload .py depuis browser, badge signature), Policies (détails collecteurs déroulables, appliquer profil), Response Actions (rollback).
+
+**Auth UI :** rôles décodés depuis JWT (hors localStorage), `ProtectedRoute requiredRole="admin"`, sidebar conditionnelle.
+
+**Sidebar :** repliable (w-52 ↔ w-12), icônes Lucide, badge alertes en mode replié, section Admin conditionnelle (admin uniquement), mobile nav inchangée.
+
+**WebSocket :** persistant sur toutes les pages (AppShell), reconnexion automatique.
+
+---
+
+### Phase 10 — Hardening + Distribution (Semaines 30–33) `[x]` COMPLÈTE + extensions post-phase
+
+**Packaging livré :** `.deb`/`.rpm` agent, `docker-compose` prod serveur.
+
+**Corrections sécurité CIA (post-Phase 10) :**
+- F-1+F-3 : vérification Ed25519 batches activée — clé de signature séparée (`OSEYE_ED25519_SIGNING_KEY`), `.pub` chargées au démarrage
+- F-2 : mTLS strict — `RuntimeError` au démarrage si certs manquants (sauf `OSEYE_GRPC_INSECURE_DEV=true`)
+- F-5 : full-jitter backoff dans 3 clients Go (`grpc_client`, `policy/client`, `commands/client`)
+- F-6 : révocation sélective agents — table `blocked_agents`, `DELETE /api/v1/agents/{cn}`, effet immédiat
+- F-4 : TLS 1.3 côté serveur (`GRPC_SSL_CIPHER_SUITES`)
+
+**Response Engine (post-Phase 10) :**
+- Agent Go : `internal/responder/` — BlockIP (nftables/iptables auto-détecté), QuarantineFile, KillProcess (vérification `/proc/{pid}/comm`)
+- Persistance avant exécution (table `active_actions` SQLite), déduplication 60s
+- Stream `ReportActions` agent→serveur
+- Serveur : table `response_actions`, `POST /{id}/rollback`, câblage `HumanApprovalQueue`→`ActionExecutor`
+
+**Enforcement mTLS sur toute la communication agent↔server :** `[x]`
+**Enforcement TLS 1.3 sur l'API REST :**
 - Rate limiting (token bucket par API key / utilisateur)
 - Isolation multi-tenant (partitionnement des données par organisation)
 - Benchmark de performance : validation > 100 000 events/s

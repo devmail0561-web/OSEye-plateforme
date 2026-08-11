@@ -11,7 +11,10 @@ const { mockList, mockValidate, mockReload } = vi.hoisted(() => ({
 
 vi.mock('@/api/client', () => ({
   rulesApi: { list: mockList, validate: mockValidate, reload: mockReload },
+  registerAuthCallbacks: vi.fn(),
 }))
+
+import { useAuthStore } from '@/stores/authStore'
 
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ isDark: true, toggle: vi.fn() }),
@@ -53,6 +56,7 @@ function renderRules() {
 describe('Rules', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({ roles: ['admin', 'analyst'] })
     mockList.mockResolvedValue({ items: [FAKE_RULE], total: 1 })
     mockValidate.mockResolvedValue({ valid: true, error: null })
     mockReload.mockResolvedValue({ reloaded: 1 })
@@ -66,8 +70,8 @@ describe('Rules', () => {
   it('renders enabled dot (green)', async () => {
     renderRules()
     await waitFor(() => screen.getByText('detect.lateral_movement'))
-    const dot = document.querySelector('.bg-green-400')
-    expect(dot).toBeInTheDocument()
+    const icon = document.querySelector('.text-green-500')
+    expect(icon).toBeInTheDocument()
   })
 
   it('expands rule row to show detail on click', async () => {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gen "github.com/oseye/agent/gen"
+	"github.com/oseye/agent/internal/backoff"
 )
 
 // PolicyClient maintains the server→agent SurveillanceProfile stream and
@@ -60,10 +61,7 @@ func (c *PolicyClient) Run(ctx context.Context) {
 				return
 			case <-t.C:
 			}
-			delay *= 2
-			if delay > maxDelay {
-				delay = maxDelay
-			}
+			delay = backoff.Next(delay, maxDelay)
 		}
 	}
 }

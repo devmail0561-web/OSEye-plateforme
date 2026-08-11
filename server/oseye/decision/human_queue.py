@@ -14,7 +14,8 @@ from uuid import UUID
 from oseye.core.observability import get_logger
 
 if TYPE_CHECKING:
-    from oseye.core.schema import Decision
+    from oseye.core.schema import Alert, Decision
+    from oseye.decision.action_executor import ActionExecutor
     from oseye.storage.repositories.decisions import SQLDecisionRepository
 
 _log = get_logger(__name__)
@@ -33,10 +34,14 @@ class HumanApprovalQueue:
         self,
         decision_repo: SQLDecisionRepository,
         poll_interval: int = 30,
+        action_executor: ActionExecutor | None = None,
     ) -> None:
         self._repo = decision_repo
         self._poll_interval = poll_interval
         self._stop = asyncio.Event()
+        # CIA — Disponibilité : after human approval, push the response command
+        # to the agent immediately via ActionExecutor.execute_after_approval().
+        self._executor = action_executor
 
     async def run(self) -> None:
         """Background loop — expires timed-out pending decisions."""
@@ -61,11 +66,23 @@ class HumanApprovalQueue:
         self._stop.set()
 
     async def approve(self, decision_id: UUID, operator: str, note: str = "") -> Decision | None:
-        """Record an operator approval for *decision_id*.
+        """Record an operator approval for *decision_id* and trigger response commands.
 
+        After persisting the approval, calls ActionExecutor.execute_after_approval()
+        to push KILL_PROCESS (or other post-approval commands) to the agent.
         Returns the updated Decision, or None if not found / already decided.
         """
-        return await self._update_decision(decision_id, "approved", operator, note)
+        decision = await self._update_decision(decision_id, "approved", operator, note)
+        if decision is not None and self._executor is not None:
+            try:
+                await self._executor.execute_after_approval(decision)
+            except Exception as exc:  # noqa: BLE001
+                _log.error(
+                    "human_queue_post_approval_error",
+                    decision_id=str(decision_id),
+                    error=str(exc),
+                )
+        return decision
 
     async def reject(self, decision_id: UUID, operator: str, note: str = "") -> Decision | None:
         """Record an operator rejection for *decision_id*."""

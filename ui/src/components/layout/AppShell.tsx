@@ -1,8 +1,10 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import { useAlertsWebSocket } from '@/hooks/useAlertsWebSocket'
 
 export default function AppShell() {
+  useAlertsWebSocket()
   return (
     <div className="flex flex-col h-screen bg-white dark:bg-gray-950 text-gray-800 dark:text-gray-100">
       <Header />

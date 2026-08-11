@@ -83,3 +83,48 @@ class Settings(BaseSettings):
 
     # Enrollment token directory (one file per token, TTL 24h)
     enrollment_token_dir: str = Field(default="/etc/oseye/enrollment_tokens")
+
+    # Directory of DER-encoded Ed25519 public keys for agent batch signature verification.
+    # One file per agent, named {cn}.pub (e.g. "my-agent-hostname.pub").
+    agent_keys_dir: str = Field(default="/etc/oseye/agent_keys")
+
+    # Allow insecure gRPC (no TLS/mTLS). NEVER set True in production.
+    grpc_insecure_dev: bool = Field(default=False)
+
+    # Surveillance policy settings
+    default_surveillance_profile: str = Field(
+        default="workstation",
+        description="Profile pushed to agents on connect. Must match a builtin profile name.",
+    )
+
+    # Plugin system
+    plugins_dir: str = Field(
+        default="/etc/oseye/plugins",
+        description="Directory where plugin .py files are stored.",
+    )
+    plugin_ipc_socket: str = Field(
+        default="/var/run/oseye/plugin.sock",
+        description="Unix socket path for plugin IPC (server ↔ plugin NDJSON).",
+    )
+    plugin_keys_dir: str = Field(
+        default="/etc/oseye/plugin_keys",
+        description="Directory of Ed25519 .pem public keys used to verify plugin signatures.",
+    )
+    plugin_require_signature: bool = Field(
+        default=False,
+        description=(
+            "Require a valid Ed25519 signature for every plugin installation. "
+            "Set True in production. When True, installations without a valid "
+            ".sig file or without a registered trusted key are rejected."
+        ),
+    )
+
+    # ML Engine
+    ml_checkpoint_path: str = Field(
+        default="/var/lib/oseye/ml_checkpoint.pkl",
+        description="Path for ML model persistence (anomaly detector + MITRE classifier).",
+    )
+    ml_checkpoint_interval_s: float = Field(
+        default=300.0,
+        description="Seconds between periodic ML checkpoint saves. 0 disables.",
+    )

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import { Input, Button } from '@/components/ui'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -29,18 +30,18 @@ export default function Login() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">OSEye</h1>
-          <p className="mt-1 text-sm text-gray-400 dark:text-gray-400">Security Operations Dashboard</p>
+          <p className="mt-1 text-sm text-gray-400">Security Operations Dashboard</p>
         </div>
 
         <form
           onSubmit={handleSubmit}
           className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-4"
         >
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="space-y-1">
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Utilisateur
             </label>
-            <input
+            <Input
               id="username"
               type="text"
               aria-label="username"
@@ -48,15 +49,15 @@ export default function Login() {
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full"
             />
           </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <div className="space-y-1">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Mot de passe
             </label>
-            <input
+            <Input
               id="password"
               type="password"
               aria-label="password"
@@ -64,23 +65,17 @@ export default function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full"
             />
           </div>
 
           {error && (
-            <p role="alert" className="text-sm text-red-400">
-              {error}
-            </p>
+            <p role="alert" className="text-sm text-red-400">{error}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white font-medium rounded-lg transition-colors"
-          >
+          <Button type="submit" variant="primary" disabled={loading} className="w-full justify-center py-2">
             {loading ? 'Connexion…' : 'Se connecter'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

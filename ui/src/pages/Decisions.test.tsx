@@ -17,9 +17,11 @@ vi.mock('@/api/client', () => ({
     approve: mockApprove,
     reject: mockReject,
   },
+  registerAuthCallbacks: vi.fn(),
 }))
 
 import Decisions from './Decisions'
+import { useAuthStore } from '@/stores/authStore'
 
 const BASE_DECISION = {
   decision_id: 'dec-1',
@@ -53,6 +55,7 @@ function renderDecisions() {
 describe('Decisions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.setState({ roles: ['admin', 'analyst'] })
     mockPending.mockResolvedValue([BASE_DECISION])
     mockList.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
     mockApprove.mockResolvedValue({ ...BASE_DECISION, human_decision: 'approved' })

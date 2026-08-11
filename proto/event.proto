@@ -88,9 +88,28 @@ message CommandRequest {
 }
 
 // AgentCommand is a server→agent instruction.
+// command_type values:
+//   Existing  : "SET_THROTTLE" | "RELOAD_PROFILE" | "TAKE_SNAPSHOT"
+//   Response  : "BLOCK_IP" | "QUARANTINE_FILE" | "KILL_PROCESS"
+//   Rollback  : "UNBLOCK_IP" | "RESTORE_FILE"
 message AgentCommand {
-    string  command_type    = 1; // "SET_THROTTLE" | "RELOAD_PROFILE" | "TAKE_SNAPSHOT"
-    bytes   payload_json    = 2; // command-specific JSON payload
+    string  command_id      = 1; // UUID — for deduplication and rollback targeting
+    string  command_type    = 2;
+    bytes   payload_json    = 3; // command-specific JSON payload
+}
+
+// ActionReport is sent by the agent after executing (or failing) a response command.
+// The agent streams these back to the server via ReportActions.
+message ActionReport {
+    string  command_id      = 1; // matches AgentCommand.command_id
+    string  status          = 2; // "executed" | "failed" | "rolled_back"
+    string  error           = 3; // non-empty on failure
+    int64   executed_at_ns  = 4; // Unix nanoseconds
+}
+
+// ActionReportResponse is the server's acknowledgement of a batch of ActionReports.
+message ActionReportResponse {
+    int32  accepted = 1;
 }
 
 // AgentService is the gRPC service exposed by the server.
@@ -105,4 +124,7 @@ service AgentService {
 
     // StreamCommands opens a server→agent command channel.
     rpc StreamCommands(CommandRequest) returns (stream AgentCommand);
+
+    // ReportActions streams action execution reports from agent to server.
+    rpc ReportActions(stream ActionReport) returns (ActionReportResponse);
 }

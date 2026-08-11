@@ -29,6 +29,25 @@ PYTEST_OPTS ?=
 PYTEST_WORKERS ?= auto
 OSEYE_SECRET_KEY ?= dev-secret-key-local-testing-only
 
+# Chemins dev (hors /etc/oseye qui requiert root)
+DEV_CERTS_DIR   := $(CURDIR)/infra/certs
+DEV_DATA_DIR    := /tmp/oseye_dev
+DEV_PLUGINS_DIR := $(DEV_DATA_DIR)/plugins
+DEV_ML_DIR      := $(DEV_DATA_DIR)
+
+# Variables d'environnement communes pour run-server et run-server-mtls
+define DEV_ENV
+	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	OSEYE_ENROLLMENT_TOKEN_DIR=$(DEV_DATA_DIR)/enrollment_tokens \
+	OSEYE_JWT_PRIVATE_KEY_PATH=$(DEV_CERTS_DIR)/jwt_private.pem \
+	OSEYE_JWT_PUBLIC_KEY_PATH=$(DEV_CERTS_DIR)/jwt_public.pem \
+	OSEYE_PLUGINS_DIR=$(DEV_PLUGINS_DIR) \
+	OSEYE_PLUGIN_IPC_SOCKET=$(DEV_DATA_DIR)/plugin.sock \
+	OSEYE_PLUGIN_KEYS_DIR=$(DEV_DATA_DIR)/plugin_keys \
+	OSEYE_ML_CHECKPOINT_PATH=$(DEV_ML_DIR)/ml_checkpoint.pkl \
+	OSEYE_GRPC_INSECURE_DEV=true
+endef
+
 help:
 	@echo ""
 	@echo "Tests"
@@ -145,7 +164,7 @@ typecheck:
 # ── Audit engine ──────────────────────────────────────────────────────────────
 
 audit:
-	$(PYTHON) tools/oseye_audit.py --mode full
+	$(PYTHON) tools/oseye_audit.py --mode all
 
 # ── Docker dev ────────────────────────────────────────────────────────────────
 
@@ -158,9 +177,10 @@ dev-down:
 
 # ── Run locally (no Docker) ───────────────────────────────────────────────────
 
-run-server:
+run-server: dev-certs
 	@echo "==> Lancement du serveur OSEye (SQLite + InMemoryBus, port 8000)"
-	cd server && $(PYTHON) -m oseye.main
+	cd server && $(DEV_ENV) \
+	  $(PYTHON) -m oseye.main
 
 run-workers:
 	@echo "==> Lancement des workers (normalizer + storage_writer)"
@@ -172,9 +192,13 @@ run-agent:
 	  $(GOBIN)/go run ./cmd/oseye-agent
 
 dev-certs:
-	@echo "==> Génération du PKI dev (CA + server + agent-dev + JWT)"
-	bash scripts/generate_certs.sh
-	@echo "==> Certs prêts dans infra/certs/"
+	@if [ ! -f $(DEV_CERTS_DIR)/jwt_private.pem ]; then \
+	  echo "==> Génération du PKI dev (CA + server + agent-dev + JWT)"; \
+	  bash scripts/generate_certs.sh; \
+	  echo "==> Certs prêts dans $(DEV_CERTS_DIR)/"; \
+	else \
+	  echo "==> Certs dev déjà présents dans $(DEV_CERTS_DIR)/ (skip)"; \
+	fi
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
@@ -249,12 +273,10 @@ init-server:
 	@echo "==> Initialisation du serveur OSEye (PKI prod + token enrollment)"
 	sudo bash scripts/init-server.sh
 
-run-server-mtls:
+run-server-mtls: dev-certs
 	@echo "==> Lancement du serveur avec mTLS (requiert make dev-certs)"
-	cd server && \
-	  OSEYE_TLS_CERT_FILE=$(CURDIR)/infra/certs/server.crt \
-	  OSEYE_TLS_KEY_FILE=$(CURDIR)/infra/certs/server.key \
-	  OSEYE_TLS_CA_CERT_FILE=$(CURDIR)/infra/certs/ca.crt \
-	  OSEYE_JWT_PRIVATE_KEY_PATH=$(CURDIR)/infra/certs/jwt_private.pem \
-	  OSEYE_JWT_PUBLIC_KEY_PATH=$(CURDIR)/infra/certs/jwt_public.pem \
+	cd server && $(DEV_ENV) \
+	  OSEYE_TLS_CERT_FILE=$(DEV_CERTS_DIR)/server.crt \
+	  OSEYE_TLS_KEY_FILE=$(DEV_CERTS_DIR)/server.key \
+	  OSEYE_TLS_CA_CERT_FILE=$(DEV_CERTS_DIR)/ca.crt \
 	  $(PYTHON) -m oseye.main

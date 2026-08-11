@@ -46,15 +46,26 @@ class PluginManager:
         plugins_dir: Path,
         ipc_socket: str = "/var/run/oseye/plugin.sock",
         verifier: PluginVerifier | None = None,
+        require_signature: bool = False,
     ) -> None:
         self._plugins_dir = plugins_dir
         self._ipc_socket = ipc_socket
         self._verifier = verifier
+        # SEC-PLUGIN-003: when True, installations without a valid .sig are rejected
+        # even if no verifier is configured (prevents silent bypass).
+        self._require_signature = require_signature
         self._plugins: dict[str, PluginInfo] = {}
         self._sandboxes: dict[str, PluginSandbox] = {}
         self._lock = asyncio.Lock()
 
-        plugins_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            plugins_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            logger.warning(
+                "Cannot create plugins_dir %s — permission denied. "
+                "Run as root or pre-create the directory.",
+                plugins_dir,
+            )
         self._discover()
 
     # ------------------------------------------------------------------
@@ -64,11 +75,15 @@ class PluginManager:
     async def install(self, path: Path, *, verify: bool = True) -> PluginInfo:
         """Copy a plugin file into plugins_dir and register it.
 
-        If verify=True and a verifier is configured, the signature is checked
-        before installation. The expected signature file is <path>.sig alongside
-        the plugin file.
+        Signature enforcement rules:
+          - If require_signature=True and no verifier is configured → rejected
+            (prevents silent bypass when plugin_keys_dir is missing).
+          - If require_signature=True and verifier is configured but .sig is
+            absent or invalid → rejected.
+          - If require_signature=False, verification is best-effort only (skipped
+            when verifier is absent or verify=False).
 
-        Raises ValueError if signature verification fails.
+        Raises ValueError if signature requirements are not met.
         Raises FileNotFoundError if path does not exist.
         """
         if not path.exists():
@@ -76,11 +91,35 @@ class PluginManager:
 
         name = path.stem
 
-        if verify and self._verifier is not None:
+        # SEC-PLUGIN-003: signature enforcement
+        if self._require_signature:
+            # Hard requirement — reject if no verifier (keys directory missing)
+            if self._verifier is None:
+                raise ValueError(
+                    "Plugin signature verification is required "
+                    "(OSEYE_PLUGIN_REQUIRE_SIGNATURE=true) but no trusted keys are "
+                    "configured. Add Ed25519 public keys to plugin_keys_dir."
+                )
             sig_path = path.with_suffix(".sig")
             if not sig_path.exists():
-                raise ValueError(f"Signature file not found: {sig_path}")
+                raise ValueError(
+                    f"Signature file not found: {sig_path}. "
+                    "Provide a .sig file alongside the plugin."
+                )
             if not self._verifier.verify(path, sig_path):
+                raise ValueError(
+                    f"Signature verification failed for plugin {name!r}. "
+                    "Ensure the plugin is signed with a trusted key."
+                )
+        elif verify and self._verifier is not None:
+            # Best-effort: verify if verifier present and caller requested it
+            sig_path = path.with_suffix(".sig")
+            if not sig_path.exists():
+                logger.warning(
+                    "Plugin %r: signature file not found — installing without verification",
+                    name,
+                )
+            elif not self._verifier.verify(path, sig_path):
                 raise ValueError(
                     f"Signature verification failed for plugin {name!r}"
                 )

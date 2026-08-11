@@ -332,6 +332,12 @@ export interface AgentSnapshot {
 
 // ── API Keys ──────────────────────────────────────────────────────────────────
 
+export interface ApiKeyCreate {
+  name: string
+  roles: string[]
+  expires_at?: string | null
+}
+
 export interface ApiKeyCreated {
   key: string
   key_id: string

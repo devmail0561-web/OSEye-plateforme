@@ -20,6 +20,9 @@ import type {
   AlertSeverity,
   CaseStatus,
   IncidentStatus,
+  ApiKeyCreate,
+  ApiKeyCreated,
+  ApiKeyResponse,
 } from '@/types'
 
 // ── Axios instance ────────────────────────────────────────────────────────────
@@ -355,12 +358,26 @@ export const tiApi = {
 // ── Plugins ───────────────────────────────────────────────────────────────────
 
 export const pluginsApi = {
+  config(): Promise<{ require_signature: boolean; has_trusted_keys: boolean }> {
+    return api.get<{ require_signature: boolean; has_trusted_keys: boolean }>('/api/v1/plugins/config').then((r) => r.data)
+  },
+
   list(): Promise<PluginInfo[]> {
     return api.get<PluginInfo[]>('/api/v1/plugins').then((r) => r.data)
   },
 
   getById(name: string): Promise<PluginInfo> {
     return api.get<PluginInfo>(`/api/v1/plugins/${name}`).then((r) => r.data)
+  },
+
+  upload(file: File, verify = true): Promise<{ name: string; status: string }> {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post<{ name: string; status: string }>(
+      `/api/v1/plugins/upload?verify=${verify}`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    ).then((r) => r.data)
   },
 
   install(path: string, verify = true): Promise<{ name: string; status: string }> {
@@ -397,6 +414,51 @@ export const policiesApi = {
     return api
       .post<{ profile: string; pushed_to: string }>(`/api/v1/policies/${name}/apply`, { agent_id })
       .then((r) => r.data)
+  },
+}
+
+// ── API Keys ──────────────────────────────────────────────────────────────────
+
+export const apiKeysApi = {
+  list(): Promise<{ items: ApiKeyResponse[]; total: number }> {
+    return api.get<{ items: ApiKeyResponse[]; total: number }>('/api/v1/api-keys').then((r) => r.data)
+  },
+
+  create(body: ApiKeyCreate): Promise<ApiKeyCreated> {
+    return api.post<ApiKeyCreated>('/api/v1/api-keys', body).then((r) => r.data)
+  },
+
+  revoke(key_id: string): Promise<void> {
+    return api.delete(`/api/v1/api-keys/${key_id}`).then(() => undefined)
+  },
+}
+
+// ── Response Actions ──────────────────────────────────────────────────────────
+
+export interface ResponseAction {
+  command_id:     string
+  decision_id:    string
+  agent_cn:       string
+  command_type:   string
+  payload:        Record<string, unknown>
+  status:         'pending_report' | 'executed' | 'failed' | 'rolled_back'
+  created_at:     string
+  executed_at:    string | null
+  rolled_back_at: string | null
+  error:          string | null
+}
+
+export const responseActionsApi = {
+  list(params?: { agent_cn?: string; action_status?: string; limit?: number; offset?: number }): Promise<ResponseAction[]> {
+    return api.get<ResponseAction[]>('/api/v1/response-actions', { params }).then((r) => r.data)
+  },
+
+  get(command_id: string): Promise<ResponseAction> {
+    return api.get<ResponseAction>(`/api/v1/response-actions/${command_id}`).then((r) => r.data)
+  },
+
+  rollback(command_id: string): Promise<void> {
+    return api.post(`/api/v1/response-actions/${command_id}/rollback`).then(() => undefined)
   },
 }
 

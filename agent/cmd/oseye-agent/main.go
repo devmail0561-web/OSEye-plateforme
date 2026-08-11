@@ -22,6 +22,7 @@ import (
 	"github.com/oseye/agent/internal/platform"
 	_ "github.com/oseye/agent/internal/platform/linux" // register LinuxDriver via init()
 	"github.com/oseye/agent/internal/policy"
+	"github.com/oseye/agent/internal/responder"
 	"github.com/oseye/agent/internal/signer"
 	"github.com/oseye/agent/internal/transport"
 	"github.com/oseye/agent/internal/watchdog"
@@ -80,12 +81,14 @@ func main() {
 	}
 
 	// ── Crypto ───────────────────────────────────────────────────────────────
+	// Use a dedicated Ed25519 signing key (OSEYE_ED25519_SIGNING_KEY), separate
+	// from the mTLS key which may be RSA/ECDSA depending on the CA.
 	ch := chain.New()
 	var s *signer.Signer
-	if cfg.TLSKeyFile != "" {
-		s, err = signer.New(cfg.TLSKeyFile)
+	if cfg.Ed25519KeyFile != "" {
+		s, err = signer.New(cfg.Ed25519KeyFile)
 		if err != nil {
-			log.Warn("key file unavailable, using ephemeral signer", "err", err)
+			log.Warn("ed25519 key file unavailable, using ephemeral signer", "err", err)
 		}
 	}
 	if s == nil {
@@ -141,13 +144,29 @@ func main() {
 	wd := watchdog.New(cfg.MaxCPUPct, float64(cfg.MaxMemMB), mgr)
 	go wd.Run(ctx)
 
+	// ── Response engine — state store + deduplicator ─────────────────────────
+	stateStore, err := responder.OpenStateStore(cfg.BufferPath)
+	if err != nil {
+		log.Error("responder state store failed", "err", err)
+		buf.Close()
+		os.Exit(1)
+	}
+	defer stateStore.Close()
+	dedup := responder.NewDeduplicator(60 * time.Second)
+
 	// ── Policy + command streams ──────────────────────────────────────────────
 	if client != nil {
 		profileHandler := policy.NewHandler(mgr)
 		policyClient := policy.NewClient(client.ServiceClient(), agentIDBytes, profileHandler.Apply)
-		cmdClient := commands.NewClient(client.ServiceClient(), agentIDBytes, mgr)
+
+		reporter := responder.NewReporter(client.ServiceClient(), 256)
+		cmdClient := commands.NewClient(
+			client.ServiceClient(), agentIDBytes, mgr,
+			stateStore, dedup, reporter, cfg.QuarantineDir,
+		)
 		go policyClient.Run(ctx)
 		go cmdClient.Run(ctx)
+		go reporter.Run(ctx)
 	}
 
 	// ── Batcher + send loop ───────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 2.8
-**Dernière mise à jour :** 2026-08-09
+**Version :** 3.3
+**Dernière mise à jour :** 2026-08-11
 **Branche active :** `main` (`latest`)
-**Phase courante :** Phase 9 — Dashboard UI `[~]` EN COURS
+**Phase courante :** Post-Phase 10 — Refonte UI + Sécurité CIA + Response Engine + Plugin/ML/Policy câblés
 
 ---
 
@@ -698,6 +698,68 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | `api/ws/manager.py` | `set` O(1) pour lookup/suppression connexions |
 | `api/routers/events.py` | dataclasses et constantes au niveau module |
 | `main.py` | `lru_cache` sur `Settings` |
+
+---
+
+## Refonte UI complète `[x]` — 2026-08-11
+
+**Primitives :** `Badge`, `Button`, `EmptyState`, `Spinner`, `Input`, `Select` dans `components/ui/`. `lucide-react` installé. `useD3.ts` supprimé (code mort). Source unique des couleurs sévérité (`lib/severityColors.ts`).
+
+**Layout :** Sidebar avec icônes Lucide, sections Surveillance/Réponse/Config/Admin, repliable (`w-52` ↔ `w-12`), badge alertes sur icône en mode replié. Header avec `Wifi`/`Sun`/`Moon`/`LogOut` Lucide. WebSocket déplacé dans AppShell (persistant sur toutes les pages).
+
+**Pages refaites :** Login, Events, Alerts, Incidents, IncidentDetail, Cases, Decisions, Rules, NetworkGraph, Dashboard — 0 emoji, EmptyState avec icône, hover lignes corrigé, Spinner.
+
+**Sub-composants extraits :** `decisions/` (PendingCard, DecisionRow, ScoreBar, CountdownBadge), `cases/NewCaseModal`, `rules/RuleDetail`, `CaseTimeline` (dot aligné + sévérité).
+
+**Auth RBAC UI :** `authStore` décode les rôles JWT (exclus localStorage). `ProtectedRoute` accepte `requiredRole="admin"`. Sidebar section Admin conditionnelle. Boutons admin-only (Reload règles, Approuver/Rejeter décisions) conditionnels.
+
+**Pages admin :** API Keys (création + bannière clé brute + copy clipboard), Plugins (upload .py, badge signature), Policies (détails collecteurs déroulables), Response Actions (rollback).
+
+---
+
+## Response Engine `[x]` — 2026-08-11
+
+Actions de réponse autonomes sur les agents (act-then-notify) intégrées dans le `DecisionEngine` existant.
+
+**Proto :** `AgentCommand` étendu (`command_id`, nouveaux types `BLOCK_IP/UNBLOCK_IP/QUARANTINE_FILE/RESTORE_FILE/KILL_PROCESS`). Nouveau message `ActionReport` + RPC `ReportActions`.
+
+**Agent Go — `internal/responder/` :**
+- `state.go` — table SQLite `active_actions`, persistance avant exécution
+- `dedup.go` — déduplication par cible (60s TTL)
+- `executor.go` — détection nftables/iptables runtime, `BlockIP/UnblockIP`, `QuarantineFile/RestoreFile`, `KillProcess` avec vérification `/proc/{pid}/comm` (anti-PID-reuse)
+- `reporter.go` — stream `ReportActions` avec full-jitter backoff
+
+**Serveur Python :**
+- `action_executor.py` corrigé — publie sur `commands:{cn}` (plus `policy:push:`), `execute_after_approval()` pour kill post-approbation
+- `human_queue.py` — envoie commande à l'agent après approbation humaine
+- Table `response_actions` + repository + router `GET/POST rollback /api/v1/response-actions`
+
+---
+
+## Corrections sécurité CIA `[x]` COMPLÈTES — 2026-08-11
+
+Audit complet des communications serveur ↔ agent. 5 findings corrigés.
+
+| Finding | Sévérité | Statut | Description |
+|---------|----------|--------|-------------|
+| F-1+F-3 | CRITIQUE | `[x]` | Vérification Ed25519 désactivée en prod + mauvaise clé utilisée → séparation `OSEYE_ED25519_SIGNING_KEY` + chargement `.pub` au démarrage + dict thread-safe avec `threading.Lock` |
+| F-2 | ÉLEVÉE | `[x]` | mTLS dégradé si `ca.crt` absent → `RuntimeError` au démarrage (sauf `OSEYE_GRPC_INSECURE_DEV=true`) ; `require_client_auth=True` toujours actif |
+| F-5 | MOYENNE | `[x]` | Thundering herd → nouveau package `agent/internal/backoff` avec full-jitter `[0, min(delay*2, max)]` appliqué aux 3 clients Go (grpc, policy, commands) |
+| F-6 | MOYENNE | `[x]` | Aucune révocation sélective → table `blocked_agents` + `AgentServiceServicer._blocked_cns` thread-safe + endpoint admin `DELETE /api/v1/agents/{cn}` avec persistance DB et effet immédiat |
+| F-4 | MOYENNE | `[x]` | Version TLS non contrainte côté serveur → `GRPC_SSL_CIPHER_SUITES` forcé TLS 1.3 uniquement |
+
+**Fichiers modifiés :**
+- `agent/internal/config/config.go` — ajout `Ed25519KeyFile`
+- `agent/cmd/oseye-agent/main.go` — utilise `Ed25519KeyFile` pour le signer
+- `agent/internal/backoff/backoff.go` — nouveau package full-jitter
+- `agent/internal/transport/grpc_client.go`, `policy/client.go`, `commands/client.go` — backoff.Next
+- `server/oseye/config.py` — `agent_keys_dir`, `grpc_insecure_dev`, `default_surveillance_profile`
+- `server/oseye/ingest/grpc_service.py` — locks thread-safe, blocklist, `_require_cn` avec révocation
+- `server/oseye/ingest/server.py` — mTLS strict, retourne `(server, servicer)`, TLS 1.3
+- `server/oseye/storage/models.py` — table `blocked_agents`
+- `server/oseye/storage/repositories/blocked_agents.py` — nouveau
+- `server/oseye/api/routers/agents.py` — nouveau (block/unblock/list)
+- `server/oseye/main.py` — câblage complet (clés, blocklist, servicer sur app.state)
 
 ---
 

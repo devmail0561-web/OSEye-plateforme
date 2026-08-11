@@ -225,3 +225,20 @@ class SQLEventRepository:
                 _apply_filters(select(EventRow), filters).subquery()
             )
             return (await session.execute(stmt)).scalar_one()
+
+    async def get_distinct_agent_ids(self) -> list[UUID]:
+        """Return the set of distinct agent UUIDs seen in the events table.
+
+        Used at startup to reconstruct the PolicyEngine's known-agents set
+        so push_to_all() works after a server restart.
+        """
+        async with self._session_factory() as session:
+            stmt = select(EventRow.agent_id).distinct()
+            rows = (await session.execute(stmt)).scalars().all()
+        result: list[UUID] = []
+        for raw in rows:
+            try:
+                result.append(UUID(raw))
+            except (ValueError, AttributeError):
+                pass
+        return result

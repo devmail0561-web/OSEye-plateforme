@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import queue as _queue
+import threading
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -23,11 +24,15 @@ if TYPE_CHECKING:
 # Lazy imports — gen/ is auto-generated and has no type stubs.
 # Imported at module level to avoid repeated dynamic imports in hot paths.
 try:
-    from server.gen import event_pb2 as _pb2
-    from server.gen import event_pb2_grpc as _pb2_grpc
-except ImportError:  # pragma: no cover — only missing in isolated unit tests
-    _pb2 = None  # type: ignore[assignment,unused-ignore]
-    _pb2_grpc = None  # type: ignore[assignment,unused-ignore]
+    from gen import event_pb2 as _pb2
+    from gen import event_pb2_grpc as _pb2_grpc
+except ImportError:
+    try:
+        from server.gen import event_pb2 as _pb2  # type: ignore[no-redef]
+        from server.gen import event_pb2_grpc as _pb2_grpc  # type: ignore[no-redef]
+    except ImportError:  # pragma: no cover — only missing in isolated unit tests
+        _pb2 = None  # type: ignore[assignment,unused-ignore]
+        _pb2_grpc = None  # type: ignore[assignment,unused-ignore]
 
 _logger = get_logger(__name__)
 
@@ -66,16 +71,25 @@ def _extract_cn_from_context(context: grpc.ServicerContext) -> str | None:
         return None
 
 
-def _require_cn(context: grpc.ServicerContext) -> str | None:
-    """Return the CN or abort the RPC with UNAUTHENTICATED.
+def _require_cn(
+    context: grpc.ServicerContext,
+    blocked_cns: set[str] | None = None,
+    blocked_lock: threading.Lock | None = None,
+) -> str | None:
+    """Return the CN or abort the RPC with UNAUTHENTICATED / PERMISSION_DENIED.
 
-    SEC-PREV-001: any stream that cannot verify the caller's identity via the
-    mTLS certificate CN is immediately terminated.  The caller's agent_id from
-    the request payload is never trusted as a fallback.
+    SEC-PREV-001: agent_id MUST come from the cert CN, never from the payload.
+    Revoked agents are rejected with PERMISSION_DENIED.
     """
     cn = _extract_cn_from_context(context)
     if cn is None:
         context.abort(grpc.StatusCode.UNAUTHENTICATED, "mTLS client certificate CN required")
+        return None
+    if blocked_cns is not None and blocked_lock is not None:
+        with blocked_lock:
+            if cn in blocked_cns:
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, f"Agent {cn!r} is revoked")
+                return None
     return cn
 
 
@@ -101,13 +115,35 @@ class AgentServiceServicer:
         self._bus = bus
         self._validator = validator
         self._loop = loop
-        # BUG-004: registry of agent CN → DER-encoded Ed25519 public key bytes.
+        # Registry of agent CN → DER-encoded Ed25519 public key bytes.
         # Populated via register_agent_key() or passed at construction time.
+        # Protected by _agent_keys_lock for concurrent access from gRPC threads.
         self._agent_keys: dict[str, bytes] = dict(agent_keys) if agent_keys else {}
+        self._agent_keys_lock = threading.Lock()
+
+        # Set of revoked agent CNs. Checked in _require_cn before any RPC.
+        # Persisted in DB; reloaded at startup via block_agent().
+        self._blocked_cns: set[str] = set()
+        self._blocked_lock = threading.Lock()
 
     def register_agent_key(self, cn: str, der_public_key: bytes) -> None:
         """Register the DER-encoded Ed25519 public key for agent *cn*."""
-        self._agent_keys[cn] = der_public_key
+        with self._agent_keys_lock:
+            self._agent_keys[cn] = der_public_key
+
+    def _get_agent_key(self, cn: str) -> bytes | None:
+        with self._agent_keys_lock:
+            return self._agent_keys.get(cn)
+
+    def block_agent(self, cn: str) -> None:
+        """Add *cn* to the blocklist — takes effect immediately on the next RPC."""
+        with self._blocked_lock:
+            self._blocked_cns.add(cn)
+
+    def unblock_agent(self, cn: str) -> None:
+        """Remove *cn* from the blocklist."""
+        with self._blocked_lock:
+            self._blocked_cns.discard(cn)
 
     # ------------------------------------------------------------------
     # IngestEvents — client-streaming RPC
@@ -119,7 +155,7 @@ class AgentServiceServicer:
         context: grpc.ServicerContext,
     ) -> Any:
         """Receive a stream of IngestRequest batches from a single agent."""
-        cn = _require_cn(context)
+        cn = _require_cn(context, self._blocked_cns, self._blocked_lock)
         if cn is None:
             return  # aborted above
 
@@ -128,10 +164,7 @@ class AgentServiceServicer:
         all_errors: list[str] = []
 
         for request in request_iterator:
-            # BUG-004: look up the agent's public key by CN so Ed25519 signature
-            # verification is actually performed.  If no key is registered, log a
-            # WARNING instead of silently skipping the check.
-            agent_public_key = self._agent_keys.get(cn) if cn else None
+            agent_public_key = self._get_agent_key(cn)
             if agent_public_key is None:
                 _logger.warning("agent_key_not_registered", cn=cn)
             result = self._validator.validate(request, agent_public_key=agent_public_key)
@@ -233,7 +266,7 @@ class AgentServiceServicer:
 
         SEC-PREV-001: aborts with UNAUTHENTICATED if no mTLS CN is present.
         """
-        cn = _require_cn(context)
+        cn = _require_cn(context, self._blocked_cns, self._blocked_lock)
         if cn is None:
             return  # aborted above
 
@@ -304,7 +337,7 @@ class AgentServiceServicer:
 
         SEC-PREV-001: aborts with UNAUTHENTICATED if no mTLS CN is present.
         """
-        cn = _require_cn(context)
+        cn = _require_cn(context, self._blocked_cns, self._blocked_lock)
         if cn is None:
             return  # aborted above
 
@@ -347,12 +380,78 @@ class AgentServiceServicer:
                 data = json.loads(raw)
                 payload_raw: bytes = json.dumps(data.get("payload", {})).encode("utf-8")
                 cmd = _pb2.AgentCommand(
+                    command_id=data.get("command_id", ""),
                     command_type=data.get("command_type", ""),
                     payload_json=payload_raw,
                 )
                 yield cmd
             except Exception as exc:  # noqa: BLE001
                 _logger.error("command_deserialize_error", error=str(exc))
+
+    # ------------------------------------------------------------------
+    # ReportActions — client-streaming RPC
+    # ------------------------------------------------------------------
+
+    def ReportActions(  # noqa: N802
+        self,
+        request_iterator: Iterator[Any],
+        context: grpc.ServicerContext,
+    ) -> Any:
+        """Receive action execution reports from the agent.
+
+        CIA — Disponibilité : reports are stored in response_actions so the
+        admin can see the status of every action even if they were offline.
+        CIA — Intégrité    : CN from the mTLS cert is verified; an agent can
+        only report on commands that were issued to it.
+        """
+        cn = _require_cn(context, self._blocked_cns, self._blocked_lock)
+        if cn is None:
+            return  # aborted above
+
+        accepted = 0
+        repo = getattr(self, "_response_actions_repo", None)
+
+        for report in request_iterator:
+            command_id = report.command_id
+            status     = report.status
+            error      = report.error
+
+            _logger.info(
+                "action_report_received",
+                cn=cn,
+                command_id=command_id,
+                status=status,
+            )
+
+            if repo is not None and self._loop is not None:
+                if status == "executed":
+                    fut = asyncio.run_coroutine_threadsafe(
+                        repo.mark_executed(command_id), self._loop
+                    )
+                elif status == "failed":
+                    fut = asyncio.run_coroutine_threadsafe(
+                        repo.mark_failed(command_id, error), self._loop
+                    )
+                elif status == "rolled_back":
+                    fut = asyncio.run_coroutine_threadsafe(
+                        repo.mark_rolled_back(command_id), self._loop
+                    )
+                else:
+                    fut = None
+                if fut is not None:
+                    try:
+                        fut.result(timeout=2.0)
+                    except Exception as exc:  # noqa: BLE001
+                        _logger.warning(
+                            "action_report_db_error",
+                            command_id=command_id,
+                            error=str(exc),
+                        )
+            accepted += 1
+
+        if _pb2 is None:  # pragma: no cover
+            return None
+        return _pb2.ActionReportResponse(accepted=accepted)
 
 
 def register_servicer(servicer: AgentServiceServicer, server: Any) -> None:

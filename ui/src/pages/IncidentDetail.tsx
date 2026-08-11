@@ -1,15 +1,29 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { ChevronLeft } from 'lucide-react'
 import { incidentsApi } from '@/api/client'
 import type { Incident, AlertSeverity } from '@/types'
 import SeverityBadge from '@/components/SeverityBadge'
 import RelativeTime from '@/components/RelativeTime'
 import CaseTimeline, { type TimelineEntry } from '@/components/CaseTimeline'
+import { Badge } from '@/components/ui'
 
-const STATUS_STYLES: Record<string, string> = {
-  open: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  investigating: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
-  resolved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+const STATUS_VARIANT: Record<string, 'red' | 'amber' | 'green'> = {
+  open:          'red',
+  investigating: 'amber',
+  resolved:      'green',
+}
+const STATUS_LABELS: Record<string, string> = {
+  open:          'Ouvert',
+  investigating: 'Investigation',
+  resolved:      'Résolu',
+}
+
+function fmtDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 export default function IncidentDetail() {
@@ -21,45 +35,52 @@ export default function IncidentDetail() {
     if (!id) return
     incidentsApi.getById(id)
       .then(setIncident)
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return <p className="text-gray-400 dark:text-gray-500 text-sm p-6">Chargement…</p>
-  if (!incident) return <p className="text-red-400 text-sm p-6">Incident introuvable</p>
+  if (loading) return (
+    <div className="p-6 text-sm text-gray-400 dark:text-gray-500">Chargement…</div>
+  )
+  if (!incident) return (
+    <div className="p-6 text-sm text-red-400">Incident introuvable</div>
+  )
 
   const timelineEntries: TimelineEntry[] = incident.timeline.map((ev) => ({
-    id: ev.alert_id,
+    id:        ev.alert_id,
     timestamp: ev.timestamp,
-    label: ev.title,
-    detail: `${ev.hostname} · ${ev.mitre_techniques.join(', ')}`,
-    severity: ev.severity,
+    label:     ev.title,
+    detail:    `${ev.hostname} · ${ev.mitre_techniques.join(', ')}`,
+    severity:  ev.severity,
   }))
-
-  const durationMin = Math.round(incident.timeframe_seconds / 60)
 
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/incidents" className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-400 dark:text-gray-400">← Incidents</Link>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white mt-1">{incident.hostname}</h1>
-        <div className="flex items-center gap-2 mt-1">
+        <Link
+          to="/incidents"
+          className="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors mb-2"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" /> Incidents
+        </Link>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{incident.hostname}</h1>
+        <div className="flex items-center gap-2 mt-1.5">
           <SeverityBadge severity={incident.severity as AlertSeverity} />
-          <span className={`text-xs px-1.5 py-0.5 rounded ${STATUS_STYLES[incident.status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>
-            {incident.status}
-          </span>
+          <Badge variant={STATUS_VARIANT[incident.status] ?? 'default'}>
+            {STATUS_LABELS[incident.status] ?? incident.status}
+          </Badge>
           <span className="text-xs text-gray-400 dark:text-gray-500">
             <RelativeTime iso={incident.created_at} />
           </span>
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Alertes', value: incident.alert_count },
-          { label: 'Durée', value: `${durationMin}min` },
-          { label: 'Corrélation', value: incident.correlation_rule },
-          { label: 'MITRE', value: incident.mitre_tactics.length },
+          { label: 'Alertes',      value: incident.alert_count },
+          { label: 'Durée',        value: fmtDuration(incident.timeframe_seconds) },
+          { label: 'Corrélation',  value: incident.correlation_rule },
+          { label: 'MITRE',        value: incident.mitre_tactics.length },
         ].map(({ label, value }) => (
           <div key={label} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
             <p className="text-xs text-gray-400 dark:text-gray-500">{label}</p>
@@ -68,33 +89,32 @@ export default function IncidentDetail() {
         ))}
       </div>
 
-      {/* MITRE tactics */}
       {incident.mitre_tactics.length > 0 && (
-        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-2">
-          <p className="text-sm font-medium text-gray-400 dark:text-gray-400">Tactiques MITRE ATT&CK</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Tactiques MITRE ATT&CK</p>
+          <div className="flex flex-wrap gap-1.5">
             {incident.mitre_tactics.map((t) => (
-              <span key={t} className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-mono">{t}</span>
+              <span key={t} className="text-xs bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded font-mono">{t}</span>
             ))}
           </div>
         </div>
       )}
 
-      {/* Timeline */}
-      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-medium text-gray-400 dark:text-gray-400">Chronologie des alertes</p>
+      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Chronologie des alertes</p>
         <CaseTimeline entries={timelineEntries} />
       </div>
 
-      {/* Alert IDs */}
-      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-2">
-        <p className="text-sm font-medium text-gray-400 dark:text-gray-400">{incident.alert_ids.length} alerte(s) liée(s)</p>
+      <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+          {incident.alert_ids.length} alerte{incident.alert_ids.length !== 1 ? 's' : ''} liée{incident.alert_ids.length !== 1 ? 's' : ''}
+        </p>
         <div className="flex flex-wrap gap-1">
           {incident.alert_ids.map((aid) => (
             <Link
               key={aid}
               to={`/alerts?alert_id=${aid}`}
-              className="text-xs font-mono text-blue-400 hover:text-blue-300 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded"
+              className="text-xs font-mono text-blue-500 hover:text-blue-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded transition-colors"
             >
               {aid.slice(0, 12)}…
             </Link>

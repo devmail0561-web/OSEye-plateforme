@@ -57,12 +57,16 @@ Les mécanismes de sécurité implémentés dans OSEye sont décrits dans :
 [`docs/ARCHITECTURE.md` — Section 5 : Architecture de sécurité](docs/ARCHITECTURE.md)
 
 Points clés :
-- **PKI interne** — mTLS entre agent et server, certificats par agent
-- **JWT RS256** — authentification API, refresh token HttpOnly
-- **RBAC 4 niveaux** — reader, analyst, senior_analyst, admin
-- **Hash chain BLAKE3 + signature Ed25519** — intégrité des events
-- **Journal immutable** — décisions protégées par hash chain signé
+- **PKI interne** — mTLS strict entre agent et server (refus démarrage si certs absents)
+- **JWT RS256** — authentification API ; rôles décodés à chaque chargement, jamais en localStorage
+- **RBAC 2 niveaux opérationnels** — analyst / admin ; admin hérite de analyst
+- **Hash chain BLAKE3 + signature Ed25519** — intégrité des events ; clé de signature Ed25519 séparée de la clé mTLS (RSA)
+- **Vérification batch serveur** — `AgentServiceServicer` charge les clés publiques `.pub` au démarrage et vérifie chaque batch
+- **Journal immutable** — décisions protégées par hash chain BLAKE3 signé
+- **Révocation d'agent** — immédiate via `DELETE /api/v1/agents/{cn}`, persistée en base, rechargée au redémarrage
 - **Plugin sandbox** — subprocess isolé avec cgroups v2
+- **TLS 1.3 uniquement** sur gRPC (`GRPC_SSL_CIPHER_SUITES` restreint aux suites TLS 1.3)
+- **Full-jitter backoff** — reconnexions agent distribuées uniformément (anti thundering herd)
 
 ## Remerciements
 
