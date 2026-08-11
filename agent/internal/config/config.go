@@ -49,6 +49,10 @@ type Config struct {
 
 	// Response engine
 	QuarantineDir string // OSEYE_QUARANTINE_DIR, default /var/lib/oseye/quarantine
+
+	// Enrollment — used only at first boot when TLSCertFile does not exist yet
+	EnrollServerURL string // OSEYE_ENROLL_URL,   default ""
+	EnrollToken     string // OSEYE_ENROLL_TOKEN, default ""
 }
 
 // InotifyWatch represents an inotify watch configuration.
@@ -83,7 +87,9 @@ func Load() (*Config, error) {
 			getenv("OSEYE_JOURNALD_UNITS", ""),
 		),
 		SyslogAddr:    getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
-		QuarantineDir: getenv("OSEYE_QUARANTINE_DIR", "/var/lib/oseye/quarantine"),
+		QuarantineDir:   getenv("OSEYE_QUARANTINE_DIR", "/var/lib/oseye/quarantine"),
+		EnrollServerURL: getenv("OSEYE_ENROLL_URL", ""),
+		EnrollToken:     getenv("OSEYE_ENROLL_TOKEN", ""),
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err

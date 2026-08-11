@@ -1,6 +1,6 @@
 # OSEye — Suivi de progression
 
-**Version :** 3.5
+**Version :** 3.6
 **Dernière mise à jour :** 2026-08-11
 **Branche active :** `main` (`latest`)
 **Phase courante :** Post-Phase 10 — Refonte UI + Sécurité CIA + Response Engine + Plugin/ML/Policy câblés + fixes API Keys
@@ -698,6 +698,23 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | `api/ws/manager.py` | `set` O(1) pour lookup/suppression connexions |
 | `api/routers/events.py` | dataclasses et constantes au niveau module |
 | `main.py` | `lru_cache` sur `Settings` |
+
+---
+
+## Bloc 7 + Bloc 9 `[x]` — 2026-08-11
+
+**Bloc 7 — Enrollment automatique agent Go**
+- `OSEYE_ENROLL_URL` + `OSEYE_ENROLL_TOKEN` dans la config
+- `agent/internal/enrollment/client.go` : `NeedsEnrollment()` + `Enroll()` — CSR RSA 2048, GET CA cert, POST CSR, écriture atomique des fichiers
+- Appelé dans `main.go` avant l'init gRPC, non-fatal si échoue (buffer-only mode)
+- Idempotent : no-op si `TLSCertFile` existe déjà
+
+**Bloc 9 — Tests manquants**
+- `agent/internal/responder/dedup_test.go` — 5 tests Deduplicator (TTL, cibles différentes, types différents)
+- `agent/internal/responder/executor_test.go` — QuarantineFile, RestoreFile, KillProcess PID guard
+- `agent/internal/enrollment/client_test.go` — 4 tests (no-op sans token, cert existant, succès complet, idempotence)
+- `server/tests/unit/test_api_agents.py` — list agents, list blocked, block/unblock, RBAC analyst/admin
+- `server/tests/unit/test_decision_ml_integration.py` — ml_score > 0 quand ml_engine câblé, = 0 sinon
 
 ---
 

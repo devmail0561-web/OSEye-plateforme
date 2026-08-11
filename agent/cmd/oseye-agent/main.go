@@ -18,6 +18,7 @@ import (
 	"github.com/oseye/agent/internal/collector"
 	"github.com/oseye/agent/internal/commands"
 	"github.com/oseye/agent/internal/config"
+	"github.com/oseye/agent/internal/enrollment"
 	"github.com/oseye/agent/internal/mapper"
 	"github.com/oseye/agent/internal/platform"
 	_ "github.com/oseye/agent/internal/platform/linux" // register LinuxDriver via init()
@@ -65,6 +66,19 @@ func main() {
 	}
 	agentIDBytes := agentUUID[:]
 	mp := mapper.New(hostname, agentIDBytes)
+
+	// ── Auto-enrollment (first boot only) ────────────────────────────────────
+	if err := enrollment.Enroll(enrollment.EnrollParams{
+		TLSCertFile: cfg.TLSCertFile,
+		TLSKeyFile:  cfg.TLSKeyFile,
+		CACertFile:  cfg.CACertFile,
+		EnrollURL:   cfg.EnrollServerURL,
+		EnrollToken: cfg.EnrollToken,
+		Hostname:    hostname,
+	}); err != nil {
+		log.Error("enrollment failed — continuing without cert", "err", err)
+		// Non-fatal: agent runs in buffer-only mode if gRPC init fails later.
+	}
 
 	// ── Platform resolution ──────────────────────────────────────────────────
 	driver, err := platform.Resolve()
