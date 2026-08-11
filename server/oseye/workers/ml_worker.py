@@ -32,6 +32,7 @@ from oseye.core.schema import UniversalEvent
 if TYPE_CHECKING:
     from oseye.bus.interface import EventBus
     from oseye.ml_engine.engine import MLEngine
+    from oseye.storage.repositories.events import SQLEventRepository
 
 _log = get_logger(__name__)
 
@@ -63,12 +64,14 @@ class MLWorker:
         checkpoint_path: Path | None = None,
         checkpoint_interval_s: float = _DEFAULT_CHECKPOINT_INTERVAL_S,
         stop_event: asyncio.Event | None = None,
+        event_repo: SQLEventRepository | None = None,
     ) -> None:
         self._bus = bus
         self._engine = engine
         self._checkpoint_path = checkpoint_path or _DEFAULT_CHECKPOINT_PATH
         self._checkpoint_interval_s = checkpoint_interval_s
         self._stop_event = stop_event or asyncio.Event()
+        self._event_repo = event_repo
         self._total_scored = 0
         self._total_published = 0
 
@@ -145,6 +148,13 @@ class MLWorker:
                 event_id=str(event.event_id),
                 error=str(exc),
             )
+
+        # Persist ml_score in EventRow so it's queryable via the API.
+        if self._event_repo is not None and ml_score > 0.0:
+            try:
+                await self._event_repo.update_ml_score(event.event_id, round(ml_score, 3))
+            except Exception as exc:  # noqa: BLE001
+                _log.debug("ml_worker_score_persist_error", event_id=str(event.event_id), error=str(exc))
 
     def checkpoint(self) -> None:
         """Save the model state to disk immediately (idempotent, non-async)."""

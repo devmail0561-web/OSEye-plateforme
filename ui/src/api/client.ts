@@ -465,6 +465,27 @@ export const responseActionsApi = {
   },
 }
 
+// ── Agents ───────────────────────────────────────────────────────────────────
+
+export interface AgentInfo {
+  cn:             string
+  online:         boolean
+  first_seen:     string | null
+  last_seen:      string | null
+  version:        string | null
+  active_profile: string
+  ip_address:     string | null
+}
+
+export const agentsApi = {
+  list(): Promise<AgentInfo[]> {
+    return api.get<AgentInfo[]>('/api/v1/agents').then((r) => r.data)
+  },
+  get(cn: string): Promise<AgentInfo> {
+    return api.get<AgentInfo>(`/api/v1/agents/${encodeURIComponent(cn)}`).then((r) => r.data)
+  },
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export const healthApi = {

@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     decision_human_poll_interval: int = 30
     decision_policy_version: str = "v1.0"
 
+    # WeightedScorer weights — must sum to 1.0
+    decision_weight_rule:  float = Field(default=0.4, description="Weight for rule score (0–1)")
+    decision_weight_ml:    float = Field(default=0.3, description="Weight for ML score (0–1)")
+    decision_weight_ti:    float = Field(default=0.2, description="Weight for TI score (0–1)")
+    decision_weight_depth: float = Field(default=0.1, description="Weight for correlation depth (0–1)")
+
     # PKI — CA private key (used by enrollment endpoint to sign agent certs)
     tls_ca_key_file: str = Field(default="/etc/oseye/certs/ca.key")
 

@@ -75,10 +75,17 @@ class PolicyOverrides:
 class WeightedScorer:
     """Combines four signal scores into a single [0, 100] final score."""
 
-    _W_RULE = 0.4
-    _W_ML = 0.3
-    _W_TI = 0.2
-    _W_DEPTH = 0.1
+    def __init__(
+        self,
+        w_rule: float = 0.4,
+        w_ml: float = 0.3,
+        w_ti: float = 0.2,
+        w_depth: float = 0.1,
+    ) -> None:
+        self._w_rule = w_rule
+        self._w_ml = w_ml
+        self._w_ti = w_ti
+        self._w_depth = w_depth
 
     def compute(
         self,
@@ -89,10 +96,10 @@ class WeightedScorer:
     ) -> float:
         depth_norm = min(correlation_depth / _MAX_CORRELATION_DEPTH, 1.0) * 100.0
         raw = (
-            rule_score * self._W_RULE
-            + ml_score * self._W_ML
-            + ti_score * self._W_TI
-            + depth_norm * self._W_DEPTH
+            rule_score * self._w_rule
+            + ml_score * self._w_ml
+            + ti_score * self._w_ti
+            + depth_norm * self._w_depth
         )
         return max(0.0, min(100.0, raw))
 
@@ -127,12 +134,21 @@ class DecisionEngine:
         human_timeout_secs: int = 3600,
         policy_version: str = "v1.0",
         ml_engine: MLEngine | None = None,
+        weight_rule: float = 0.4,
+        weight_ml: float = 0.3,
+        weight_ti: float = 0.2,
+        weight_depth: float = 0.1,
     ) -> None:
         self._journal = journal
         self._overrides = policy_overrides or PolicyOverrides()
         self._human_timeout_secs = human_timeout_secs
         self._policy_version = policy_version
-        self._scorer = WeightedScorer()
+        self._scorer = WeightedScorer(
+            w_rule=weight_rule,
+            w_ml=weight_ml,
+            w_ti=weight_ti,
+            w_depth=weight_depth,
+        )
         self._ml_engine = ml_engine
         self._lock = asyncio.Lock()
 

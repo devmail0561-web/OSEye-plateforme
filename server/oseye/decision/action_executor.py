@@ -88,6 +88,8 @@ class ActionExecutor:
             await self._request_forensic_snapshot(decision)
         elif decision_type == "COLLECT_MORE":
             await self._request_additional_collection(decision)
+        elif decision_type == "NOTIFY":
+            await self._emit_notification(decision)
 
     async def execute_after_approval(
         self, decision: Decision, alert: Alert | None = None
@@ -264,6 +266,28 @@ class ActionExecutor:
                 entity_id=decision.entity_id,
                 error=str(exc),
             )
+
+    async def _emit_notification(self, decision: Decision) -> None:
+        """Publish a NOTIFY event to notifications:pending.
+
+        Consumed by ExporterPlugin instances (Slack, PagerDuty, email…)
+        via the IPC socket. The core server has no direct notification dependency.
+        """
+        topic = "notifications:pending"
+        payload = json.dumps(
+            {
+                "decision_id":   str(decision.decision_id),
+                "entity_id":     decision.entity_id,
+                "final_score":   decision.final_score,
+                "explanation":   decision.explanation,
+                "created_at":    decision.created_at.isoformat(),
+            }
+        ).encode()
+        try:
+            await self._bus.publish(topic, payload)
+            _log.info("action_notify_published", entity_id=decision.entity_id)
+        except Exception as exc:  # noqa: BLE001
+            _log.error("action_notify_error", entity_id=decision.entity_id, error=str(exc))
 
     async def _request_additional_collection(self, decision: Decision) -> None:
         topic = f"policy:push:{decision.entity_id}"

@@ -302,12 +302,14 @@ class TestActionExecutor:
         assert topic == "decisions:pending"
 
     @pytest.mark.asyncio
-    async def test_isolate_emits_policy_push(self) -> None:
+    async def test_isolate_emits_completed(self) -> None:
+        # ISOLATE publishes to decisions:completed.
+        # BLOCK_IP command is emitted on commands:{cn} only when dst_ip is available
+        # on the alert — without an alert the side-effect is skipped gracefully.
         executor, publish = self._make_executor()
         await executor.execute(self._make_decision("ISOLATE"))
         topics = [call[0][0] for call in publish.call_args_list]
         assert "decisions:completed" in topics
-        assert any("policy:push:" in t for t in topics)
 
     @pytest.mark.asyncio
     async def test_investigate_emits_forensics(self) -> None:

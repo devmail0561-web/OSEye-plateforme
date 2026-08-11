@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Shield,
   Network,
+  Monitor,
   Key,
   Puzzle,
   ShieldAlert,
@@ -29,6 +30,7 @@ interface NavItem {
 const SURVEILLANCE: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard',  icon: LayoutDashboard },
   { to: '/events',    label: 'Événements', icon: List },
+  { to: '/agents',    label: 'Agents',     icon: Monitor },
   { to: '/network',   label: 'Graphe',     icon: Network },
 ]
 

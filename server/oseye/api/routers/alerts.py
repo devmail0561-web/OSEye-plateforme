@@ -202,4 +202,27 @@ async def mark_false_positive(
         except Exception as exc:  # noqa: BLE001
             _logger.warning("rule_version_log_failed", error=str(exc))
 
+    # ML feedback: negative update — unlearn techniques associated with this false positive.
+    ml_engine = getattr(request.app.state, "ml_engine", None)
+    if ml_engine is not None and alert.mitre_techniques:
+        event_repo = getattr(request.app.state, "event_repo", None)
+        trigger_event = None
+        if event_repo is not None:
+            try:
+                trigger_event = await event_repo.get(alert.trigger_event_id)
+            except Exception:  # noqa: BLE001
+                pass
+        if trigger_event is not None:
+            try:
+                # learn_from_alert with empty techniques list produces negative updates
+                # for all known techniques — equivalent to "this event is NOT malicious".
+                ml_engine.learn_from_alert(trigger_event, [])
+                _logger.info(
+                    "ml_false_positive_feedback",
+                    alert_id=str(alert_id),
+                    mitre=alert.mitre_techniques,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _logger.debug("ml_fp_feedback_error", error=str(exc))
+
     return alert

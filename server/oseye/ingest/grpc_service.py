@@ -111,10 +111,12 @@ class AgentServiceServicer:
         validator: BatchValidator,
         loop: asyncio.AbstractEventLoop | None = None,
         agent_keys: dict[str, bytes] | None = None,
+        agent_repo: Any | None = None,
     ) -> None:
         self._bus = bus
         self._validator = validator
         self._loop = loop
+        self._agent_repo = agent_repo
         # Registry of agent CN → DER-encoded Ed25519 public key bytes.
         # Populated via register_agent_key() or passed at construction time.
         # Protected by _agent_keys_lock for concurrent access from gRPC threads.
@@ -158,6 +160,15 @@ class AgentServiceServicer:
         cn = _require_cn(context, self._blocked_cns, self._blocked_lock)
         if cn is None:
             return  # aborted above
+
+        # Track agent connection
+        if self._agent_repo is not None and self._loop is not None:
+            _peer = context.peer() or ""
+            _ip = _peer.split(":")[1] if _peer.startswith("ipv4:") else None
+            asyncio.run_coroutine_threadsafe(
+                self._agent_repo.upsert(cn=cn, online=True, ip_address=_ip),
+                self._loop,
+            )
 
         total_accepted = 0
         total_rejected = 0
@@ -246,6 +257,13 @@ class AgentServiceServicer:
 
         if _pb2 is None:  # pragma: no cover
             return None
+
+        # Mark agent offline when stream ends
+        if self._agent_repo is not None and self._loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._agent_repo.set_offline(cn),
+                self._loop,
+            )
 
         return _pb2.IngestResponse(
             accepted=total_accepted,

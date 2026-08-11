@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, insert, select
+from sqlalchemy import Select, and_, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.core.pagination import PageResult
@@ -225,6 +225,16 @@ class SQLEventRepository:
                 _apply_filters(select(EventRow), filters).subquery()
             )
             return (await session.execute(stmt)).scalar_one()
+
+    async def update_ml_score(self, event_id: UUID, ml_score: float) -> None:
+        """Update the ml_score field for a stored event."""
+        async with self._session_factory() as session:
+            await session.execute(
+                update(EventRow)
+                .where(EventRow.event_id == str(event_id))
+                .values(ml_score=ml_score)
+            )
+            await session.commit()
 
     async def get_distinct_agent_ids(self) -> list[UUID]:
         """Return the set of distinct agent UUIDs seen in the events table.

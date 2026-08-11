@@ -1,6 +1,6 @@
 # OSEye — Suivi de progression
 
-**Version :** 3.4
+**Version :** 3.5
 **Dernière mise à jour :** 2026-08-11
 **Branche active :** `main` (`latest`)
 **Phase courante :** Post-Phase 10 — Refonte UI + Sécurité CIA + Response Engine + Plugin/ML/Policy câblés + fixes API Keys
@@ -698,6 +698,40 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | `api/ws/manager.py` | `set` O(1) pour lookup/suppression connexions |
 | `api/routers/events.py` | dataclasses et constantes au niveau module |
 | `main.py` | `lru_cache` sur `Settings` |
+
+---
+
+## Gaps fonctionnels résolus `[x]` — 2026-08-11
+
+**Bloc 1 — Câblage ML (CRITIQUE)**
+- `ml_engine` passé à `DecisionEngine` → `ml_score` réel dans toutes les décisions
+- `event_repo` passé à `DecisionWorker` → `trigger_event` disponible pour le scoring
+- `ml_engine` passé à `RuleWorker` → `learn_from_alert()` appelé sur chaque alerte confirmée
+
+**Bloc 2 — Feedback faux positifs**
+- `POST /alerts/{id}/false-positive` appelle `ml_engine.learn_from_alert(event, [])` → update négatif sur le classifieur MITRE
+
+**Bloc 3 — Consommation `analysis:ml`**
+- `MLWorker._process()` appelle `event_repo.update_ml_score()` après chaque scoring
+- `SQLEventRepository.update_ml_score()` ajouté
+
+**Bloc 4 — Tâches périodiques**
+- `CorrelationWorker` : boucle `_stale_incidents_loop()` toutes les 5 min → `close_stale_incidents()`
+
+**Bloc 5 — Table agents + API + UI**
+- Table `AgentRow` (cn, online, first_seen, last_seen, version, active_profile, ip_address)
+- `SQLAgentRepository` (upsert, set_offline, list, get)
+- `IngestEvents` gRPC : upsert à la connexion, set_offline à la déconnexion
+- `GET /api/v1/agents` et `GET /api/v1/agents/{cn}` (analyst+)
+- Page UI `Agents.tsx` dans la sidebar Surveillance
+
+**Bloc 6 — Poids WeightedScorer configurables**
+- 4 settings : `OSEYE_DECISION_WEIGHT_RULE/ML/TI/DEPTH` (défauts 0.4/0.3/0.2/0.1)
+- `WeightedScorer.__init__` accepte les 4 poids en paramètres
+
+**Bloc 8 — Action NOTIFY**
+- `ActionExecutor._emit_notification()` publie sur `notifications:pending`
+- Consommable par les plugins `ExporterPlugin` via IPC socket
 
 ---
 

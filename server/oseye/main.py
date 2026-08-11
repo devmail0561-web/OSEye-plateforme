@@ -39,6 +39,7 @@ from oseye.storage.repositories.api_keys import SQLApiKeyRepository
 from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.storage.repositories.events import SQLEventRepository
 from oseye.storage.repositories.incidents import SQLIncidentRepository
+from oseye.storage.repositories.agents import SQLAgentRepository
 from oseye.storage.repositories.blocked_agents import SQLBlockedAgentsRepository
 from oseye.storage.repositories.cases import SQLCaseRepository
 from oseye.storage.repositories.response_actions import SQLResponseActionsRepository
@@ -94,6 +95,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             alert_repo=alert_repo,
             rules_root=_RULES_ROOT,
             hot_reload=False,  # engine already hot-reloads
+            ml_engine=ml_engine,
         )
 
         stop = asyncio.Event()
@@ -162,6 +164,19 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         )
 
         # ------------------------------------------------------------------
+        # ML Engine — instancié en premier car injecté dans DecisionEngine
+        # ------------------------------------------------------------------
+
+        ml_engine = MLEngine()
+        ml_worker = MLWorker(
+            bus=bus,
+            engine=ml_engine,
+            checkpoint_path=Path(settings.ml_checkpoint_path),
+            checkpoint_interval_s=settings.ml_checkpoint_interval_s,
+            event_repo=repo,
+        )
+
+        # ------------------------------------------------------------------
         # Phase 5 — Decision Engine
         # ------------------------------------------------------------------
 
@@ -176,6 +191,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             policy_overrides=PolicyOverrides(),
             human_timeout_secs=settings.decision_human_timeout_secs,
             policy_version=settings.decision_policy_version,
+            ml_engine=ml_engine,
+            weight_rule=settings.decision_weight_rule,
+            weight_ml=settings.decision_weight_ml,
+            weight_ti=settings.decision_weight_ti,
+            weight_depth=settings.decision_weight_depth,
         )
         action_executor = ActionExecutor(bus=bus)
         human_queue = HumanApprovalQueue(
@@ -199,18 +219,6 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             "policy_engine_ready",
             profiles=len(policy_engine.list_profiles()),
             known_agents=len(_agent_ids_for_policy),
-        )
-
-        # ------------------------------------------------------------------
-        # ML Engine — scoring online + checkpointing périodique
-        # ------------------------------------------------------------------
-
-        ml_engine = MLEngine()
-        ml_worker = MLWorker(
-            bus=bus,
-            engine=ml_engine,
-            checkpoint_path=Path(settings.ml_checkpoint_path),
-            checkpoint_interval_s=settings.ml_checkpoint_interval_s,
         )
 
         # ------------------------------------------------------------------
@@ -275,6 +283,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             incident_repo=incident_repo,
             alert_repo=alert_repo,
             action_executor=action_executor,
+            event_repo=repo,
             stop_event=stop,
         )
 
@@ -303,6 +312,10 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 _logger.info("agent_key_loaded", cn=cn)
         else:
             _logger.warning("agent_keys_dir_missing", path=str(_keys_dir))
+
+        # Agent tracking repository
+        agent_repo = SQLAgentRepository(backend.session_factory)
+        grpc_servicer._agent_repo = agent_repo  # noqa: SLF001
 
         # Load persisted agent blocklist so revocations survive restarts
         blocked_agents_repo = SQLBlockedAgentsRepository(backend.session_factory)
@@ -347,6 +360,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         app.state.human_queue = human_queue  # type: ignore[attr-defined]
         app.state.case_manager = case_manager  # type: ignore[attr-defined]
         app.state.grpc_servicer = grpc_servicer  # type: ignore[attr-defined]
+        app.state.agent_repo = agent_repo  # type: ignore[attr-defined]
         app.state.action_executor = action_executor  # type: ignore[attr-defined]
         app.state.plugin_manager = plugin_manager  # type: ignore[attr-defined]
         app.state.ml_engine = ml_engine  # type: ignore[attr-defined]

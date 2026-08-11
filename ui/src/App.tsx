@@ -14,6 +14,7 @@ const Incidents = lazy(() => import('@/pages/Incidents'))
 const IncidentDetail = lazy(() => import('@/pages/IncidentDetail'))
 const Rules = lazy(() => import('@/pages/Rules'))
 const NetworkGraph = lazy(() => import('@/pages/NetworkGraph'))
+const Agents = lazy(() => import('@/pages/Agents'))
 const ApiKeys = lazy(() => import('@/pages/admin/ApiKeys'))
 const Plugins = lazy(() => import('@/pages/admin/Plugins'))
 const Policies = lazy(() => import('@/pages/admin/Policies'))
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
           { path: '/incidents/:id', element: <Suspense fallback={null}><IncidentDetail /></Suspense> },
           { path: '/rules', element: <Suspense fallback={null}><Rules /></Suspense> },
           { path: '/network', element: <Suspense fallback={null}><NetworkGraph /></Suspense> },
+          { path: '/agents', element: <Suspense fallback={null}><Agents /></Suspense> },
           {
             element: <ProtectedRoute requiredRole="admin" />,
             children: [

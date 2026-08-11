@@ -356,3 +356,17 @@ class ResponseActionRow(Base):
     executed_at:    Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
     rolled_back_at: Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
     error:          Mapped[str | None]     = mapped_column(Text, nullable=True)
+
+
+class AgentRow(Base):
+    """Tracks connected agents — updated on gRPC stream events."""
+
+    __tablename__ = "agents"
+
+    cn:             Mapped[str]            = mapped_column(String(253), primary_key=True)
+    first_seen:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
+    version:        Mapped[str | None]     = mapped_column(String(64),  nullable=True)
+    active_profile: Mapped[str]            = mapped_column(String(64),  nullable=False, default="workstation")
+    ip_address:     Mapped[str | None]     = mapped_column(String(45),  nullable=True)
+    online:         Mapped[bool]           = mapped_column(Boolean,     nullable=False, default=False)

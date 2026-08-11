@@ -19,6 +19,7 @@ from oseye.rule_engine import RuleEngine
 
 if TYPE_CHECKING:
     from oseye.bus.interface import EventBus
+    from oseye.ml_engine.engine import MLEngine
     from oseye.rule_engine.models import RuleMatch
     from oseye.storage.repositories.alerts import SQLAlertRepository
 
@@ -47,11 +48,13 @@ class RuleWorker:
         alert_repo: SQLAlertRepository,
         rules_root: Path | None = None,
         hot_reload: bool = True,
+        ml_engine: MLEngine | None = None,
     ) -> None:
         self._bus = bus
         self._alert_repo = alert_repo
         root = rules_root or _DEFAULT_RULES_ROOT
         self._engine = RuleEngine(rules_root=root, hot_reload=hot_reload)
+        self._ml_engine = ml_engine
         self._total_evaluated = 0
         self._total_matches = 0
         self._total_alerts = 0
@@ -160,6 +163,13 @@ class RuleWorker:
         except Exception as exc:  # noqa: BLE001
             _log.error("alert_create_error", rule_id=match.rule_id, error=str(exc))
             return
+
+        # Feedback loop: train ML classifier on confirmed positives (rule matches).
+        if self._ml_engine is not None and match.mitre:
+            try:
+                self._ml_engine.learn_from_alert(event, list(match.mitre))
+            except Exception as exc:  # noqa: BLE001
+                _log.debug("ml_learn_from_alert_error", error=str(exc))
 
         # F-01: ALWAYS publish alerts:created so CorrelationWorker and DecisionWorker
         # receive non-network alerts (filesystem, process, privilege escalation, etc.).

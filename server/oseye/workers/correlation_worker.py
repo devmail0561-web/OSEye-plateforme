@@ -75,6 +75,9 @@ class CorrelationWorker:
         """Main loop — runs until stop_event is set or task is cancelled."""
         _log.info("correlation_worker_started", topic=CONSUME_TOPIC)
 
+        # Periodic task: auto-close stale incidents every 5 minutes.
+        stale_task = asyncio.create_task(self._stale_incidents_loop())
+
         try:
             async for message in await self._bus.subscribe(CONSUME_TOPIC):
                 try:
@@ -88,11 +91,27 @@ class CorrelationWorker:
                 if self._stop_event.is_set():
                     break
         finally:
+            stale_task.cancel()
+            try:
+                await stale_task
+            except asyncio.CancelledError:
+                pass
             _log.info(
                 "correlation_worker_stopped",
                 processed=self._total_processed,
                 correlated=self._total_correlated,
             )
+
+    async def _stale_incidents_loop(self) -> None:
+        """Close incidents with no activity for auto_close_after_seconds every 5 min."""
+        while True:
+            await asyncio.sleep(300)
+            try:
+                closed = await self._engine.close_stale_incidents()
+                if closed:
+                    _log.info("stale_incidents_closed", count=closed)
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("stale_incidents_close_error", error=str(exc))
 
     async def _process(self, payload: dict[str, object]) -> None:
         alert_id_str: str = str(payload.get("alert_id", ""))
