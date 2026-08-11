@@ -76,11 +76,15 @@ async def create_api_key(
 @router.get("/api-keys")
 async def list_api_keys(
     request: Request,
+    include_revoked: bool = False,
     _auth: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
-    """List all API keys (admin only). Raw keys are never returned."""
+    """List API keys (admin only). Raw keys are never returned.
+
+    Pass include_revoked=true to also show revoked keys (greyed out in the UI).
+    """
     repo = _get_repo(request)
-    items = await repo.list()
+    items = await repo.list(include_revoked=include_revoked)
     return {"items": items, "total": len(items)}
 
 
@@ -90,7 +94,11 @@ async def revoke_api_key(
     request: Request,
     _auth: dict[str, Any] = Depends(require_admin),
 ) -> None:
-    """Revoke an API key by ID (admin only)."""
+    """Revoke an API key (admin only).
+
+    The key is marked revoked in the database — it cannot be used anymore
+    but the row is kept for audit purposes. It will no longer appear in list().
+    """
     repo = _get_repo(request)
     found = await repo.revoke(key_id)
     if not found:

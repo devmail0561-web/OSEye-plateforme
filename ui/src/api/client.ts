@@ -420,8 +420,11 @@ export const policiesApi = {
 // ── API Keys ──────────────────────────────────────────────────────────────────
 
 export const apiKeysApi = {
-  list(): Promise<{ items: ApiKeyResponse[]; total: number }> {
-    return api.get<{ items: ApiKeyResponse[]; total: number }>('/api/v1/api-keys').then((r) => r.data)
+  list(includeRevoked = false): Promise<{ items: ApiKeyResponse[]; total: number }> {
+    return api.get<{ items: ApiKeyResponse[]; total: number }>(
+      '/api/v1/api-keys',
+      { params: { include_revoked: includeRevoked } },
+    ).then((r) => r.data)
   },
 
   create(body: ApiKeyCreate): Promise<ApiKeyCreated> {

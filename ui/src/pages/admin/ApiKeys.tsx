@@ -17,6 +17,7 @@ export default function ApiKeys() {
   const location = useLocation()
   const [keys, setKeys] = useState<ApiKeyResponse[]>([])
   const [loading, setLoading] = useState(false)
+  const [showRevoked, setShowRevoked] = useState(false)
   const [banner, setBanner] = useState<CreatedBanner | null>(null)
   const [copied, setCopied] = useState(false)
   const keyInputRef = useRef<HTMLInputElement>(null)
@@ -28,22 +29,19 @@ export default function ApiKeys() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (includeRevoked: boolean) => {
     setLoading(true)
     try {
-      const data = await apiKeysApi.list()
+      const data = await apiKeysApi.list(includeRevoked)
       setKeys(data.items)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { void load(showRevoked) }, [load, showRevoked])
 
-  // Dismiss banner on navigation
-  useEffect(() => {
-    setBanner(null)
-  }, [location.pathname])
+  useEffect(() => { setBanner(null) }, [location.pathname])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -54,13 +52,20 @@ export default function ApiKeys() {
       const body: ApiKeyCreate = {
         name: name.trim(),
         roles: [role],
-        expires_at: expiresAt || null,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
       }
       const created = await apiKeysApi.create(body)
       setBanner({ key: created.key, key_id: created.key_id, name: created.name })
+      setKeys((prev) => [...prev, {
+        key_id:     created.key_id,
+        name:       created.name,
+        roles:      created.roles,
+        created_by: '',
+        expires_at: body.expires_at ?? null,
+        revoked:    false,
+      }])
       setName('')
       setExpiresAt('')
-      void load()
     } catch {
       setCreateError('Erreur lors de la création')
     } finally {
@@ -76,17 +81,23 @@ export default function ApiKeys() {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
         return
-      } catch {
-        // fallback below
-      }
+      } catch { /* fallback */ }
     }
     keyInputRef.current?.select()
   }
 
   async function handleRevoke(key_id: string) {
     await apiKeysApi.revoke(key_id)
-    setKeys((prev) => prev.map((k) => k.key_id === key_id ? { ...k, revoked: true } : k))
+    if (showRevoked) {
+      // Mettre à jour le statut en place (la ligne reste visible car on affiche les révoquées)
+      setKeys((prev) => prev.map((k) => k.key_id === key_id ? { ...k, revoked: true } : k))
+    } else {
+      // Masquer la ligne (comportement par défaut)
+      setKeys((prev) => prev.filter((k) => k.key_id !== key_id))
+    }
   }
+
+  const revokedCount = keys.filter((k) => k.revoked).length
 
   return (
     <div className="space-y-6">
@@ -133,13 +144,8 @@ export default function ApiKeys() {
         <form onSubmit={handleCreate} className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[160px] space-y-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">Nom</label>
-            <Input
-              required
-              placeholder="ex. agent-prod-01"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full"
-            />
+            <Input required placeholder="ex. agent-prod-01" value={name}
+              onChange={(e) => setName(e.target.value)} className="w-full" />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">Rôle</label>
@@ -150,11 +156,7 @@ export default function ApiKeys() {
           </div>
           <div className="space-y-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">Expire le (optionnel)</label>
-            <Input
-              type="date"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value ? new Date(e.target.value).toISOString() : '')}
-            />
+            <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
           </div>
           <Button type="submit" variant="primary" size="sm" disabled={creating}>
             {creating ? 'Création…' : 'Créer'}
@@ -165,6 +167,23 @@ export default function ApiKeys() {
 
       {/* Keys table */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-x-auto">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {keys.filter((k) => !k.revoked).length} clé{keys.filter((k) => !k.revoked).length !== 1 ? 's' : ''} active{keys.filter((k) => !k.revoked).length !== 1 ? 's' : ''}
+            {showRevoked && revokedCount > 0 && ` · ${revokedCount} révoquée${revokedCount > 1 ? 's' : ''}`}
+          </span>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showRevoked}
+              onChange={(e) => setShowRevoked(e.target.checked)}
+              className="accent-blue-500"
+            />
+            Afficher les révoquées
+          </label>
+        </div>
+
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-xs uppercase">
@@ -181,13 +200,23 @@ export default function ApiKeys() {
             {!loading && keys.length === 0 && (
               <tr>
                 <td colSpan={6}>
-                  <EmptyState icon={Key} title="Aucune clé API" description="Créez une clé pour permettre à un agent de s'authentifier" />
+                  <EmptyState icon={Key} title="Aucune clé API"
+                    description="Créez une clé pour permettre à un agent de s'authentifier" />
                 </td>
               </tr>
             )}
             {keys.map((k) => (
-              <tr key={k.key_id} className="border-b border-gray-100 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                <td className="px-3 py-2.5 font-medium text-gray-800 dark:text-gray-200 font-mono text-xs">{k.name}</td>
+              <tr
+                key={k.key_id}
+                className={`border-b border-gray-100 dark:border-gray-800/50 ${
+                  k.revoked
+                    ? 'opacity-50'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'
+                }`}
+              >
+                <td className="px-3 py-2.5 font-medium font-mono text-xs text-gray-800 dark:text-gray-200">
+                  {k.name}
+                </td>
                 <td className="px-3 py-2.5">
                   <div className="flex gap-1">
                     {k.roles.map((r) => (
@@ -197,7 +226,7 @@ export default function ApiKeys() {
                 </td>
                 <td className="px-3 py-2.5 text-gray-500 dark:text-gray-400 text-xs">{k.created_by}</td>
                 <td className="px-3 py-2.5 text-gray-500 dark:text-gray-400 text-xs">
-                  {k.expires_at ? <RelativeTime iso={k.expires_at} /> : '—'}
+                  {!k.revoked && k.expires_at ? <RelativeTime iso={k.expires_at} /> : '—'}
                 </td>
                 <td className="px-3 py-2.5">
                   <Badge variant={k.revoked ? 'default' : 'green'}>
@@ -206,11 +235,7 @@ export default function ApiKeys() {
                 </td>
                 <td className="px-3 py-2.5">
                   {!k.revoked && (
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleRevoke(k.key_id)}
-                    >
+                    <Button size="sm" variant="danger" onClick={() => handleRevoke(k.key_id)}>
                       Révoquer
                     </Button>
                   )}

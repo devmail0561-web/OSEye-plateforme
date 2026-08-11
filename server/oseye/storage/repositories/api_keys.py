@@ -109,9 +109,22 @@ class SQLApiKeyRepository:
                 row.revoked = True
         return True
 
-    async def list(self) -> list[dict[str, object]]:
+    async def delete(self, key_id: str) -> bool:
+        """Permanently delete a key row. Returns True if found and deleted."""
+        from sqlalchemy import delete as sql_delete
         async with self._session_factory() as session:
-            rows = (await session.execute(select(ApiKeyRow))).scalars().all()
+            async with session.begin():
+                result = await session.execute(
+                    sql_delete(ApiKeyRow).where(ApiKeyRow.key_id == key_id)
+                )
+        return result.rowcount > 0
+
+    async def list(self, include_revoked: bool = False) -> list[dict[str, object]]:
+        async with self._session_factory() as session:
+            stmt = select(ApiKeyRow)
+            if not include_revoked:
+                stmt = stmt.where(ApiKeyRow.revoked == False)  # noqa: E712
+            rows = (await session.execute(stmt)).scalars().all()
         return [
             {
                 "key_id": r.key_id,

@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 3.3
+**Version :** 3.4
 **Dernière mise à jour :** 2026-08-11
 **Branche active :** `main` (`latest`)
-**Phase courante :** Post-Phase 10 — Refonte UI + Sécurité CIA + Response Engine + Plugin/ML/Policy câblés
+**Phase courante :** Post-Phase 10 — Refonte UI + Sécurité CIA + Response Engine + Plugin/ML/Policy câblés + fixes API Keys
 
 ---
 
@@ -698,6 +698,18 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | `api/ws/manager.py` | `set` O(1) pour lookup/suppression connexions |
 | `api/routers/events.py` | dataclasses et constantes au niveau module |
 | `main.py` | `lru_cache` sur `Settings` |
+
+---
+
+## Corrections API Keys `[x]` — 2026-08-11
+
+- **Révocation** : `DELETE /api/v1/api-keys/{id}` → `revoked=True` en base (persisté), la ligne reste pour l'audit
+- **Clé révoquée inutilisable** : `verify()` retourne `None` si `revoked=True` ou ligne absente → 401
+- **`list()`** : filtre `WHERE revoked=false` par défaut ; `include_revoked=true` pour afficher toutes
+- **UI** : case "Afficher les révoquées" — lignes révoquées en `opacity-50`, badge "Révoquée", sans bouton action
+- **Compteur** : `X actives · Y révoquées` dans le toolbar
+- **`expires_at`** : masqué sur les révoquées (sans objet), stocké en `YYYY-MM-DD` dans le state (plus de conversion prématurée en ISO)
+- **Création** : ajout direct au state local sans rechargement (évite les doublons)
 
 ---
 
