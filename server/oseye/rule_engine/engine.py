@@ -177,12 +177,14 @@ class RuleEngine:
     # Correction 3 — temporal state persistence
     # ------------------------------------------------------------------
 
-    def save_temporal_state(self, path: str | Path) -> None:
+    async def save_temporal_state(self, path: str | Path) -> None:
         """Persist temporal windows to *path* so they survive a restart.
 
         Call periodically (e.g. every 60 s) from a maintenance task.
         Serialises deque[tuple[float, dict]] as list of [float, dict] in JSON.
         Uses atomic write (tmp + os.replace) to avoid partial state files.
+        File I/O is offloaded to a thread-pool executor to avoid blocking the
+        asyncio event loop.
         """
         import os as _os
 
@@ -192,6 +194,7 @@ class RuleEngine:
                 for key, window in _eval._temporal_windows.items()
             }
         tmp_path = str(path) + ".tmp"
+
         class _Encoder(json.JSONEncoder):
             def default(self, o: object) -> object:
                 import datetime
@@ -202,21 +205,38 @@ class RuleEngine:
                     return o.isoformat()
                 return super().default(o)
 
-        with open(tmp_path, "w") as fh:
-            fh.write(json.dumps(state, cls=_Encoder))
-        _os.replace(tmp_path, path)
-        _log.info("temporal_state_saved", path=str(path), windows=len(state))
+        # Serialise in the event-loop thread (pure CPU, minimal cost).
+        serialized = json.dumps(state, cls=_Encoder)
+        path_str = str(path)
 
-    def load_temporal_state(self, path: str | Path) -> None:
+        def _write_state() -> None:
+            with open(tmp_path, "w") as fh:
+                fh.write(serialized)
+            _os.replace(tmp_path, path_str)
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _write_state)
+        _log.info("temporal_state_saved", path=path_str, windows=len(state))
+
+    async def load_temporal_state(self, path: str | Path) -> None:
         """Restore temporal windows from a file written by :meth:`save_temporal_state`.
 
         Call on startup before the rule worker begins consuming events.
+        File I/O is offloaded to a thread-pool executor to avoid blocking the
+        asyncio event loop.
         """
-        try:
+        loop = asyncio.get_running_loop()
+        path_str = str(path)
+
+        def _read_state() -> str:
             with open(path) as fh:
-                raw = json.loads(fh.read())
+                return fh.read()
+
+        try:
+            raw_text = await loop.run_in_executor(None, _read_state)
+            raw = json.loads(raw_text)
         except Exception as exc:  # noqa: BLE001
-            _log.warning("temporal_state_load_failed", path=str(path), error=str(exc))
+            _log.warning("temporal_state_load_failed", path=path_str, error=str(exc))
             return
         state = {
             key: collections.deque(
@@ -227,7 +247,7 @@ class RuleEngine:
         }
         with _eval._temporal_windows_lock:
             _eval._temporal_windows.update(state)
-        _log.info("temporal_state_loaded", path=str(path), windows=len(state))
+        _log.info("temporal_state_loaded", path=path_str, windows=len(state))
 
     # ------------------------------------------------------------------
     # Hot-reload — watchdog (inotify) with polling fallback
@@ -289,10 +309,11 @@ class RuleEngine:
             observer.join()  # type: ignore[attr-defined]
 
     async def _poll_loop(self) -> None:
-        last_mtime = self._current_mtime()
+        loop = asyncio.get_running_loop()
+        last_mtime = await loop.run_in_executor(None, self._current_mtime)
         while not self._stop_event.is_set():
             await asyncio.sleep(self._reload_interval)
-            mtime = self._current_mtime()
+            mtime = await loop.run_in_executor(None, self._current_mtime)
             if mtime != last_mtime:
                 _log.info("rule_engine_change_detected_poll", rules_root=str(self._rules_root))
                 self.reload()

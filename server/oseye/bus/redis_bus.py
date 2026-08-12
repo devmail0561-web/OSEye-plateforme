@@ -28,14 +28,17 @@ class RedisEventBus:
         self._client: Any = None
         self._consumer_id = f"consumer-{id(self)}"
         self._closed = False
+        self._lock = asyncio.Lock()
 
     async def _get_client(self) -> Any:
         if self._client is None:
-            self._client = await aioredis.from_url(
-                self._redis_url,
-                decode_responses=False,
-                socket_connect_timeout=5,
-            )
+            async with self._lock:
+                if self._client is None:
+                    self._client = await aioredis.from_url(
+                        self._redis_url,
+                        decode_responses=False,
+                        socket_connect_timeout=5,
+                    )
         return self._client
 
     async def _ensure_group(self, client: Any, topic: str) -> None:

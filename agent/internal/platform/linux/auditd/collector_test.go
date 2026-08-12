@@ -123,7 +123,7 @@ func TestParseTimestamp(t *testing.T) {
 
 func TestParseKV_QuotedAndUnquoted(t *testing.T) {
 	line := `key1=val1 key2="quoted value" key3=val3`
-	m := parseKV(line)
+	m, _ := parseKV(line)
 	if m["key1"] != "val1" {
 		t.Errorf("key1 = %q", m["key1"])
 	}
@@ -146,7 +146,7 @@ func TestDecodeComm(t *testing.T) {
 		{"python3", "python3"},  // not all hex chars
 	}
 	for _, tc := range cases {
-		if got := decodeComm(tc.in); got != tc.want {
+		if got := decodeComm(tc.in, false); got != tc.want {
 			t.Errorf("decodeComm(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}

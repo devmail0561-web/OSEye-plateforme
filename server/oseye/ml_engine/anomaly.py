@@ -39,6 +39,8 @@ Cold-start: fewer than `min_samples` events → score 0 (model not yet reliable)
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import pickle
 from collections import OrderedDict
@@ -49,6 +51,33 @@ from river.anomaly import HalfSpaceTrees
 
 from oseye.core.schema import UniversalEvent
 from oseye.ml_engine.features import extract
+
+# ML-01: HMAC-SHA256 protection for pickle checkpoints.  Must match the key
+# used by engine.py (both read the same OSEYE_CHECKPOINT_HMAC_KEY env var).
+_HMAC_KEY = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", "dev-insecure-key").encode()
+
+
+def _compute_mac(path: Path) -> bytes:
+    data = path.read_bytes()
+    return hmac.new(_HMAC_KEY, data, hashlib.sha256).digest()
+
+
+def _write_mac(path: Path) -> None:
+    path.with_suffix(path.suffix + ".mac").write_bytes(_compute_mac(path))
+
+
+def _verify_mac(path: str | Path) -> None:
+    path = Path(path)
+    mac_path = path.with_suffix(path.suffix + ".mac")
+    if not mac_path.exists():
+        raise ValueError(f"checkpoint: MAC file missing for {path}")
+    expected = mac_path.read_bytes()
+    actual = _compute_mac(path)
+    if not hmac.compare_digest(expected, actual):
+        raise ValueError(
+            f"checkpoint: MAC mismatch for {path} — file may be tampered"
+        )
+
 
 _DEFAULT_N_TREES = 25
 _DEFAULT_HEIGHT = 15
@@ -209,6 +238,7 @@ class EntityAnomalyDetector:
             with open(tmp, "wb") as fh:
                 pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
             os.replace(tmp, path)
+            _write_mac(path)
         except Exception:
             tmp.unlink(missing_ok=True)
             raise
@@ -219,6 +249,7 @@ class EntityAnomalyDetector:
 
         Call on startup before the first event arrives to skip cold-start.
         """
+        _verify_mac(path)
         with open(path, "rb") as fh:
             payload = pickle.load(fh)  # noqa: S301
 

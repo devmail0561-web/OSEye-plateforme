@@ -55,7 +55,7 @@ class _InstallBody(BaseModel):
 @router.get("/config")
 async def get_plugin_config(
     request: Request,
-    _: dict[str, Any] = Depends(_require_reader),
+    _: dict[str, Any] = Depends(_require_admin),
 ) -> dict[str, Any]:
     """Return plugin system configuration (read-only).
 

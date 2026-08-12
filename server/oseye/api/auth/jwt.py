@@ -7,6 +7,9 @@ HS256 is used when the optional `secret` parameter is provided instead
 
 from __future__ import annotations
 
+import json
+import os
+import pathlib
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -19,6 +22,10 @@ from fastapi import HTTPException, status
 from oseye.core.observability import get_logger
 
 _logger = get_logger(__name__)
+
+_BLOCKLIST_FILE = pathlib.Path(
+    os.environ.get("OSEYE_DATA_DIR", "/tmp")  # noqa: S108
+) / "revoked_tokens.json"
 
 
 class JWTHandler:
@@ -50,8 +57,9 @@ class JWTHandler:
 
         # SEC-JWT-001: jti blocklist — {jti: expiry_timestamp_utc}
         # Bounded: revoked entries are pruned on every verify call once expired.
-        self._revoked: dict[str, datetime] = {}
+        # B-05: persisted to disk so the blocklist survives restarts.
         self._revoked_lock = threading.Lock()
+        self._revoked: dict[str, datetime] = self._load_blocklist()
 
     # ------------------------------------------------------------------
     # Token creation
@@ -99,17 +107,24 @@ class JWTHandler:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # SEC-JWT-001: check and prune blocklist
+        # B-11: tokens without jti cannot be checked for revocation — reject them.
         jti: str | None = payload.get("jti")
-        if jti is not None:
-            self._prune_revoked()
-            with self._revoked_lock:
-                if jti in self._revoked:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Token has been revoked",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
+        if jti is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # SEC-JWT-001: check and prune blocklist
+        self._prune_revoked()
+        with self._revoked_lock:
+            if jti in self._revoked:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
         return payload
 
     # ------------------------------------------------------------------
@@ -146,6 +161,7 @@ class JWTHandler:
 
         with self._revoked_lock:
             self._revoked[jti] = exp_dt
+        self._save_blocklist()
         _logger.info("jwt_revoked", jti=jti)
 
     # ------------------------------------------------------------------
@@ -159,3 +175,37 @@ class JWTHandler:
             expired = [jti for jti, exp in self._revoked.items() if exp <= now]
             for jti in expired:
                 del self._revoked[jti]
+        if expired:
+            self._save_blocklist()
+
+    def _load_blocklist(self) -> dict[str, datetime]:
+        """Load the blocklist from disk. Returns an empty dict on any error.
+
+        B-05: format on disk is {jti: expiry_iso_string}.
+        """
+        try:
+            raw: dict[str, str] = json.loads(_BLOCKLIST_FILE.read_text())
+            result: dict[str, datetime] = {}
+            for jti, expiry_str in raw.items():
+                try:
+                    result[jti] = datetime.fromisoformat(expiry_str)
+                except (ValueError, TypeError):
+                    pass
+            return result
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _save_blocklist(self) -> None:
+        """Write the blocklist to disk atomically (write + rename).
+
+        B-05: uses a .tmp file to avoid a partial write being read on crash.
+        Caller must NOT hold _revoked_lock (acquires it internally).
+        """
+        try:
+            with self._revoked_lock:
+                snapshot = {jti: exp.isoformat() for jti, exp in self._revoked.items()}
+            tmp = _BLOCKLIST_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(snapshot))
+            tmp.rename(_BLOCKLIST_FILE)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("jwt_blocklist_save_failed", error=str(exc))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import UTC, datetime
 from typing import Any
@@ -30,6 +31,12 @@ class CaseManager:
 
     def __init__(self, case_repo: SQLCaseRepository) -> None:
         self._repo = case_repo
+        self._case_locks: dict[UUID, asyncio.Lock] = {}
+
+    async def _get_case_lock(self, case_id: UUID) -> asyncio.Lock:
+        if case_id not in self._case_locks:
+            self._case_locks[case_id] = asyncio.Lock()
+        return self._case_locks[case_id]
 
     async def _append_custody(
         self,
@@ -86,34 +93,36 @@ class CaseManager:
         return await self._repo.get(case_id)
 
     async def update_case(self, case_id: UUID, operator: str, **fields: Any) -> ForensicCase:
-        case = await self._repo.get(case_id)
-        if case is None:
-            raise ValueError(f"Case {case_id} not found")
-        for k, v in fields.items():
-            object.__setattr__(case, k, v)
-        case.updated_at = datetime.now(UTC)
-        await self._repo.update(case)
-        detail = ", ".join(f"{k}={v}" for k, v in fields.items())
-        await self._append_custody(case, operator, "case_updated", detail)
-        return case
+        async with await self._get_case_lock(case_id):
+            case = await self._repo.get(case_id)
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            for k, v in fields.items():
+                object.__setattr__(case, k, v)
+            case.updated_at = datetime.now(UTC)
+            await self._repo.update(case)
+            detail = ", ".join(f"{k}={v}" for k, v in fields.items())
+            await self._append_custody(case, operator, "case_updated", detail)
+            return case
 
     async def add_note(self, case_id: UUID, author: str, content: str) -> CaseNote:
-        case = await self._repo.get(case_id)
-        if case is None:
-            raise ValueError(f"Case {case_id} not found")
-        now = datetime.now(UTC)
-        note = CaseNote(
-            note_id=uuid4(),
-            case_id=case_id,
-            created_at=now,
-            author=author,
-            content=content,
-        )
-        case.notes.append(note)
-        case.updated_at = now
-        await self._repo.update(case)
-        await self._append_custody(case, author, "note_added", content[:200])
-        return note
+        async with await self._get_case_lock(case_id):
+            case = await self._repo.get(case_id)
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            now = datetime.now(UTC)
+            note = CaseNote(
+                note_id=uuid4(),
+                case_id=case_id,
+                created_at=now,
+                author=author,
+                content=content,
+            )
+            case.notes.append(note)
+            case.updated_at = now
+            await self._repo.update(case)
+            await self._append_custody(case, author, "note_added", content[:200])
+            return note
 
     async def add_evidence(
         self,
@@ -123,35 +132,37 @@ class CaseManager:
         content: str,
         description: str | None = None,
     ) -> EvidenceItem:
-        case = await self._repo.get(case_id)
-        if case is None:
-            raise ValueError(f"Case {case_id} not found")
-        now = datetime.now(UTC)
-        item = EvidenceItem(
-            evidence_id=uuid4(),
-            type=type_,  # type: ignore[arg-type]
-            content=content,
-            description=description,
-            added_by=operator,
-            added_at=now,
-            marked_as_evidence_at=now,
-        )
-        case.evidence.append(item)
-        case.updated_at = now
-        await self._repo.update(case)
-        detail = description or content[:200]
-        await self._append_custody(case, operator, "evidence_added", detail)
-        return item
+        async with await self._get_case_lock(case_id):
+            case = await self._repo.get(case_id)
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            now = datetime.now(UTC)
+            item = EvidenceItem(
+                evidence_id=uuid4(),
+                type=type_,  # type: ignore[arg-type]
+                content=content,
+                description=description,
+                added_by=operator,
+                added_at=now,
+                marked_as_evidence_at=now,
+            )
+            case.evidence.append(item)
+            case.updated_at = now
+            await self._repo.update(case)
+            detail = description or content[:200]
+            await self._append_custody(case, operator, "evidence_added", detail)
+            return item
 
     async def close_case(self, case_id: UUID, operator: str, resolution: str) -> ForensicCase:
-        case = await self._repo.get(case_id)
-        if case is None:
-            raise ValueError(f"Case {case_id} not found")
-        case.status = "resolved"
-        case.updated_at = datetime.now(UTC)
-        await self._repo.update(case)
-        await self._append_custody(case, operator, "case_closed", resolution)
-        return case
+        async with await self._get_case_lock(case_id):
+            case = await self._repo.get(case_id)
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            case.status = "resolved"
+            case.updated_at = datetime.now(UTC)
+            await self._repo.update(case)
+            await self._append_custody(case, operator, "case_closed", resolution)
+            return case
 
     async def list_cases(
         self, filters: dict[str, object], pagination: Pagination

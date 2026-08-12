@@ -82,9 +82,12 @@
     Réduit significativement la posture de sécurité du système.
 
 - id: rule_rootkit_detection
-  name: "Tentative de chargement de module noyau non signé"
+  name: "Chargement de module noyau (insmod/modprobe)"
   enabled: true
-  severity: critical
+  # R-05 : sévérité abaissée de CRITICAL à HIGH — insmod/modprobe sont très courants
+  # pour des modules légitimes (pilotes GPU, VirtualBox, VMware, Bluetooth…).
+  # CRITICAL devrait être réservé à un second niveau avec détection de nom suspect.
+  severity: high
   tags: [defense_evasion, rootkit]
   mitre: [T1014]
   platforms: [linux]
@@ -92,9 +95,19 @@
     event.category == "process"
     and (event.process_name == "insmod" or event.process_name == "modprobe")
     and event.uid == 0
+    # R-05 : exclusions des modules légitimes courants pour réduire les faux positifs.
+    and not(event.executable contains "depmod")
+    and not(event.resource contains "nvidia")
+    and not(event.resource contains "vboxdrv")
+    and not(event.resource contains "vmw_")
+    and not(event.resource contains "bluetooth")
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Chargement d'un module noyau par root (uid==0).
-    Vecteur d'installation de rootkit ou de backdoor kernel.
+    Chargement d'un module noyau par root (uid==0) via insmod ou modprobe.
+    Vecteur d'installation de rootkit ou de backdoor kernel. La sévérité est HIGH
+    (et non CRITICAL) car insmod/modprobe sont fréquemment utilisés pour des modules
+    légitimes. Les modules nvidia, vboxdrv, vmw_* et bluetooth sont exclus pour
+    limiter les faux positifs. Un second niveau de détection (nom de module inconnu
+    ou pattern suspect) peut élever à CRITICAL.

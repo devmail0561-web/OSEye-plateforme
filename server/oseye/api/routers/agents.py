@@ -10,9 +10,9 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 
 from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.observability import get_logger
@@ -87,7 +87,7 @@ async def list_blocked(
 
 @router.get("/{cn}")
 async def get_agent(
-    cn: str,
+    cn: Annotated[str, Path(max_length=253)],
     request: Request,
     _auth: dict[str, Any] = Depends(require_analyst),
 ) -> dict[str, Any]:
@@ -101,7 +101,7 @@ async def get_agent(
 
 @router.delete("/{cn}", status_code=status.HTTP_204_NO_CONTENT)
 async def block_agent(
-    cn: str,
+    cn: Annotated[str, Path(max_length=253)],
     request: Request,
     _auth: dict[str, Any] = Depends(require_admin),
 ) -> None:
@@ -115,7 +115,7 @@ async def block_agent(
 
 @router.post("/{cn}/unblock", status_code=status.HTTP_204_NO_CONTENT)
 async def unblock_agent(
-    cn: str,
+    cn: Annotated[str, Path(max_length=253)],
     request: Request,
     _auth: dict[str, Any] = Depends(require_admin),
 ) -> None:

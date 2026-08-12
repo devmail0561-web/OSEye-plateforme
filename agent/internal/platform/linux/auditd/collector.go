@@ -156,7 +156,7 @@ func (c *AuditdCollector) parseLine(line string) (collector.RawEvent, bool) {
 		return collector.RawEvent{}, false
 	}
 
-	fields := parseKV(line)
+	fields, quotedFields := parseKV(line)
 
 	recType, ok := fields["type"]
 	if !ok || recType != "SYSCALL" {
@@ -170,7 +170,8 @@ func (c *AuditdCollector) parseLine(line string) (collector.RawEvent, bool) {
 	tsNs := parseTimestamp(msgVal)
 
 	// Decode hex-encoded comm (e.g. comm=62617368 → "bash") or quoted comm="bash".
-	comm := decodeComm(fields["comm"])
+	// GO-005: pass wasQuoted so that names like "dead" or "cafe" are not mis-decoded.
+	comm := decodeComm(fields["comm"], quotedFields["comm"])
 
 	payload := map[string]interface{}{
 		"type":    recType,
@@ -233,10 +234,13 @@ func parseTimestamp(msg string) int64 {
 	return sec*1_000_000_000 + ms*1_000_000
 }
 
-// parseKV parses "key=value key2=value2 ..." into a map.
+// parseKV parses "key=value key2=value2 ..." into a value map and a quoted-status map.
 // Values may be unquoted tokens or double-quoted strings.
-func parseKV(line string) map[string]string {
-	m := make(map[string]string, 16)
+// GO-005: the quoted map tracks which keys had their value wrapped in double quotes —
+// auditd uses quoting for printable ASCII names and hex-encoding for binary names.
+func parseKV(line string) (m map[string]string, quoted map[string]bool) {
+	m = make(map[string]string, 16)
+	quoted = make(map[string]bool, 16)
 	rest := line
 	for len(rest) > 0 {
 		rest = strings.TrimLeft(rest, " \t")
@@ -258,6 +262,8 @@ func parseKV(line string) map[string]string {
 				val = rest[1 : closeQ+1]
 				rest = rest[closeQ+2:]
 			}
+			m[key] = val
+			quoted[key] = true
 		} else {
 			// Unquoted token — read until next space.
 			sp := strings.IndexByte(rest, ' ')
@@ -268,22 +274,42 @@ func parseKV(line string) map[string]string {
 				val = rest[:sp]
 				rest = rest[sp+1:]
 			}
+			m[key] = val
 		}
-		m[key] = val
 	}
-	return m
+	return m, quoted
 }
 
 // decodeComm handles both hex-encoded (62617368) and quoted ("bash") comm values.
-func decodeComm(s string) string {
+// GO-005: wasQuoted indicates the value was wrapped in double quotes by auditd,
+// meaning it is already a printable ASCII name and must not be hex-decoded.
+// For unquoted values, hex decoding is attempted; if all decoded bytes are
+// printable ASCII the original string is the real name (avoids mis-decoding names
+// like "dead", "cafe", "beef"). If any decoded byte is non-printable, the value
+// is a hex-encoded binary name and the decoded bytes are returned.
+func decodeComm(s string, wasQuoted bool) string {
 	if s == "" {
 		return ""
 	}
-	// Already unquoted by parseKV — check if it looks like hex.
+	if wasQuoted {
+		// auditd quoted the value → it is a printable ASCII name; do not decode.
+		return s
+	}
 	if len(s)%2 == 0 && isHex(s) {
-		if decoded, err := hexDecode(s); err == nil {
-			return decoded
+		decoded, err := hexDecode(s)
+		if err != nil {
+			return s
 		}
+		for _, b := range decoded {
+			if b < 0x20 || b > 0x7e {
+				// Non-printable byte → the original was a hex-encoded binary name.
+				return decoded
+			}
+		}
+		// All decoded bytes are printable ASCII → the original unquoted token IS
+		// the real process name (e.g. "bash" itself is valid hex but decodes to
+		// itself; return the original to avoid an unnecessary round-trip).
+		return s
 	}
 	return s
 }

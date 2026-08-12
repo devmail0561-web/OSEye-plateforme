@@ -27,7 +27,7 @@
     Peut indiquer un mouvement latéral depuis une machine compromise vers d'autres cibles.
 
 - id: rule_port_scan
-  name: "Scan de ports (>100 connexions TCP new/30s, uid!=0)"
+  name: "Scan de ports (>20 connexions TCP new/30s)"
   enabled: true
   severity: high
   tags: [lateral_movement, discovery, port_scan]
@@ -39,13 +39,15 @@
     event.category == "network"
     and event.protocol == "tcp"
     and event.type == "new"
-    and event.uid != 0
+    # R-03 : uid != 0 supprimé — netlink ne peuple pas le champ uid (défaut = 0),
+    # la condition était donc toujours fausse et supprimait toutes les alertes.
   timeframe: 30
   threshold: 20
   actions: [ALERT]
   explanation: >
-    Plus de 20 connexions TCP new en 30 secondes depuis un utilisateur non-root.
-    Pattern typique d'un scan de ports offensif (nmap, masscan).
+    Plus de 20 connexions TCP new en 30 secondes. Pattern typique d'un scan de ports
+    offensif (nmap, masscan). Le filtre uid != 0 a été supprimé car netlink ne peuple
+    pas ce champ (toujours 0 par défaut).
     NOTE (YAML-007): compte toutes les connexions TCP new (pas nécessairement
     vers des IPs distinctes) — count_distinct non supporté nativement.
 

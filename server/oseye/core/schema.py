@@ -123,6 +123,10 @@ class Decision(BaseModel):
         "ALERT", "IGNORE", "ESCALATE", "INVESTIGATE",
         "ISOLATE", "REQUEST_HUMAN", "COLLECT_MORE", "NOTIFY"
     ]
+    # Full action set produced by the risk matrix (e.g. ["ALERT", "ISOLATE"]).
+    # Not persisted to DB — populated in-memory by the engine.
+    # Defaults to [] for decisions loaded from DB (only decision_type is stored).
+    decision_types: list[str] = Field(default_factory=list)
 
     # Input signals
     rule_score: float

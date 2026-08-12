@@ -26,6 +26,7 @@ def build_timeline(
                 "severity": ev.severity,
                 "title": f"{ev.category}/{ev.type}",
                 "detail": ev.resource or ev.cmdline,
+                "hostname": ev.hostname,
                 "id": str(ev.event_id),
             }
         )
@@ -39,6 +40,7 @@ def build_timeline(
                 "severity": alert.severity,
                 "title": alert.title,
                 "detail": alert.description,
+                "hostname": alert.hostname,
                 "id": str(alert.alert_id),
             }
         )
@@ -52,6 +54,7 @@ def build_timeline(
                 "severity": "info",
                 "title": entry.action,
                 "detail": entry.detail,
+                "hostname": "",
                 "id": entry.hash,
             }
         )

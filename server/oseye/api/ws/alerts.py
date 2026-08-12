@@ -45,18 +45,40 @@ async def ws_alerts(ws: WebSocket) -> None:
             pass
         return
 
-    try:
-        handler = ws.app.state.jwt_handler
-        payload = handler.verify_token(token)
-    except Exception:  # noqa: BLE001
+    # B-18: support both JWT tokens and API Keys (osk_ prefix)
+    current_user: dict
+    if token.startswith("osk_"):
+        api_key_repo = getattr(ws.app.state, "api_key_repo", None)
+        if api_key_repo is None:
+            try:
+                await ws.close(code=4001)
+            except Exception:  # noqa: BLE001
+                pass
+            return
         try:
-            await ws.close(code=4001)
+            key_data = await api_key_repo.verify(token)
         except Exception:  # noqa: BLE001
-            pass
-        return
+            key_data = None
+        if key_data is None:
+            try:
+                await ws.close(code=4001)
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        current_user = {"sub": key_data.name, "roles": list(key_data.roles)}
+    else:
+        try:
+            handler = ws.app.state.jwt_handler
+            current_user = handler.verify_token(token)
+        except Exception:  # noqa: BLE001
+            try:
+                await ws.close(code=4001)
+            except Exception:  # noqa: BLE001
+                pass
+            return
 
     # SEC-005: enforce role check
-    roles: list[str] = list(payload.get("roles", []))
+    roles: list[str] = list(current_user.get("roles", []))
     if not _VALID_WS_ROLES.intersection(roles):
         try:
             await ws.close(code=4003)
@@ -65,7 +87,7 @@ async def ws_alerts(ws: WebSocket) -> None:
         return
 
     # SEC-WS-001: pass user_sub so the manager can enforce per-user connection cap
-    user_sub: str | None = payload.get("sub")
+    user_sub: str | None = current_user.get("sub")
     await alerts_ws_manager.connect(ws, user_sub=user_sub)
     try:
         while True:

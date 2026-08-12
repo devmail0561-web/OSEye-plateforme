@@ -191,6 +191,54 @@ class SQLCaseRepository:
                 row.assigned_to = updated.assigned_to
                 row.event_ids = updated.event_ids
                 row.alert_ids = updated.alert_ids
+
+                # Persist notes that do not yet exist in DB
+                existing_note_ids: set[str] = set(
+                    (
+                        await session.execute(
+                            select(CaseNoteRow.note_id).where(
+                                CaseNoteRow.case_id == str(case.case_id)
+                            )
+                        )
+                    ).scalars().all()
+                )
+                for note in case.notes:
+                    if str(note.note_id) not in existing_note_ids:
+                        session.add(
+                            CaseNoteRow(
+                                note_id=str(note.note_id),
+                                case_id=str(case.case_id),
+                                created_at=note.created_at.isoformat(),
+                                updated_at=note.updated_at.isoformat() if note.updated_at else None,
+                                author=note.author,
+                                content=note.content,
+                            )
+                        )
+
+                # Persist evidence items that do not yet exist in DB
+                existing_evidence_ids: set[str] = set(
+                    (
+                        await session.execute(
+                            select(EvidenceItemRow.evidence_id).where(
+                                EvidenceItemRow.case_id == str(case.case_id)
+                            )
+                        )
+                    ).scalars().all()
+                )
+                for ev in case.evidence:
+                    if str(ev.evidence_id) not in existing_evidence_ids:
+                        session.add(
+                            EvidenceItemRow(
+                                evidence_id=str(ev.evidence_id),
+                                case_id=str(case.case_id),
+                                type=ev.type,
+                                content=ev.content,
+                                description=ev.description,
+                                added_by=ev.added_by,
+                                added_at=ev.added_at.isoformat(),
+                                marked_as_evidence_at=ev.marked_as_evidence_at.isoformat(),
+                            )
+                        )
         return case
 
     async def list(

@@ -194,6 +194,7 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
 async def logout(
     request: Request,
     token: str = Body(..., embed=True),

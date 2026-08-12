@@ -220,6 +220,7 @@ class DecisionEngine:
             decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
             created_at=now,
             decision_type=primary_type,
+            decision_types=list(decision_types),
             rule_score=rule_score,
             ml_score=ml_score,
             ti_score=ti_score,

@@ -67,7 +67,7 @@ async def lookup(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Invalid IP address: {ip!r}",
+                detail="Invalid IP address format",
             )
 
     # SEC-TI-001: validate hash format

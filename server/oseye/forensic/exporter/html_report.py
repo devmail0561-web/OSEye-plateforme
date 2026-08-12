@@ -92,11 +92,11 @@ def _timeline_rows(timeline: list[dict]) -> str:
     if not timeline:
         return "<tr><td colspan='4' style='color:#4a5568;text-align:center;'>No entries</td></tr>"
     rows = []
-    for entry in sorted(timeline, key=lambda e: e.get("timestamp", "")):
-        ts = html.escape(str(entry.get("timestamp", "—")))
+    for entry in sorted(timeline, key=lambda e: e.get("ts", 0)):
+        ts = html.escape(_ns_to_iso(entry.get("ts", 0)))
         sev = str(entry.get("severity", "info"))
         title = html.escape(str(entry.get("title", "—")))
-        host = html.escape(str(entry.get("hostname", "—")))
+        host = html.escape(str(entry.get("hostname", "") or "—"))
         rows.append(
             f"<tr><td>{ts}</td><td>{_sev_cell(sev)}</td>"
             f"<td>{title}</td><td>{host}</td></tr>"

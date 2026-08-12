@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.schema import Rule
@@ -13,6 +15,7 @@ from oseye.rule_engine.evaluator import _eval_expr
 from oseye.rule_engine.models import RuleDefinition
 
 router = APIRouter(prefix="/api/v1", tags=["rules"])
+_limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +102,9 @@ async def get_rule(
 
 
 @router.post("/rules/validate", status_code=status.HTTP_200_OK)
+@_limiter.limit("20/minute")
 async def validate_rule(
+    request: Request,
     body: RuleValidateRequest,
     _auth: dict[str, Any] = Depends(require_analyst),
 ) -> RuleValidateResponse:

@@ -53,6 +53,9 @@ class ActionExecutor:
     async def execute(self, decision: Decision, alert: Alert | None = None) -> None:
         """Dispatch the decision to the appropriate topic(s)."""
         decision_type = decision.decision_type
+        # decision_types is the full set (e.g. ["ALERT", "ISOLATE"]).
+        # Populated by the engine; empty for decisions loaded from DB.
+        decision_types = decision.decision_types
 
         if decision_type == "IGNORE":
             _log.info(
@@ -79,16 +82,18 @@ class ActionExecutor:
                 entity_id=decision.entity_id,
             )
 
-        # Type-specific side effects
-        if decision_type == "ISOLATE":
-            # ISOLATE → BLOCK_IP on the alert's destination IP (if known)
-            # CIA — Intégrité : command_id ties this command to the decision.
+        # Multi-type side effects — each action can coexist with ALERT.
+        # CIA — Intégrité : command_id ties each command to this decision.
+        # decision_types is empty for decisions loaded from DB (only decision_type
+        # is persisted); fall back to [decision_type] so side-effects still fire.
+        effective_types: list[str] = decision_types if decision_types else [decision_type]
+        if "ISOLATE" in effective_types:
             await self._emit_block_ip_command(decision, alert)
-        elif decision_type == "INVESTIGATE":
+        if "INVESTIGATE" in effective_types:
             await self._request_forensic_snapshot(decision)
-        elif decision_type == "COLLECT_MORE":
+        if "COLLECT_MORE" in effective_types:
             await self._request_additional_collection(decision)
-        elif decision_type == "NOTIFY":
+        if "NOTIFY" in effective_types:
             await self._emit_notification(decision)
 
     async def execute_after_approval(
@@ -99,7 +104,7 @@ class ActionExecutor:
         Called by HumanApprovalQueue after an operator approves the decision.
         KILL_PROCESS is only issued here — never autonomously.
         """
-        if decision.decision_type not in ("ALERT", "ISOLATE", "REQUEST_HUMAN"):
+        if not decision.requires_human:
             return
 
         await self._emit_kill_process_command(decision, alert)

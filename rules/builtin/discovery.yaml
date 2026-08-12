@@ -71,13 +71,17 @@
          or event.resource contains "/etc/kubernetes" or event.resource contains "kubeconfig"
          or event.resource contains "docker-compose.yml" or event.resource contains ".npmrc"
          or event.resource contains ".pypirc")
-    and event.uid != 0
+    # R-02 : uid != 0 supprimé — fanotify/inotify ne peuplent pas le champ uid
+    # (défaut Pydantic = 0), donc le filtre bloquerait toutes les alertes.
+    # Les accès root à des fichiers de credentials sont également suspects.
   timeframe: null
   threshold: null
   actions: [ALERT]
   explanation: >
     Accès à des fichiers contenant potentiellement des credentials (AWS, Kubernetes,
-    variables d'environnement, registres de packages).
+    variables d'environnement, registres de packages). Le filtre uid != 0 a été
+    supprimé car fanotify/inotify n'émettent pas ce champ (uid vaut toujours 0
+    par défaut Pydantic) — les accès root sont aussi signalés.
 
 - id: rule_sudo_discovery
   name: "Énumération des droits sudo"

@@ -98,6 +98,11 @@ class AsyncCircuitBreaker:
                 self._failure_count = 0
                 self._half_open_probe_in_flight = False
             return result
+        finally:
+            # CancelledError (BaseException) bypasses both except and else — ensure
+            # the half-open probe slot is always released so the circuit can recover.
+            if self._state == _HALF_OPEN:
+                self._half_open_probe_in_flight = False
 
 
 class CircuitOpenError(Exception):

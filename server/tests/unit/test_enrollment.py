@@ -190,7 +190,10 @@ def app_with_store(tmp_path: Path):
 def test_api_get_ca_cert_valid_token(app_with_store) -> None:
     client, store = app_with_store
     token = store.create_token()
-    resp = client.get(f"/api/v1/enroll/{token}")
+    resp = client.get(
+        "/api/v1/enroll/ca",
+        headers={"X-Enrollment-Token": token},
+    )
     assert resp.status_code == 200
     assert "BEGIN CERTIFICATE" in resp.text
     # Token must still be valid after GET (not consumed)
@@ -199,7 +202,10 @@ def test_api_get_ca_cert_valid_token(app_with_store) -> None:
 
 def test_api_get_ca_cert_invalid_token(app_with_store) -> None:
     client, _ = app_with_store
-    resp = client.get("/api/v1/enroll/" + "b" * 64)
+    resp = client.get(
+        "/api/v1/enroll/ca",
+        headers={"X-Enrollment-Token": "b" * 64},
+    )
     assert resp.status_code == 404
 
 
@@ -208,8 +214,9 @@ def test_api_post_csr_valid(app_with_store) -> None:
     token = store.create_token()
     csr_pem = _make_csr("myhost.local")
     resp = client.post(
-        f"/api/v1/enroll/{token}",
+        "/api/v1/enroll/sign",
         json={"csr": csr_pem, "hostname": "myhost.local"},
+        headers={"X-Enrollment-Token": token},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -221,8 +228,9 @@ def test_api_post_csr_invalid_token(app_with_store) -> None:
     client, _ = app_with_store
     csr_pem = _make_csr("myhost.local")
     resp = client.post(
-        "/api/v1/enroll/" + "c" * 64,
+        "/api/v1/enroll/sign",
         json={"csr": csr_pem, "hostname": "myhost.local"},
+        headers={"X-Enrollment-Token": "c" * 64},
     )
     assert resp.status_code == 404
 
@@ -232,9 +240,10 @@ def test_api_post_csr_one_time_use(app_with_store) -> None:
     token = store.create_token()
     csr_pem = _make_csr("myhost.local")
     payload = {"csr": csr_pem, "hostname": "myhost.local"}
-    resp1 = client.post(f"/api/v1/enroll/{token}", json=payload)
+    headers = {"X-Enrollment-Token": token}
+    resp1 = client.post("/api/v1/enroll/sign", json=payload, headers=headers)
     assert resp1.status_code == 200
-    resp2 = client.post(f"/api/v1/enroll/{token}", json=payload)
+    resp2 = client.post("/api/v1/enroll/sign", json=payload, headers=headers)
     assert resp2.status_code == 404
 
 

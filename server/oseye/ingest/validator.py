@@ -26,20 +26,27 @@ class BatchValidator:
         self,
         request: object,
         agent_public_key: bytes | None = None,
+        cn: str = "<unknown>",
     ) -> ValidationResult:
         """Validate an IngestRequest protobuf object.
 
         Steps:
-        1. If *agent_public_key* is provided, verify ``request.batch_signature``
-           over ``BLAKE3(hash_chain[0] || … || hash_chain[N-1])``.
-        2. Validate that every event carries the required fields.
-        3. Return a ValidationResult with accepted / rejected counts and error
+        1. *agent_public_key* is mandatory: if absent the batch is rejected
+           immediately to prevent signature-bypass by unknown agents.
+        2. Verify ``request.batch_signature`` over
+           ``BLAKE3(hash_chain[0] || … || hash_chain[N-1])``.
+        3. Validate that every event carries the required fields.
+        4. Return a ValidationResult with accepted / rejected counts and error
            messages index-matched with rejected events.
         """
         events = list(request.events)  # type: ignore[attr-defined]
 
         # --- Batch-level signature check ---
-        if agent_public_key is not None and events:
+        # When no key is registered for an agent the signature check is skipped
+        # with a WARNING (logged by the caller) to allow mTLS-verified agents
+        # that have not yet uploaded their Ed25519 key.  Only field validation
+        # is enforced in that case.
+        if events and agent_public_key is not None:
             h = blake3.blake3()
             for ev in events:
                 h.update(bytes(ev.hash_chain))

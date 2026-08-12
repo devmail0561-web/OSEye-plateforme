@@ -16,6 +16,7 @@ from oseye.core.observability import get_logger
 if TYPE_CHECKING:
     from oseye.core.schema import Decision
     from oseye.decision.action_executor import ActionExecutor
+    from oseye.storage.repositories.alerts import SQLAlertRepository
     from oseye.storage.repositories.decisions import SQLDecisionRepository
 
 _log = get_logger(__name__)
@@ -35,6 +36,7 @@ class HumanApprovalQueue:
         decision_repo: SQLDecisionRepository,
         poll_interval: int = 30,
         action_executor: ActionExecutor | None = None,
+        alert_repo: SQLAlertRepository | None = None,
     ) -> None:
         self._repo = decision_repo
         self._poll_interval = poll_interval
@@ -42,6 +44,7 @@ class HumanApprovalQueue:
         # CIA — Disponibilité : after human approval, push the response command
         # to the agent immediately via ActionExecutor.execute_after_approval().
         self._executor = action_executor
+        self._alert_repo = alert_repo
 
     async def run(self) -> None:
         """Background loop — expires timed-out pending decisions."""
@@ -75,7 +78,10 @@ class HumanApprovalQueue:
         decision = await self._update_decision(decision_id, "approved", operator, note)
         if decision is not None and self._executor is not None:
             try:
-                await self._executor.execute_after_approval(decision)
+                alert = None
+                if self._alert_repo and decision.trigger_alert_id:
+                    alert = await self._alert_repo.get(decision.trigger_alert_id)
+                await self._executor.execute_after_approval(decision, alert=alert)
             except Exception as exc:  # noqa: BLE001
                 _log.error(
                     "human_queue_post_approval_error",

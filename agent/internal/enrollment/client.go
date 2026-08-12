@@ -1,10 +1,13 @@
 // Package enrollment handles automatic agent enrollment on first boot.
 //
 // If OSEYE_ENROLL_TOKEN is set and TLSCertFile does not exist yet, the agent:
-//  1. GET  {EnrollServerURL}/api/v1/enroll/{token} → downloads the CA cert
+//  1. GET  {EnrollServerURL}/api/v1/enroll/ca              → downloads the CA cert
+//         (header X-Enrollment-Token carries the token)
 //  2. Generates an RSA 2048 key pair + PKCS#10 CSR (CN = hostname)
-//  3. POST {EnrollServerURL}/api/v1/enroll/{token} → receives the signed cert
-//  4. Writes CACertFile, TLSKeyFile, TLSCertFile to disk
+//  3. POST {EnrollServerURL}/api/v1/enroll/sign            → receives the signed cert
+//         (header X-Enrollment-Token carries the token)
+//  4. Validates the received cert: CN == hostname, signature from CA
+//  5. Writes CACertFile, TLSKeyFile, TLSCertFile to disk
 //
 // On subsequent boots, TLSCertFile exists so Enroll is a no-op.
 package enrollment
@@ -23,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -46,13 +50,23 @@ func NeedsEnrollment(p EnrollParams) bool {
 }
 
 // Enroll performs the full enrollment flow. Returns nil if not needed.
-// CIA — Confidentialité : all HTTP calls should go over HTTPS in production.
+// CIA — Confidentialité : all HTTP calls must go over HTTPS in production.
+// Set OSEYE_INSECURE=true to allow HTTP (dev/test only).
 func Enroll(p EnrollParams) error {
 	if !NeedsEnrollment(p) {
 		if p.EnrollToken != "" {
 			slog.Info("enrollment: cert already present, skipping", "path", p.TLSCertFile)
 		}
 		return nil
+	}
+
+	// G-E-01: enforce HTTPS to protect token and cert in transit.
+	if !strings.HasPrefix(p.EnrollURL, "https://") {
+		if os.Getenv("OSEYE_INSECURE") != "true" {
+			return fmt.Errorf("enrollment: EnrollURL must use HTTPS (set OSEYE_INSECURE=true to allow HTTP in dev)")
+		}
+		slog.Warn("enrollment: EnrollURL does not use HTTPS — token and cert will be transmitted in cleartext",
+			"url", p.EnrollURL)
 	}
 
 	slog.Info("enrollment: starting", "server", p.EnrollURL, "hostname", p.Hostname)
@@ -69,8 +83,8 @@ func Enroll(p EnrollParams) error {
 		return fmt.Errorf("enrollment: generate CSR: %w", err)
 	}
 
-	// Step 3: POST CSR → get signed cert
-	certPEM, err := signCSR(p.EnrollURL, p.EnrollToken, csrPEM, p.Hostname)
+	// Step 3: POST CSR → get signed cert (validated against CA)
+	certPEM, err := signCSR(p.EnrollURL, p.EnrollToken, csrPEM, p.Hostname, caPEM)
 	if err != nil {
 		return fmt.Errorf("enrollment: sign CSR: %w", err)
 	}
@@ -106,19 +120,41 @@ func Enroll(p EnrollParams) error {
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 func fetchCACert(serverURL, token string) ([]byte, error) {
-	url := serverURL + "/api/v1/enroll/" + token
-	resp, err := httpClient.Get(url) //nolint:noctx
+	// G-E-02: token in header, not in URL path.
+	url := serverURL + "/api/v1/enroll/ca"
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Enrollment-Token", token)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	// G-E-03: cap response size to 1 MB.
+	resp.Body = io.NopCloser(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("server returned %d", resp.StatusCode)
 	}
 	return io.ReadAll(resp.Body)
 }
 
-func signCSR(serverURL, token, csrPEM, hostname string) ([]byte, error) {
+// signCSR posts the CSR to the server and returns the signed certificate PEM.
+// G-E-02: token is sent in X-Enrollment-Token header, not in the URL.
+// G-E-03: response body is capped at 1 MB.
+// G-E-04: returned cert is validated (CN == hostname, signature from caCert).
+func signCSR(serverURL, token, csrPEM, hostname string, caPEM []byte) ([]byte, error) {
+	// Parse CA cert now so we can validate the returned certificate.
+	caBlock, _ := pem.Decode(caPEM)
+	if caBlock == nil {
+		return nil, fmt.Errorf("enrollment: failed to decode CA cert PEM")
+	}
+	caCert, err := x509.ParseCertificate(caBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("enrollment: parse CA cert: %w", err)
+	}
+
 	body, err := json.Marshal(map[string]string{
 		"csr":      csrPEM,
 		"hostname": hostname,
@@ -127,12 +163,21 @@ func signCSR(serverURL, token, csrPEM, hostname string) ([]byte, error) {
 		return nil, err
 	}
 
-	url := serverURL + "/api/v1/enroll/" + token
-	resp, err := httpClient.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
+	// G-E-02: token in header, not in URL path.
+	url := serverURL + "/api/v1/enroll/sign"
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Enrollment-Token", token)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	// G-E-03: cap response size to 1 MB.
+	resp.Body = io.NopCloser(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("server returned %d: %s", resp.StatusCode, raw)
@@ -144,7 +189,27 @@ func signCSR(serverURL, token, csrPEM, hostname string) ([]byte, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
-	return []byte(result.Cert), nil
+
+	certPEM := []byte(result.Cert)
+
+	// G-E-04: validate the returned certificate.
+	certBlock, _ := pem.Decode(certPEM)
+	if certBlock == nil {
+		return nil, fmt.Errorf("enrollment: failed to decode received cert PEM")
+	}
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("enrollment: parse received cert: %w", err)
+	}
+	if cert.Subject.CommonName != hostname {
+		return nil, fmt.Errorf("enrollment: cert CN %q does not match hostname %q",
+			cert.Subject.CommonName, hostname)
+	}
+	if err := cert.CheckSignatureFrom(caCert); err != nil {
+		return nil, fmt.Errorf("enrollment: cert signature invalid: %w", err)
+	}
+
+	return certPEM, nil
 }
 
 // ------------------------------------------------------------------

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.observability import get_logger
@@ -47,8 +47,8 @@ async def list_response_actions(
     request: Request,
     agent_cn: str | None = None,
     action_status: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     _auth: dict[str, Any] = Depends(require_analyst),
 ) -> list[dict]:
     """List response actions with optional filters."""

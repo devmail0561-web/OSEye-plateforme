@@ -19,7 +19,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
@@ -74,7 +74,7 @@ def _get_alert_repo(request: Request) -> Any:
 class _CreateCaseBody(BaseModel):
     # SEC-CASES-001: length constraints to prevent DoS via oversized payloads
     title: Annotated[str, StringConstraints(min_length=1, max_length=500)]
-    severity: str
+    severity: Literal["low", "medium", "high", "critical"]
     description: Annotated[str, StringConstraints(max_length=10_000)] = ""
     tags: list[str] = Field(default_factory=list, max_length=50)
     alert_ids: list[UUID] = Field(default_factory=list, max_length=500)
@@ -85,8 +85,8 @@ class _UpdateCaseBody(BaseModel):
     # SEC-CASES-001: length constraints mirror _CreateCaseBody
     title: Annotated[str, StringConstraints(min_length=1, max_length=500)] | None = None
     description: Annotated[str, StringConstraints(max_length=10_000)] | None = None
-    severity: str | None = None
-    status: str | None = None
+    severity: Literal["low", "medium", "high", "critical"] | None = None
+    status: Literal["open", "investigating", "closed"] | None = None
     assigned_to: str | None = None
     tags: list[str] | None = Field(default=None, max_length=50)
 
@@ -97,7 +97,7 @@ class _AddNoteBody(BaseModel):
 
 
 class _AddEvidenceBody(BaseModel):
-    type: str
+    type: Literal["file", "process", "network", "memory", "log", "artifact", "other"]
     # SEC-CASES-001: cap evidence content at 1 MB (characters)
     content: Annotated[str, StringConstraints(min_length=1, max_length=1_000_000)]
     description: str | None = None

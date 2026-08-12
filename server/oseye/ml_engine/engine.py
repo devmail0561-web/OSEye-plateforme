@@ -24,6 +24,8 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import pickle
 from pathlib import Path
@@ -34,6 +36,32 @@ from oseye.ml_engine.classifier import MITREClassifier
 
 _W_ANOMALY = 0.7
 _W_CLASSIFIER = 0.3
+
+# ML-01: HMAC-SHA256 protection for pickle checkpoints (prevents RCE via
+# poisoned checkpoint files).  Set OSEYE_CHECKPOINT_HMAC_KEY in the environment
+# to a secret value generated with `openssl rand -hex 32`.
+_HMAC_KEY = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", "dev-insecure-key").encode()
+
+
+def _compute_mac(path: Path) -> bytes:
+    data = path.read_bytes()
+    return hmac.new(_HMAC_KEY, data, hashlib.sha256).digest()
+
+
+def _write_mac(path: Path) -> None:
+    path.with_suffix(path.suffix + ".mac").write_bytes(_compute_mac(path))
+
+
+def _verify_mac(path: Path) -> None:
+    mac_path = path.with_suffix(path.suffix + ".mac")
+    if not mac_path.exists():
+        raise ValueError(f"checkpoint: MAC file missing for {path}")
+    expected = mac_path.read_bytes()
+    actual = _compute_mac(path)
+    if not hmac.compare_digest(expected, actual):
+        raise ValueError(
+            f"checkpoint: MAC mismatch for {path} — file may be tampered"
+        )
 
 
 class MLEngine:
@@ -89,6 +117,7 @@ class MLEngine:
             with open(clf_tmp, "wb") as fh:
                 pickle.dump(self._classifier, fh, protocol=pickle.HIGHEST_PROTOCOL)
             os.replace(clf_tmp, clf_path)
+            _write_mac(clf_path)
         except Exception:
             clf_tmp.unlink(missing_ok=True)
             raise
@@ -99,6 +128,7 @@ class MLEngine:
         self._anomaly = EntityAnomalyDetector.load(path)
         clf_path = path.with_suffix(".classifier.pkl")
         if clf_path.exists():
+            _verify_mac(clf_path)
             with open(clf_path, "rb") as fh:
                 self._classifier = pickle.load(fh)  # noqa: S301  # trusted local file
 

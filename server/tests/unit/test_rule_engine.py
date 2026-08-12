@@ -361,7 +361,8 @@ class TestRuleEngine:
 
     # --- correction 3 : persistance des fenêtres temporelles ---
 
-    def test_temporal_state_save_and_load(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_temporal_state_save_and_load(self, tmp_path: Path) -> None:
         import os
         import tempfile
 
@@ -380,11 +381,11 @@ class TestRuleEngine:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as f:
             path = f.name
         try:
-            engine.save_temporal_state(path)
+            await engine.save_temporal_state(path)
             # Clear windows
             with ev_mod._temporal_windows_lock:
                 ev_mod._temporal_windows.clear()
-            engine.load_temporal_state(path)
+            await engine.load_temporal_state(path)
             with ev_mod._temporal_windows_lock:
                 assert "fake::key" in ev_mod._temporal_windows
         finally:
@@ -392,12 +393,13 @@ class TestRuleEngine:
             with ev_mod._temporal_windows_lock:
                 ev_mod._temporal_windows.pop("fake::key", None)
 
-    def test_load_temporal_state_missing_file_is_noop(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_load_temporal_state_missing_file_is_noop(self, tmp_path: Path) -> None:
         from oseye.rule_engine.engine import RuleEngine
         (tmp_path / "builtin").mkdir()
         engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
         # Should not raise
-        engine.load_temporal_state(tmp_path / "nonexistent.pkl")
+        await engine.load_temporal_state(tmp_path / "nonexistent.pkl")
 
     # --- correction 4 : entity_key stable ---
 

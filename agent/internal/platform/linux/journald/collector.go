@@ -60,6 +60,10 @@ func (c *JournaldCollector) Health() collector.CollectorHealth {
 	}
 }
 
+// Start tails the journal via journalctl until ctx is cancelled or Stop is called.
+// GO-006: if the scanner encounters a line exceeding the buffer (bufio.ErrTooLong),
+// the current journalctl process is killed and a new one is spawned after a brief
+// pause, so the collector never dies permanently from a single oversized log entry.
 func (c *JournaldCollector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
 	c.running.Store(true)
 	defer c.running.Store(false)
@@ -72,70 +76,101 @@ func (c *JournaldCollector) Start(ctx context.Context, out chan<- collector.RawE
 		args = append(args, "-u", unit)
 	}
 
-	cmd := exec.CommandContext(ctx, "journalctl", args...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		c.lastError.Store(err.Error())
-		return err
-	}
-
-	if err := cmd.Start(); err != nil {
-		c.lastError.Store(err.Error())
-		return err
-	}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		const scanBufSize = 4 * 1024 * 1024 // 4 MB — handles large journal entries
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, scanBufSize), scanBufSize)
-		for scanner.Scan() {
-			select {
-			case <-c.stopCh:
-				return
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			throttle, _ := c.throttle.Load().(float64)
-			if throttle <= 0 {
-				continue
-			}
-
-			line := scanner.Bytes()
-			event, err := c.parseJournalLine(line)
-			if err != nil {
-				c.errorCount.Add(1)
-				continue
-			}
-
-			select {
-			case out <- event:
-				c.eventCount.Add(1)
-			case <-ctx.Done():
-				return
-			}
+	for {
+		// Check for shutdown before (re)launching journalctl.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-c.stopCh:
+			return nil
+		default:
 		}
-		// If the scanner stopped due to a line that exceeded the buffer, log and
-		// continue rather than silently killing the goroutine (GO-005).
-		if err := scanner.Err(); err == bufio.ErrTooLong {
-			c.logger.Warn("journald: line too long, skipping oversized entry", slog.String("error", err.Error()))
-			c.errorCount.Add(1)
+
+		cmd := exec.CommandContext(ctx, "journalctl", args...)
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			c.lastError.Store(err.Error())
+			return err
 		}
-	}()
+		if err := cmd.Start(); err != nil {
+			c.lastError.Store(err.Error())
+			return err
+		}
 
-	select {
-	case <-ctx.Done():
-	case <-c.stopCh:
-	case <-done:
+		// restartNeeded is set to true by the scanner goroutine on ErrTooLong.
+		// Synchronisation: the goroutine closes done after setting restartNeeded,
+		// and the outer select waits on done before reading it — no data race.
+		restartNeeded := false
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			const scanBufSize = 4 * 1024 * 1024 // 4 MB — handles large journal entries
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, scanBufSize), scanBufSize)
+			for scanner.Scan() {
+				select {
+				case <-c.stopCh:
+					return
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				throttle, _ := c.throttle.Load().(float64)
+				if throttle <= 0 {
+					continue
+				}
+
+				line := scanner.Bytes()
+				event, err := c.parseJournalLine(line)
+				if err != nil {
+					c.errorCount.Add(1)
+					continue
+				}
+
+				select {
+				case out <- event:
+					c.eventCount.Add(1)
+				case <-ctx.Done():
+					return
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				if err == bufio.ErrTooLong {
+					c.logger.Warn("journald: line too long, skipping and continuing",
+						slog.String("err", err.Error()))
+					c.errorCount.Add(1)
+					restartNeeded = true // signal outer loop to respawn journalctl
+				} else {
+					c.lastError.Store(err.Error())
+					c.errorCount.Add(1)
+				}
+			}
+		}()
+
+		select {
+		case <-ctx.Done():
+		case <-c.stopCh:
+		case <-done:
+		}
+
+		cmd.Process.Kill() //nolint:errcheck
+		cmd.Wait()         //nolint:errcheck
+		<-done             // wait for goroutine to finish writing to out
+
+		if !restartNeeded {
+			return nil
+		}
+		// ErrTooLong — restart journalctl after a brief pause to avoid a tight loop.
+		c.logger.Warn("journald: restarting after oversized line")
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-c.stopCh:
+			return nil
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
-
-	cmd.Process.Kill() //nolint:errcheck
-	cmd.Wait()         //nolint:errcheck
-	<-done             // wait for goroutine to finish writing to out
-	return nil
 }
 
 func (c *JournaldCollector) Stop() error {

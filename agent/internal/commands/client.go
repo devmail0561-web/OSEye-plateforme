@@ -5,8 +5,12 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"path/filepath"
+	"strings"
 	"time"
 
 	gen "github.com/oseye/agent/gen"
@@ -157,29 +161,57 @@ func (c *CommandClient) handleBlockIP(cmd *gen.AgentCommand) {
 		return
 	}
 
+	// GO-003: reject CIDR ranges and validate the IP address.
+	if strings.Contains(payload.IP, "/") {
+		slog.Warn("block_ip: CIDR ranges not accepted", "ip", payload.IP)
+		c.reporter.Send(cmd.GetCommandId(), "failed", fmt.Sprintf("block_ip: CIDR ranges not accepted: %s", payload.IP))
+		return
+	}
+	parsed := net.ParseIP(strings.TrimSpace(payload.IP))
+	if parsed == nil {
+		slog.Warn("block_ip: invalid IP address", "ip", payload.IP)
+		c.reporter.Send(cmd.GetCommandId(), "failed", fmt.Sprintf("block_ip: invalid IP address: %s", payload.IP))
+		return
+	}
+	canonicalIP := parsed.String()
+
 	// CIA — Déduplication : one block per IP per 60s.
-	if !c.dedup.Allow(cmdBlockIP, payload.IP) {
-		slog.Info("block_ip: deduplicated", "ip", payload.IP)
+	if !c.dedup.Allow(cmdBlockIP, canonicalIP) {
+		slog.Info("block_ip: deduplicated", "ip", canonicalIP)
 		return
 	}
 
 	// CIA — Intégrité : persist state BEFORE execution so we can recover on restart.
-	state := responder.ActionState{
+	statePayload := map[string]any{"ip": canonicalIP}
+	initialState := responder.ActionState{
 		CommandID:   cmd.GetCommandId(),
 		CommandType: cmdBlockIP,
-		Payload:     map[string]any{"ip": payload.IP},
+		Payload:     statePayload,
 		Status:      "pending",
 		CreatedAt:   nowNs(),
 	}
-	if err := c.state.Save(state); err != nil {
+	if err := c.state.Save(initialState); err != nil {
 		slog.Warn("block_ip: state save failed", "err", err)
 	}
 
-	if err := responder.BlockIP(payload.IP); err != nil {
-		slog.Error("block_ip: failed", "ip", payload.IP, "err", err)
+	handle, err := responder.BlockIP(canonicalIP)
+	if err != nil {
+		slog.Error("block_ip: failed", "ip", canonicalIP, "err", err)
 		_ = c.state.MarkFailed(cmd.GetCommandId())
 		c.reporter.Send(cmd.GetCommandId(), "failed", err.Error())
 		return
+	}
+
+	// Persist nft handle for targeted per-rule removal on unblock.
+	if handle != "" {
+		statePayload["nft_handle"] = handle
+		_ = c.state.Save(responder.ActionState{
+			CommandID:   cmd.GetCommandId(),
+			CommandType: cmdBlockIP,
+			Payload:     statePayload,
+			Status:      "pending",
+			CreatedAt:   initialState.CreatedAt,
+		})
 	}
 
 	_ = c.state.MarkExecuted(cmd.GetCommandId(), nowNs())
@@ -195,8 +227,32 @@ func (c *CommandClient) handleUnblockIP(cmd *gen.AgentCommand) {
 		return
 	}
 
-	if err := responder.UnblockIP(payload.IP); err != nil {
-		slog.Error("unblock_ip: failed", "ip", payload.IP, "err", err)
+	// Canonicalize IP before state lookup and executor call.
+	parsed := net.ParseIP(strings.TrimSpace(payload.IP))
+	if parsed == nil {
+		slog.Warn("unblock_ip: invalid IP", "ip", payload.IP)
+		c.reporter.Send(cmd.GetCommandId(), "failed", fmt.Sprintf("unblock_ip: invalid IP: %s", payload.IP))
+		return
+	}
+	canonicalIP := parsed.String()
+
+	// Retrieve the nft rule handle stored when BlockIP was executed.
+	handle := ""
+	if actions, err := c.state.GetExecuted(); err == nil {
+		for _, a := range actions {
+			if a.CommandType == cmdBlockIP {
+				if ip, ok := a.Payload["ip"].(string); ok && ip == canonicalIP {
+					if h, ok := a.Payload["nft_handle"].(string); ok {
+						handle = h
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if err := responder.UnblockIP(canonicalIP, handle); err != nil {
+		slog.Error("unblock_ip: failed", "ip", canonicalIP, "err", err)
 		c.reporter.Send(cmd.GetCommandId(), "failed", err.Error())
 		return
 	}
@@ -211,6 +267,14 @@ func (c *CommandClient) handleQuarantineFile(cmd *gen.AgentCommand) {
 	}
 	if err := json.Unmarshal(cmd.GetPayloadJson(), &payload); err != nil || payload.Path == "" {
 		slog.Warn("quarantine_file: invalid payload", "err", err)
+		return
+	}
+
+	// GO-002: validate source path against traversal attacks before any action.
+	clean := filepath.Clean(payload.Path)
+	if !filepath.IsAbs(clean) || !isAllowedPath(clean) {
+		slog.Warn("quarantine_file: path traversal rejected", "path", payload.Path)
+		c.reporter.Send(cmd.GetCommandId(), "failed", fmt.Sprintf("quarantine: path traversal rejected: %s", payload.Path))
 		return
 	}
 
@@ -263,6 +327,22 @@ func (c *CommandClient) handleRestoreFile(cmd *gen.AgentCommand) {
 		return
 	}
 
+	// GO-004: validate quarantine_path is within the expected quarantine directory.
+	cleanQ := filepath.Clean(payload.QuarantinePath)
+	if !strings.HasPrefix(cleanQ, c.quarantineDir+"/") && cleanQ != c.quarantineDir {
+		slog.Warn("restore_file: quarantine path outside quarantine dir", "path", payload.QuarantinePath)
+		c.reporter.Send(cmd.GetCommandId(), "failed", "restore_file: invalid quarantine path")
+		return
+	}
+
+	// GO-004: reject restoration to dangerous system directories.
+	cleanO := filepath.Clean(payload.OriginalPath)
+	if isDangerousPath(cleanO) {
+		slog.Warn("restore_file: dangerous original path rejected", "path", payload.OriginalPath)
+		c.reporter.Send(cmd.GetCommandId(), "failed", fmt.Sprintf("restore_file: dangerous destination rejected: %s", payload.OriginalPath))
+		return
+	}
+
 	if err := responder.RestoreFile(payload.QuarantinePath, payload.OriginalPath); err != nil {
 		slog.Error("restore_file: failed", "err", err)
 		c.reporter.Send(cmd.GetCommandId(), "failed", err.Error())
@@ -278,7 +358,7 @@ func (c *CommandClient) handleKillProcess(cmd *gen.AgentCommand) {
 		PID         int    `json:"pid"`
 		ProcessName string `json:"process_name"`
 	}
-	if err := json.Unmarshal(cmd.GetPayloadJson(), &payload); err != nil || payload.PID <= 0 {
+	if err := json.Unmarshal(cmd.GetPayloadJson(), &payload); err != nil || payload.PID < 2 {
 		slog.Warn("kill_process: invalid payload", "err", err)
 		return
 	}
@@ -291,6 +371,28 @@ func (c *CommandClient) handleKillProcess(cmd *gen.AgentCommand) {
 	}
 
 	c.reporter.Send(cmd.GetCommandId(), "executed", "")
+}
+
+// isAllowedPath returns true if p starts with a permitted filesystem prefix for
+// quarantine source paths. Mirrors the check in responder.isAllowedPath.
+func isAllowedPath(p string) bool {
+	for _, prefix := range []string{"/var", "/tmp", "/home", "/opt", "/srv", "/run"} {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// isDangerousPath returns true if p targets a critical system directory that
+// must never be used as a restore destination.
+func isDangerousPath(p string) bool {
+	for _, prefix := range []string{"/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin"} {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func nowNs() int64 { return time.Now().UnixNano() }

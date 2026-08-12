@@ -206,6 +206,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             decision_repo=decision_repo,
             poll_interval=settings.decision_human_poll_interval,
             action_executor=action_executor,
+            alert_repo=alert_repo,
         )
 
         # ------------------------------------------------------------------
