@@ -117,7 +117,7 @@ class Settings(BaseSettings):
         description="Directory of Ed25519 .pem public keys used to verify plugin signatures.",
     )
     plugin_require_signature: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Require a valid Ed25519 signature for every plugin installation. "
             "Set True in production. When True, installations without a valid "

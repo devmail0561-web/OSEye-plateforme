@@ -12,17 +12,34 @@ _CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
 def _apply_rlimits(cpu_limit_s: int, mem_limit_bytes: int) -> None:
-    """Preexec function: apply RLIMIT_CPU and RLIMIT_AS in the child process."""
+    """Preexec function: apply resource limits in the child process.
+
+    Applied limits:
+      - RLIMIT_CPU  : wall-clock CPU seconds before SIGXCPU
+      - RLIMIT_AS   : virtual address space (prevents memory bombs)
+      - RLIMIT_NOFILE: max open file descriptors (reduces exfil surface)
+      - RLIMIT_NPROC: max child processes (prevents fork bombs)
+      - RLIMIT_FSIZE: max bytes a single write() can produce (limits disk writes)
+    """
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit_s, cpu_limit_s))
     resource.setrlimit(resource.RLIMIT_AS, (mem_limit_bytes, mem_limit_bytes))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))          # max 64 file descriptors
+    resource.setrlimit(resource.RLIMIT_NPROC, (8, 8))             # max 8 child processes
+    _fsize = 10 * 1024 * 1024  # max 10 MB writes
+    resource.setrlimit(resource.RLIMIT_FSIZE, (_fsize, _fsize))
+    # TODO(security): add seccomp-bpf via python-seccomp to block socket() calls.
+    # Requires: pip install seccomp (libseccomp-dev needed). See PL-01 audit finding.
 
 
 class PluginSandbox:
     """Runs a plugin module in an isolated subprocess with resource limits.
 
     Limits applied:
-      - CPU: RLIMIT_CPU = cpu_limit_s (default 5 s per burst)
-      - Memory: RLIMIT_AS = mem_limit_mb * 1024 * 1024 (default 128 MB)
+      - CPU    : RLIMIT_CPU  = cpu_limit_s (default 5 s per burst)
+      - Memory : RLIMIT_AS   = mem_limit_mb * 1024 * 1024 (default 128 MB)
+      - FDs    : RLIMIT_NOFILE = 64 (reduces exfiltration surface)
+      - Procs  : RLIMIT_NPROC  = 8  (prevents fork bombs)
+      - Writes : RLIMIT_FSIZE  = 10 MB (limits disk writes)
 
     cgroups v2 note: full cgroup isolation requires root. When not root,
     we fall back to rlimit-only isolation and log a warning.

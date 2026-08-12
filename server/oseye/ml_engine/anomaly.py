@@ -79,8 +79,8 @@ def _verify_mac(path: str | Path) -> None:
         )
 
 
-_DEFAULT_N_TREES = 25
-_DEFAULT_HEIGHT = 15
+_DEFAULT_N_TREES = 10
+_DEFAULT_HEIGHT = 8
 _DEFAULT_WINDOW = 250
 _MIN_SAMPLES = 50
 _MAX_MODELS = 10_000
