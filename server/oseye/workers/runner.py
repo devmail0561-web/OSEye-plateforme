@@ -65,7 +65,7 @@ async def run_workers(settings: Settings) -> None:
         await asyncio.gather(
             _normalizer_loop(),
             writer.run(stop_event=stop),
-            rule_worker.run(),
+            rule_worker.run(stop_event=stop),
         )
     except asyncio.CancelledError:
         stop.set()

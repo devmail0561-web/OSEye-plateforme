@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -73,3 +73,18 @@ class SQLAgentRepository:
     async def get(self, cn: str) -> AgentRow | None:
         async with self._session_factory() as session:
             return await session.get(AgentRow, cn)
+
+    async def update_last_seen(self, cn: str) -> None:
+        """Update the last_seen timestamp for an agent without touching other fields."""
+        now = datetime.now(UTC)
+        async with self._session_factory() as session:
+            await session.execute(
+                update(AgentRow).where(AgentRow.cn == cn).values(last_seen=now)
+            )
+            await session.commit()
+
+    async def reset_all_offline(self) -> None:
+        """Mark every agent offline — call once at server startup to clear stale online flags."""
+        async with self._session_factory() as session:
+            await session.execute(update(AgentRow).values(online=False))
+            await session.commit()

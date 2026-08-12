@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -70,7 +69,16 @@ class RuleWorker:
             enabled=self._engine.enabled_count,
         )
 
-        last_purge = time.monotonic()
+        async def _periodic_purge() -> None:
+            while not (stop_event is not None and stop_event.is_set()):
+                await asyncio.sleep(600)  # 10 minutes
+                try:
+                    removed = await self._engine.purge_stale_windows()
+                    _log.info("rule_engine_periodic_purge", removed=removed)
+                except Exception as exc:  # noqa: BLE001
+                    _log.warning("rule_engine_purge_error", error=str(exc))
+
+        purge_task = asyncio.create_task(_periodic_purge())
         try:
             async for message in await self._bus.subscribe(CONSUME_TOPIC):
                 try:
@@ -85,18 +93,14 @@ class RuleWorker:
                     self._total_matches += len(matches)
                     await self._handle_matches(event, matches)
 
-                # Bloc 4b — purge stale temporal windows every 10 minutes
-                if time.monotonic() - last_purge > 600:
-                    try:
-                        removed = await self._engine.purge_stale_windows()
-                        _log.info("rule_engine_purge_stale_windows", removed=removed)
-                    except Exception as exc:  # noqa: BLE001
-                        _log.warning("rule_engine_purge_error", error=str(exc))
-                    last_purge = time.monotonic()
-
                 if stop_event is not None and stop_event.is_set():
                     break
         finally:
+            purge_task.cancel()
+            try:
+                await purge_task
+            except asyncio.CancelledError:
+                pass
             await self._engine.stop()
             _log.info(
                 "rule_worker_stopped",

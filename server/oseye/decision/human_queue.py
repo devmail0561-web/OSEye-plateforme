@@ -57,11 +57,12 @@ class HumanApprovalQueue:
                     _log.error("human_queue_sweep_error", error=str(exc))
                 try:
                     await asyncio.wait_for(
-                        asyncio.shield(self._stop.wait()),
-                        timeout=self._poll_interval,
+                        self._stop.wait(), timeout=self._poll_interval
                     )
-                except TimeoutError:
-                    pass
+                    return  # stop was signaled
+                except (TimeoutError, asyncio.CancelledError):
+                    if self._stop.is_set():
+                        return
         finally:
             _log.info("human_queue_stopped")
 

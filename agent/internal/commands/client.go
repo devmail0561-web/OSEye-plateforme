@@ -236,12 +236,14 @@ func (c *CommandClient) handleUnblockIP(cmd *gen.AgentCommand) {
 	}
 	canonicalIP := parsed.String()
 
-	// Retrieve the nft rule handle stored when BlockIP was executed.
+	// Retrieve the nft rule handle and original command ID stored when BlockIP was executed.
+	blockCommandID := ""
 	handle := ""
 	if actions, err := c.state.GetExecuted(); err == nil {
 		for _, a := range actions {
 			if a.CommandType == cmdBlockIP {
 				if ip, ok := a.Payload["ip"].(string); ok && ip == canonicalIP {
+					blockCommandID = a.CommandID
 					if h, ok := a.Payload["nft_handle"].(string); ok {
 						handle = h
 					}
@@ -257,7 +259,11 @@ func (c *CommandClient) handleUnblockIP(cmd *gen.AgentCommand) {
 		return
 	}
 
-	_ = c.state.MarkRolledBack(cmd.GetCommandId())
+	// NE-R-03: MarkRolledBack must use the BLOCK_IP command ID (the one that was
+	// persisted in state), not the UNBLOCK_IP command ID which was never stored.
+	if blockCommandID != "" {
+		_ = c.state.MarkRolledBack(blockCommandID)
+	}
 	c.reporter.Send(cmd.GetCommandId(), "rolled_back", "")
 }
 

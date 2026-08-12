@@ -292,7 +292,12 @@ class ActionExecutor:
             await self._bus.publish(topic, payload)
             _log.info("action_notify_published", entity_id=decision.entity_id)
         except Exception as exc:  # noqa: BLE001
-            _log.error("action_notify_error", entity_id=decision.entity_id, error=str(exc))
+            _log.warning(
+                "action_notify_failed",
+                entity_id=decision.entity_id,
+                error=str(exc),
+            )
+            # Note: no retry — notifications are best-effort
 
     async def _request_additional_collection(self, decision: Decision) -> None:
         topic = f"policy:push:{decision.entity_id}"

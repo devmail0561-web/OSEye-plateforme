@@ -193,7 +193,11 @@ class DecisionEngine:
         requires_human = "REQUEST_HUMAN" in decision_types
 
         explanation = _build_explanation(
-            decision_types, rule_score, ml_score, ti_score, correlation_depth, final_score
+            decision_types, rule_score, ml_score, ti_score, correlation_depth, final_score,
+            w_rule=self._scorer._w_rule,
+            w_ml=self._scorer._w_ml,
+            w_ti=self._scorer._w_ti,
+            w_depth=self._scorer._w_depth,
         )
 
         now = datetime.now(UTC)
@@ -272,11 +276,15 @@ def _build_explanation(
     ti_score: float,
     correlation_depth: int,
     final_score: float,
+    w_rule: float = 0.4,
+    w_ml: float = 0.3,
+    w_ti: float = 0.2,
+    w_depth: float = 0.1,
 ) -> str:
     actions = "+".join(decision_types)
     return (
         f"Actions: {actions}. "
         f"Score: {final_score:.1f}/100 "
-        f"(rule={rule_score:.0f}×0.4, ml={ml_score:.0f}×0.3, "
-        f"ti={ti_score:.0f}×0.2, depth={correlation_depth}×0.1). "
+        f"(rule={rule_score:.0f}×{w_rule}, ml={ml_score:.0f}×{w_ml}, "
+        f"ti={ti_score:.0f}×{w_ti}, depth={correlation_depth}×{w_depth}). "
     )

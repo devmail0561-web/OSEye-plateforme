@@ -120,6 +120,7 @@ class StorageWriter:
                         {
                             "reason": "storage_flush_failed",
                             "dropped_count": len(batch),
+                            "event_ids": [str(e.event_id) for e in batch],
                             "consecutive_failures": self._consecutive_failures,
                             "error": str(exc),
                         }

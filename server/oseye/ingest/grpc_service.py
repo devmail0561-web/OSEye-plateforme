@@ -137,6 +137,16 @@ class AgentServiceServicer:
         with self._agent_keys_lock:
             return self._agent_keys.get(cn)
 
+    async def startup(self) -> None:
+        """Call once before the gRPC server starts accepting connections.
+
+        Resets all agents to online=False so stale flags from a previous crash
+        are cleared (AG-R-07).
+        """
+        if self._agent_repo is not None:
+            await self._agent_repo.reset_all_offline()
+            _logger.info("agents_reset_offline_on_startup")
+
     def block_agent(self, cn: str) -> None:
         """Add *cn* to the blocklist — takes effect immediately on the next RPC."""
         with self._blocked_lock:
@@ -254,6 +264,12 @@ class AgentServiceServicer:
                 accepted=result.accepted,
                 rejected=result.rejected,
             )
+            # AG-R-04: refresh last_seen on every successfully processed batch.
+            if self._agent_repo is not None and self._loop is not None:
+                asyncio.run_coroutine_threadsafe(
+                    self._agent_repo.update_last_seen(cn),
+                    self._loop,
+                )
 
         if _pb2 is None:  # pragma: no cover
             return None

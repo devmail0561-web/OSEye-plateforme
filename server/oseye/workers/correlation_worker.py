@@ -146,8 +146,8 @@ class CorrelationWorker:
                 existing = await self._engine.get_incident(alert.incident_chain_id)
                 if existing is not None:
                     incident_before_severity = existing.severity
-            except Exception:  # noqa: BLE001
-                pass  # best-effort; missing snapshot only means we might re-notify
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("correlation_worker_snapshot_error", error=str(exc))  # best-effort
 
         try:
             incident = await self._engine.process_alert(alert)

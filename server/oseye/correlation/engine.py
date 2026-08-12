@@ -75,6 +75,10 @@ class CorrelationEngine:
     ) -> None:
         if not linkers:
             raise ValueError("CorrelationEngine requires at least one linker")
+        if min_severity not in _SEVERITY_ORDER:
+            raise ValueError(
+                f"Invalid min_severity: {min_severity!r}. Must be one of {list(_SEVERITY_ORDER)}"
+            )
         self._linkers = linkers
         self._repo = incident_repo
         self._min_severity = min_severity
@@ -90,7 +94,7 @@ class CorrelationEngine:
         Returns the Incident (created or updated), or None if the alert is
         below *min_severity*.
         """
-        if _SEVERITY_ORDER.get(alert.severity, -1) < _SEVERITY_ORDER[self._min_severity]:
+        if _SEVERITY_ORDER.get(alert.severity, -1) < _SEVERITY_ORDER.get(self._min_severity, 0):
             return None
 
         event = IncidentEvent(
