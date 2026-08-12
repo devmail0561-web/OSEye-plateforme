@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
 **Version :** 3.6
-**Dernière mise à jour :** 2026-08-11
+**Dernière mise à jour :** 2026-08-12
 **Branche active :** `main` (`latest`)
-**Phase courante :** Post-Phase 10 — Refonte UI + Sécurité CIA + Response Engine + Plugin/ML/Policy câblés + fixes API Keys
+**Phase courante :** Post-Phase 10 — Corrections audit 2026-08-12 (ROADMAP + Full Audit)
 
 ---
 
@@ -171,7 +171,7 @@
 
 | Dimension | Valeur | Seuil | Statut |
 |-----------|--------|-------|--------|
-| Tests Python (unit + integration + scenarios) | **292/292** | 100% | ✅ |
+| Tests Python (unit + integration + scenarios) | **466/466** | 100% | ✅ |
 | Tests Go | **133 tests / 20 packages** | 100% | ✅ |
 | ruff (server/oseye) | **0 erreur** | 0 | ✅ |
 | mypy (rule_engine, workers, api, main — 23 fichiers) | **0 erreur** | 0 | ✅ |
@@ -179,6 +179,8 @@
 | go build ./... | **0 erreur** | 0 | ✅ |
 | go vet ./... | **0 erreur** | 0 | ✅ |
 | go test -race ./... | **0 race** | 0 | ✅ |
+
+_Dernière vérification : 2026-08-12._
 
 ### Répartition tests Python
 
@@ -483,6 +485,78 @@ Audit complet réalisé sur les modules M22-M23 + agent Go (collecteurs eBPF, tr
 | R8 | MEDIUM | `impact_c2.yaml` | `rule_outbound_c2_beaconing` : même problème `"172."` que R5 |
 | R9 | LOW | `privilege_escalation.yaml` | `rule_polkit_abuse` : MITRE `T1548` trop large → `T1548.003` |
 | R10 | LOW | `credential_access.yaml` | `rule_memory_dump_mimipenguin` : MITRE `T1003.001` incorrect → `T1003.007` |
+
+---
+
+## Audit code — Full Audit OSEye 2026-08-12
+
+Audit complet de tous les modules (Go + Python + Règles YAML) — 102 findings bruts identifiés.
+**21 CRITICAL/HIGH confirmés après vérification adversariale → 21 corrigés (commits ebe4b17, 5c09c4a, ff494d8).**
+
+Périmètre : Go Core, Go Nouveaux (enrollment, responder), Python Core, Python API, Python Workers, Decision Engine, Forensic, ML/Plugin, ThreatIntel, Règles YAML.
+
+### Findings CRITICAL/HIGH résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| GO-001 | CRITICAL | `commands/client.go` | KillProcess PID=1 non rejeté |
+| G-E-01 | CRITICAL | `enrollment/client.go` | Enrollment HTTP clair accepté |
+| GO-002 | CRITICAL | `commands/client.go` | QuarantineFile path traversal |
+| G-X-01 | CRITICAL | `responder/executor.go` | nft flush chain efface tous les blocages |
+| D-01 | CRITICAL | `decision/action_executor.py` | ISOLATE dead code |
+| F-01 | CRITICAL | `forensic/case_manager.py` | Notes/preuves forensiques perdues |
+| R-02 | CRITICAL | `discovery.yaml` | rule_sensitive_file_discovery uid=0 par défaut |
+| GO-003 | HIGH | `commands/client.go` | BlockIP sans validation IP (DoS CIDR) |
+| GO-004 | HIGH | `commands/client.go` | RestoreFile paths non validés |
+| GO-005 | HIGH | `auditd/collector.go` | decodeComm corrompt les noms hex |
+| GO-006 | HIGH | `journald/collector.go` | ErrTooLong tue le collector |
+| G-E-04 | HIGH | `enrollment/client.go` | Certificat non validé |
+| G-E-02 | HIGH | `enrollment/client.go` | Token dans URL |
+| G-E-03 | HIGH | `enrollment/client.go` | Pas de limite taille body |
+| G-X-02 | HIGH | `responder/executor.go` | IP non validée avant nft/iptables |
+| PC-01 | HIGH | `bus/redis_bus.py` | Race condition connexion Redis |
+| PC-04 | HIGH | `storage/repositories/agents.py` | Race condition upsert |
+| PC-05 | HIGH | `ingest/validator.py` | Signature Ed25519 bypassée |
+| W-02 | HIGH | `rule_engine/engine.py` | I/O synchrone bloque asyncio |
+| D-03 | HIGH | `decision/human_queue.py` | approve() sans alerte → KILL_PROCESS jamais émis |
+| F-03 | HIGH | `forensic/exporter/html_report.py` | Timeline clés erronées |
+| PL-02 | HIGH | `plugin/manager.py` | require_signature=False par défaut |
+| R-05 | HIGH | `defense_evasion.yaml` | rule_rootkit_detection sans filtre module |
+| D-02 | HIGH | `decision/action_executor.py` | execute_after_approval guard trop large |
+| ML-01 | HIGH | `ml_engine/engine.py` | pickle.load sans HMAC (déjà présent avant audit) |
+| PL-01 | HIGH | `plugin/sandbox.py` | Sandbox sans isolation réseau/syscall |
+| TI-01 | HIGH | `threat_intel/breaker.py` | CancelledError deadlock circuit breaker |
+| R-03 | HIGH | `lateral_movement.yaml` | rule_port_scan uid toujours 0 |
+| F-02 | HIGH | `forensic/case_manager.py` | TOCTOU mutations |
+| PC-05 | HIGH | `ingest/validator.py` | Bypass signature |
+| B-01 | HIGH | `api/routers/enrollment.py` | Token enrollment dans URL |
+| B-02 | HIGH | `api/routers/enrollment.py` | Pas de rate limit enrollment |
+
+**API Audit (audit-py-api) :** 2 HIGH + 7 MEDIUM + 9 LOW/INFO — 18 findings corrigés.
+
+---
+
+## Audit code — ROADMAP Modules (2026-08-12)
+
+Audit ciblé des modules implémentés dans ROADMAP_REMAINING (Blocs 1-9).
+**42 findings bruts — 12 CRITICAL/HIGH confirmés → 12 corrigés (commit 52716de).**
+
+### Findings CRITICAL/HIGH résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| ML-R-03 | CRITICAL | `ml_engine/engine.py` | Clé HMAC défaut publique → pickle RCE |
+| ML-R-01 | HIGH | `decision/engine.py` | Double-entraînement anomalie |
+| ML-R-02 | HIGH | `ml_engine/classifier.py` | _models dict non borné |
+| ML-R-06 | HIGH | `api/routers/alerts.py` | Feedback faux-positifs no-op |
+| D-R-01 | HIGH | `decision/engine.py` | NOTIFY jamais produit par risk_matrix |
+| D-R-02 | HIGH | `decision/action_executor.py` | Alert sans dst_ip/pid → ISOLATE no-op |
+| AG-R-01 | HIGH | `ingest/grpc_service.py` | IDOR ReportActions |
+| AG-R-02 | HIGH | `api/routers/response_actions.py` | TOCTOU rollback double-emit |
+| AG-R-03 | HIGH | `api/routers/response_actions.py` | KILL_PROCESS rollback silencieux |
+| RE-R-01 | HIGH | `workers/rule_worker.py` | purge_stale_windows sans try/except |
+| NE-R-01 | HIGH | `decision/action_executor.py` | notifications:pending sans subscriber |
+| NE-R-04 | HIGH | `agent/internal/commands/client.go` | quarantineDir sans filepath.Clean |
 
 ---
 

@@ -3,6 +3,8 @@
 **Date :** 2026-08-11  
 **Base :** Post-Phase 10 + extensions (UI refonte, sécurité CIA, Response Engine, Plugin/ML/Policy câblés)
 
+**Statut au 2026-08-12 : TOUS LES BLOCS LIVRÉS ET AUDITÉS — 12 findings corrigés (commit 52716de)**
+
 ---
 
 ## Contexte
@@ -11,7 +13,7 @@ Les 10 phases de la roadmap sont complètes. Ce plan couvre les **gaps fonctionn
 
 ---
 
-## Bloc 1 — Câblage ML (CRITIQUE)
+## Bloc 1 — Câblage ML (CRITIQUE) ✅ LIVRÉ (commit 4ec35a2 / 8d495d4)
 
 ### Problème
 Le `ml_engine` n'est pas passé au `DecisionEngine` dans `main.py`. Conséquence : `ml_score = 0.0` sur toutes les décisions. Le poids `ml×0.3` est mort en production malgré l'infrastructure complète.
@@ -49,7 +51,7 @@ decision_worker = DecisionWorker(
 
 ---
 
-## Bloc 2 — Boucle de feedback ML
+## Bloc 2 — Boucle de feedback ML ✅ LIVRÉ — mais bug ML-R-06 corrigé (commit 52716de)
 
 ### Problème
 `MLEngine.learn_from_alert()` existe mais n'est jamais appelé. Le classifieur MITRE ne s'améliore jamais en production. Le marquage `false_positive` dans le router alertes est une île isolée.
@@ -66,7 +68,7 @@ Dans l'endpoint `POST /alerts/{id}/false-positive` : quand une alerte est marqu�
 
 ---
 
-## Bloc 3 — Consommation de `analysis:ml`
+## Bloc 3 — Consommation de `analysis:ml` ✅ LIVRÉ (ml_worker.py)
 
 ### Problème
 `MLWorker` publie le score ML sur le topic `analysis:ml` mais personne ne le consomme. Le champ `ml_score` dans `EventRow` reste `None`.
@@ -79,16 +81,16 @@ Ajouter `update_ml_score` dans `server/oseye/storage/repositories/events.py`.
 
 ---
 
-## Bloc 4 — Tâches périodiques manquantes
+## Bloc 4 — Tâches périodiques manquantes ✅ LIVRÉ
 
-### 4a — `close_stale_incidents()`
+### 4a — `close_stale_incidents()` ✅ LIVRÉ
 `CorrelationEngine.close_stale_incidents()` existe et est documentée mais jamais appelée. Les incidents restent ouverts indéfiniment.
 
 **Fichier : `server/oseye/workers/correlation_worker.py`**
 
 Ajouter une boucle asyncio dans `run()` qui appelle `close_stale_incidents()` toutes les 5 minutes en parallèle du traitement des alertes.
 
-### 4b — `purge_stale_windows()`
+### 4b — `purge_stale_windows()` ✅ LIVRÉ (commit ebd4197)
 `RuleEngine.purge_stale_windows()` (fenêtres temporelles des règles) n'est jamais appelée. État en mémoire croît indéfiniment.
 
 **Fichier : `server/oseye/workers/rule_worker.py`**
@@ -97,7 +99,7 @@ Même pattern : appel périodique toutes les 10 minutes dans la boucle `run()`.
 
 ---
 
-## Bloc 5 — Table agents + API agents
+## Bloc 5 — Table agents + API agents ✅ LIVRÉ
 
 ### Problème
 Pas de table `agents` dédiée. Impossible d'afficher la liste des agents actifs, leur dernière connexion, leur version, leur profil actif.
@@ -132,7 +134,7 @@ Nouvelle page `Agents.tsx` accessible aux analystes et admins (pas uniquement ad
 
 ---
 
-## Bloc 6 — Poids WeightedScorer configurables
+## Bloc 6 — Poids WeightedScorer configurables ✅ LIVRÉ
 
 ### Problème
 Les poids `0.4/0.3/0.2/0.1` sont des constantes de classe non modifiables sans redéploiement.
@@ -156,7 +158,7 @@ Passer les 4 settings à `DecisionEngine`.
 
 ---
 
-## Bloc 7 — Client enrollment dans l'agent Go
+## Bloc 7 — Client enrollment dans l'agent Go ✅ LIVRÉ (commit 4ec35a2)
 
 ### Problème
 L'enrollment est 100% manuel. L'agent doit pouvoir s'enroller automatiquement au premier démarrage si un token est fourni.
@@ -178,7 +180,7 @@ EnrollToken     string // OSEYE_ENROLL_TOKEN, default ""
 
 ---
 
-## Bloc 8 — Action NOTIFY fonctionnelle
+## Bloc 8 — Action NOTIFY fonctionnelle ✅ LIVRÉ — NotificationWorker ajouté (commit 52716de)
 
 ### Problème
 `NOTIFY` dans `ActionExecutor` est silencieux — publié sur `decisions:completed` mais sans effet réel.
@@ -190,7 +192,7 @@ Ajouter un **worker de notification configurable** via le système de plugins. Q
 
 ---
 
-## Bloc 9 — Tests manquants
+## Bloc 9 — Tests manquants ✅ LIVRÉ (commit ebd4197)
 
 | Fichier à créer | Couvre |
 |---|---|
@@ -205,15 +207,15 @@ Ajouter un **worker de notification configurable** via le système de plugins. Q
 ## Ordre d'exécution recommandé
 
 ```
-Bloc 1 (câblage ML)          — 1 fichier, impact immédiat, correction de bug
-Bloc 3 (consommation ml)     — dépend de Bloc 1 pour être utile
-Bloc 2 (feedback FP)         — dépend de Bloc 1
-Bloc 4 (tâches périodiques)  — indépendant, 2 fichiers
-Bloc 6 (poids configurables) — dépend de Bloc 1 (même fichier main.py)
-Bloc 5 (table agents)        — indépendant, travail plus large
-Bloc 7 (enrollment Go)       — indépendant, nouveau package Go
-Bloc 8 (NOTIFY)              — indépendant, extensible via plugins
-Bloc 9 (tests)               — après chaque bloc
+Bloc 1 (câblage ML)          — 1 fichier, impact immédiat, correction de bug          ✅ LIVRÉ (commit 4ec35a2 / 8d495d4)
+Bloc 3 (consommation ml)     — dépend de Bloc 1 pour être utile                       ✅ LIVRÉ (ml_worker.py)
+Bloc 2 (feedback FP)         — dépend de Bloc 1                                       ✅ LIVRÉ — mais bug ML-R-06 corrigé (commit 52716de)
+Bloc 4 (tâches périodiques)  — indépendant, 2 fichiers                                ✅ LIVRÉ (4a + 4b, commit ebd4197)
+Bloc 6 (poids configurables) — dépend de Bloc 1 (même fichier main.py)               ✅ LIVRÉ
+Bloc 5 (table agents)        — indépendant, travail plus large                        ✅ LIVRÉ
+Bloc 7 (enrollment Go)       — indépendant, nouveau package Go                        ✅ LIVRÉ (commit 4ec35a2)
+Bloc 8 (NOTIFY)              — indépendant, extensible via plugins                    ✅ LIVRÉ — NotificationWorker ajouté (commit 52716de)
+Bloc 9 (tests)               — après chaque bloc                                      ✅ LIVRÉ (commit ebd4197)
 ```
 
 ---
