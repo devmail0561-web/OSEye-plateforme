@@ -36,6 +36,9 @@ def _row_to_alert(row: AlertRow, notes: list[AlertNote] | None = None) -> Alert:
         assigned_to=row.assigned_to,
         notes=notes or [],
         false_positive_count=row.false_positive_count,
+        dst_ip=row.dst_ip,
+        pid=row.pid,
+        process_name=row.process_name,
     )
 
 
@@ -59,6 +62,9 @@ def _alert_to_row(alert: Alert) -> AlertRow:
         mitre_techniques=json.dumps(alert.mitre_techniques),
         assigned_to=alert.assigned_to,
         false_positive_count=alert.false_positive_count,
+        dst_ip=alert.dst_ip,
+        pid=alert.pid,
+        process_name=alert.process_name,
     )
 
 
@@ -134,6 +140,9 @@ class SQLAlertRepository:
                 row.mitre_techniques = updated.mitre_techniques
                 row.assigned_to = updated.assigned_to
                 row.false_positive_count = updated.false_positive_count
+                row.dst_ip = updated.dst_ip
+                row.pid = updated.pid
+                row.process_name = updated.process_name
         return alert
 
     async def list(self, filters: dict[str, object], pagination: Pagination) -> PageResult[Alert]:

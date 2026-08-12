@@ -173,11 +173,15 @@ class DecisionEngine:
         """
         # Derive signal scores from incident context
         rule_score = _SEVERITY_SCORE.get(incident.severity, 50.0)
-        ml_score = (
-            self._ml_engine.score_event(trigger_event)
-            if self._ml_engine is not None and trigger_event is not None
-            else 0.0
-        )
+        if self._ml_engine is not None and trigger_event is not None:
+            # ML-R-01: prefer score_event_readonly (no training side-effect); fall back
+            # to score_event for older MLEngine versions that lack the method.
+            _score_fn = getattr(
+                self._ml_engine, "score_event_readonly", None
+            ) or self._ml_engine.score_event
+            ml_score = _score_fn(trigger_event)
+        else:
+            ml_score = 0.0
         ti_score = 100.0 if (alert and alert.ti_triggered) else 0.0
         correlation_depth = incident.alert_count
 

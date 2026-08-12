@@ -214,9 +214,10 @@ async def mark_false_positive(
                 pass
         if trigger_event is not None:
             try:
-                # learn_from_alert with empty techniques list produces negative updates
-                # for all known techniques — equivalent to "this event is NOT malicious".
-                ml_engine.learn_from_alert(trigger_event, [])
+                # ML-R-06: negative_feedback applies learn_one(features, False) to
+                # every known technique model — the correct negative signal.
+                # learn_from_alert(event, []) was a no-op (early return on empty list).
+                ml_engine.negative_feedback(trigger_event)
                 _logger.info(
                     "ml_false_positive_feedback",
                     alert_id=str(alert_id),

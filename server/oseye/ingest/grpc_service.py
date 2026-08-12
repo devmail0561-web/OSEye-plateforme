@@ -442,6 +442,36 @@ class AgentServiceServicer:
             )
 
             if repo is not None and self._loop is not None:
+                # AG-R-01: IDOR guard — verify the command was issued to this agent.
+                try:
+                    command = asyncio.run_coroutine_threadsafe(
+                        repo.get(command_id), self._loop
+                    ).result(timeout=2.0)
+                except Exception as exc:  # noqa: BLE001
+                    _logger.warning(
+                        "action_report_fetch_error",
+                        command_id=command_id,
+                        error=str(exc),
+                    )
+                    continue
+
+                if command is None:
+                    _logger.warning(
+                        "action_report_unknown_command",
+                        command_id=command_id,
+                        cn=cn,
+                    )
+                    continue
+
+                if command.agent_cn != cn:
+                    _logger.warning(
+                        "grpc_report_actions_idor_attempt",
+                        command_id=command_id,
+                        claimed_cn=cn,
+                        actual_cn=command.agent_cn,
+                    )
+                    continue  # ignorer silencieusement
+
                 if status == "executed":
                     fut = asyncio.run_coroutine_threadsafe(
                         repo.mark_executed(command_id), self._loop

@@ -327,11 +327,14 @@ func (c *CommandClient) handleRestoreFile(cmd *gen.AgentCommand) {
 		return
 	}
 
-	// GO-004: validate quarantine_path is within the expected quarantine directory.
+	// NE-R-04: clean both sides before the prefix check so that a raw
+	// quarantineDir with a trailing slash or a sibling name (e.g.
+	// "/var/quarantine2/evil") cannot bypass the containment guard.
+	cleanDir := filepath.Clean(c.quarantineDir) + string(filepath.Separator)
 	cleanQ := filepath.Clean(payload.QuarantinePath)
-	if !strings.HasPrefix(cleanQ, c.quarantineDir+"/") && cleanQ != c.quarantineDir {
+	if !strings.HasPrefix(cleanQ, cleanDir) {
 		slog.Warn("restore_file: quarantine path outside quarantine dir", "path", payload.QuarantinePath)
-		c.reporter.Send(cmd.GetCommandId(), "failed", "restore_file: invalid quarantine path")
+		c.reporter.Send(cmd.GetCommandId(), "failed", fmt.Errorf("restore: path outside quarantine dir: %s", payload.QuarantinePath).Error())
 		return
 	}
 

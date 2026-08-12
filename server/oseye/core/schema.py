@@ -110,6 +110,11 @@ class Alert(BaseModel):
     notes: list[AlertNote] = Field(default_factory=list)
     false_positive_count: int = 0
 
+    # Context fields required for ISOLATE / KILL_PROCESS response actions
+    dst_ip: str | None = None
+    pid: int | None = None
+    process_name: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Decision

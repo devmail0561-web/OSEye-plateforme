@@ -59,11 +59,11 @@ async def sign_agent_csr(
     The enrollment token is consumed (one-time use) after successful signing.
     """
     store = request.app.state.enrollment_store
-    if not store.validate_token(x_enrollment_token):
+    # NE-R-05: atomic validate+consume under a lock to prevent TOCTOU races.
+    if not store.validate_and_consume(x_enrollment_token):
         raise HTTPException(status_code=404, detail="Invalid or expired enrollment token")
     try:
         cert_pem = store.sign_csr(body.csr, body.hostname)
     except ValueError:
         raise HTTPException(status_code=422, detail="CSR validation failed") from None
-    store.consume_token(x_enrollment_token)
     return {"cert": cert_pem}

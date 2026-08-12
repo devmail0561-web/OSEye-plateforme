@@ -23,8 +23,10 @@ async def run_migrations(engine: AsyncEngine) -> None:
         if engine.dialect.name == "postgresql":
             await _install_immutability_triggers(conn)
             await _install_entity_hourly_stats_refresh(conn)
+            await _migrate_alerts_response_columns_pg(conn)
         if engine.dialect.name == "sqlite":
             await _install_entity_hourly_stats_refresh_sqlite(conn)
+            await _migrate_alerts_response_columns_sqlite(conn)
 
 
 async def _install_immutability_triggers(conn: AsyncConnection) -> None:
@@ -122,6 +124,44 @@ async def _install_entity_hourly_stats_refresh(conn: AsyncConnection) -> None:
         END;
         $$;
     """))
+
+
+async def _migrate_alerts_response_columns_pg(conn: AsyncConnection) -> None:
+    """D-R-02: add dst_ip, pid, process_name to the alerts table (PostgreSQL).
+
+    Uses ADD COLUMN IF NOT EXISTS so re-running migrations is idempotent.
+    """
+    from sqlalchemy import text
+
+    statements = [
+        "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS dst_ip VARCHAR(45) DEFAULT NULL;",
+        "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS pid INTEGER DEFAULT NULL;",
+        "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS process_name"
+        " VARCHAR(255) NOT NULL DEFAULT '';",
+    ]
+    for stmt in statements:
+        await conn.execute(text(stmt))
+
+
+async def _migrate_alerts_response_columns_sqlite(conn: AsyncConnection) -> None:
+    """D-R-02: add dst_ip, pid, process_name to the alerts table (SQLite).
+
+    SQLite does not support IF NOT EXISTS on ALTER TABLE columns, so we check
+    the PRAGMA table_info first and skip columns that already exist.
+    """
+    from sqlalchemy import text
+
+    result = await conn.execute(text("PRAGMA table_info(alerts);"))
+    existing_columns = {row[1] for row in result.fetchall()}
+
+    if "dst_ip" not in existing_columns:
+        await conn.execute(text("ALTER TABLE alerts ADD COLUMN dst_ip VARCHAR(45) DEFAULT NULL;"))
+    if "pid" not in existing_columns:
+        await conn.execute(text("ALTER TABLE alerts ADD COLUMN pid INTEGER DEFAULT NULL;"))
+    if "process_name" not in existing_columns:
+        await conn.execute(
+            text("ALTER TABLE alerts ADD COLUMN process_name VARCHAR(255) NOT NULL DEFAULT '';")
+        )
 
 
 async def _install_entity_hourly_stats_refresh_sqlite(conn: AsyncConnection) -> None:

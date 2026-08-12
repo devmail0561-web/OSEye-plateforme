@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import threading
 import time
 from pathlib import Path
 
@@ -34,6 +35,8 @@ class EnrollmentStore:
         self._ca_cert_path = Path(settings.tls_ca_cert_file)
         self._ca_key_path = Path(settings.tls_ca_key_file)
         self._token_dir.mkdir(parents=True, exist_ok=True)
+        # NE-R-05: serialises validate+consume under a lock to prevent TOCTOU races.
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Token management
@@ -67,6 +70,22 @@ class EnrollmentStore:
             token_file.unlink()
         except FileNotFoundError:
             pass
+
+    def validate_and_consume(self, token: str) -> bool:
+        """Atomically validate and consume *token* under a lock.
+
+        NE-R-05: combining validate + consume under a single lock prevents the
+        TOCTOU window where two concurrent requests both pass validate_token
+        before either calls consume_token.
+
+        Returns True if the token was valid and has been consumed.
+        Returns False if the token was absent, expired, or already consumed.
+        """
+        with self._lock:
+            if not self.validate_token(token):
+                return False
+            self.consume_token(token)
+            return True
 
     # ------------------------------------------------------------------
     # Certificate operations

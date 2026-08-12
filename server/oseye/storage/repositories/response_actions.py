@@ -85,3 +85,23 @@ class SQLResponseActionsRepository:
                 .values(status="rolled_back", rolled_back_at=datetime.now(UTC))
             )
             await session.commit()
+
+    async def atomic_mark_rolled_back(self, command_id: str) -> bool:
+        """Atomically transition status executed → rolled_back.
+
+        AG-R-02: executes a single conditional UPDATE to prevent TOCTOU races.
+        Returns True if exactly one row was updated (i.e. the action was in
+        'executed' state and has been successfully marked rolled_back).
+        Returns False if the row does not exist or was already rolled back.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                update(ResponseActionRow)
+                .where(
+                    ResponseActionRow.command_id == command_id,
+                    ResponseActionRow.status == "executed",
+                )
+                .values(status="rolled_back", rolled_back_at=datetime.now(UTC))
+            )
+            await session.commit()
+            return result.rowcount == 1

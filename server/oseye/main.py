@@ -8,6 +8,7 @@ lifespan context manager.
 from __future__ import annotations
 
 import asyncio
+import os
 import socket
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -57,6 +58,7 @@ from oseye.threat_intel.providers.virustotal import VirusTotalProvider
 from oseye.workers.correlation_worker import CorrelationWorker
 from oseye.workers.decision_worker import DecisionWorker
 from oseye.workers.ml_worker import MLWorker
+from oseye.workers.notify_worker import NotificationWorker
 from oseye.workers.rule_worker import RuleWorker
 from oseye.workers.storage_writer import StorageWriter
 from oseye.workers.ti_worker import TIWorker
@@ -76,6 +78,15 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
 
     @asynccontextmanager
     async def lifespan(app: object) -> AsyncGenerator[None, None]:  # noqa: ARG001
+        # ML-R-03: Guard HMAC key at startup — warn when missing or insecure default.
+        hmac_key_env = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", "")
+        if not hmac_key_env or hmac_key_env == "dev-insecure-key":
+            if os.environ.get("OSEYE_INSECURE", "").lower() != "true":
+                _logger.warning(
+                    "OSEYE_CHECKPOINT_HMAC_KEY not set or uses insecure default — "
+                    "set OSEYE_INSECURE=true to allow in dev"
+                )
+
         bus = create_bus(settings)
         backend = create_backend(settings)
         await backend.init()
@@ -292,6 +303,10 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             stop_event=stop,
         )
 
+        # NE-R-01: NotificationWorker consumes notifications:pending so that
+        # messages published by ActionExecutor._emit_notification are not dropped.
+        notify_worker = NotificationWorker(bus=bus, stop_event=stop)
+
         async def _normalizer_loop() -> None:
             async for topic, message in await bus.subscribe_pattern("events:raw:*"):
                 parts = topic.split(":")
@@ -342,6 +357,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             asyncio.create_task(decision_worker.run(), name="decision_worker"),
             asyncio.create_task(human_queue.run(), name="human_queue"),
             asyncio.create_task(ml_worker.run(), name="ml_worker"),
+            asyncio.create_task(notify_worker.run(), name="notify_worker"),
         ]
         _logger.info("workers_started", count=len(tasks))
 

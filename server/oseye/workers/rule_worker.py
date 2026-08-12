@@ -87,8 +87,11 @@ class RuleWorker:
 
                 # Bloc 4b — purge stale temporal windows every 10 minutes
                 if time.monotonic() - last_purge > 600:
-                    removed = await self._engine.purge_stale_windows()
-                    _log.info("rule_engine_purge_stale_windows", removed=removed)
+                    try:
+                        removed = await self._engine.purge_stale_windows()
+                        _log.info("rule_engine_purge_stale_windows", removed=removed)
+                    except Exception as exc:  # noqa: BLE001
+                        _log.warning("rule_engine_purge_error", error=str(exc))
                     last_purge = time.monotonic()
 
                 if stop_event is not None and stop_event.is_set():
@@ -157,6 +160,9 @@ class RuleWorker:
             title=match.rule_name,
             description=match.explanation,
             mitre_techniques=match.mitre,
+            dst_ip=event.dst_ip,
+            pid=event.pid if event.pid else None,
+            process_name=event.process_name,
         )
         try:
             await self._alert_repo.create(alert)

@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import os
 import pickle
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -52,27 +51,25 @@ from river.anomaly import HalfSpaceTrees
 from oseye.core.schema import UniversalEvent
 from oseye.ml_engine.features import extract
 
-# ML-01: HMAC-SHA256 protection for pickle checkpoints.  Must match the key
-# used by engine.py (both read the same OSEYE_CHECKPOINT_HMAC_KEY env var).
-_HMAC_KEY = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", "dev-insecure-key").encode()
 
-
-def _compute_mac(path: Path) -> bytes:
+# ML-R-03: MAC helpers accept the key as an explicit parameter — no module-level
+# secret.  The key is managed by MLEngine and passed in on every save/load call.
+def _compute_mac(path: Path, key: bytes) -> bytes:
     data = path.read_bytes()
-    return hmac.new(_HMAC_KEY, data, hashlib.sha256).digest()
+    return hmac.new(key, data, hashlib.sha256).digest()
 
 
-def _write_mac(path: Path) -> None:
-    path.with_suffix(path.suffix + ".mac").write_bytes(_compute_mac(path))
+def _write_mac(path: Path, key: bytes) -> None:
+    path.with_suffix(path.suffix + ".mac").write_bytes(_compute_mac(path, key))
 
 
-def _verify_mac(path: str | Path) -> None:
+def _verify_mac(path: str | Path, key: bytes) -> None:
     path = Path(path)
     mac_path = path.with_suffix(path.suffix + ".mac")
     if not mac_path.exists():
         raise ValueError(f"checkpoint: MAC file missing for {path}")
     expected = mac_path.read_bytes()
-    actual = _compute_mac(path)
+    actual = _compute_mac(path, key)
     if not hmac.compare_digest(expected, actual):
         raise ValueError(
             f"checkpoint: MAC mismatch for {path} — file may be tampered"
@@ -216,13 +213,38 @@ class EntityAnomalyDetector:
             return 0.0
         return float(min(raw / state.decaying_max, 1.0) * 100.0)
 
-    def save(self, path: str | Path) -> None:
+    def score_only(self, entity_id: str, features: dict) -> float:
+        """Score *features* for *entity_id* without updating the model (read-only).
+
+        ML-R-01: used by MLEngine.score_event_readonly() so that the Decision
+        Engine path does not double-train a model that MLWorker already updated.
+
+        Returns 0.0 during cold-start (< min_samples seen) or if the entity
+        has no model yet.
+        """
+        state = self._store.get(entity_id)
+        if state is None or state.count < self._min_samples:
+            return 0.0
+        raw: float = state.model.score_one(features)  # type: ignore[no-untyped-call]
+        if state.decaying_max == 0.0:
+            return 0.0
+        return float(min(raw / state.decaying_max, 1.0) * 100.0)
+
+    def save(self, path: str | Path, hmac_key: bytes | None = None) -> None:
         """Persist the full detector state to *path* via pickle.
 
         Write is atomic: data goes to a tmp file alongside *path* then
         os.replace() swaps it in, so a crash mid-write never corrupts the
         existing checkpoint.
+
+        Parameters
+        ----------
+        hmac_key:
+            Optional secret key used to sign the checkpoint file with
+            HMAC-SHA256 (ML-R-03). When ``None``, no MAC file is written.
         """
+        import os
+
         path = Path(path)
         payload = {
             "n_trees": self._n_trees,
@@ -238,18 +260,26 @@ class EntityAnomalyDetector:
             with open(tmp, "wb") as fh:
                 pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
             os.replace(tmp, path)
-            _write_mac(path)
+            if hmac_key is not None:
+                _write_mac(path, hmac_key)
         except Exception:
             tmp.unlink(missing_ok=True)
             raise
 
     @classmethod
-    def load(cls, path: str | Path) -> EntityAnomalyDetector:
+    def load(cls, path: str | Path, hmac_key: bytes | None = None) -> EntityAnomalyDetector:
         """Restore a detector from a pickle file written by :meth:`save`.
 
         Call on startup before the first event arrives to skip cold-start.
+
+        Parameters
+        ----------
+        hmac_key:
+            Optional secret key used to verify the checkpoint MAC (ML-R-03).
+            When ``None``, MAC verification is skipped.
         """
-        _verify_mac(path)
+        if hmac_key is not None:
+            _verify_mac(path, hmac_key)
         with open(path, "rb") as fh:
             payload = pickle.load(fh)  # noqa: S301
 

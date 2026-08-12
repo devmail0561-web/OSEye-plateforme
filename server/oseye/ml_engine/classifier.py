@@ -19,6 +19,8 @@ and the matched MITRE technique list. The engine calls this after a rule fires.
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from river.linear_model import LogisticRegression
 from river.optim import Adam
 
@@ -26,6 +28,12 @@ from oseye.core.schema import UniversalEvent
 from oseye.ml_engine.features import extract
 
 _LEARNING_RATE = 0.01
+
+# ML-R-02: hard cap on number of per-technique models to prevent unbounded memory
+# growth when the MITRE technique space is large or when noisy rules create many
+# unique technique strings.  LRU eviction: the least-recently-used model is
+# dropped when the cap is reached.
+_MAX_MODELS = 500
 
 
 class MITREClassifier:
@@ -38,14 +46,20 @@ class MITREClassifier:
 
     def __init__(self, learning_rate: float = _LEARNING_RATE) -> None:
         self._lr = learning_rate
-        self._models: dict[str, LogisticRegression] = {}
+        self._models: OrderedDict[str, LogisticRegression] = OrderedDict()
 
     def _get_or_create(self, technique: str) -> LogisticRegression:
         if technique not in self._models:
+            # ML-R-02: evict LRU entry before adding when at capacity.
+            if len(self._models) >= _MAX_MODELS:
+                self._models.popitem(last=False)
             self._models[technique] = LogisticRegression(
                 optimizer=Adam(lr=self._lr),
                 intercept_lr=self._lr,
             )
+        else:
+            # Move to end to mark as most-recently-used.
+            self._models.move_to_end(technique)
         return self._models[technique]
 
     def learn(self, event: UniversalEvent, techniques: list[str]) -> None:
@@ -86,6 +100,22 @@ class MITREClassifier:
                 max_prob = prob
 
         return max_prob * 100.0
+
+    def negative_feedback(self, event: UniversalEvent) -> None:
+        """Apply a negative (false-positive) update to every known technique model.
+
+        ML-R-06: called when an alert is marked as a false positive.  Runs
+        learn_one(features, False) on all existing technique models so that future
+        events similar to this one are scored lower across all techniques.
+
+        Unlike learn(event, []) — which exits immediately when techniques is empty —
+        this method always updates models when at least one technique is known.
+        """
+        if not self._models:
+            return
+        features = extract(event)
+        for model in self._models.values():
+            model.learn_one(features, False)  # type: ignore[no-untyped-call]
 
     @property
     def known_techniques(self) -> list[str]:

@@ -105,6 +105,11 @@ class AlertRow(Base):
     assigned_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
     false_positive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Context fields required for ISOLATE / KILL_PROCESS response actions (D-R-02)
+    dst_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    process_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+
 
 class AlertNoteRow(Base):
     __tablename__ = "alert_notes"

@@ -71,6 +71,9 @@ async def get_response_action(
     return _row_to_dict(row)
 
 
+_NON_REVERSIBLE: frozenset[str] = frozenset({"KILL_PROCESS"})
+
+
 @router.post("/{command_id}/rollback", status_code=status.HTTP_204_NO_CONTENT)
 async def rollback_response_action(
     command_id: str,
@@ -83,16 +86,20 @@ async def rollback_response_action(
       BLOCK_IP        → UNBLOCK_IP
       QUARANTINE_FILE → RESTORE_FILE
 
-    CIA — Disponibilité : the rollback is persisted before the command is sent.
+    AG-R-03: KILL_PROCESS is not reversible — returns 422.
+    AG-R-02: Persist BEFORE emit to guarantee correct ordering; atomic
+             conditional UPDATE prevents concurrent double-rollback races.
     """
     repo = _get_repo(request)
     row = await repo.get(command_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Response action not found")
-    if row.status != "executed":
+
+    # AG-R-03: reject non-reversible command types early.
+    if row.command_type in _NON_REVERSIBLE:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot rollback action with status '{row.status}'",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{row.command_type} cannot be rolled back",
         )
 
     executor = _get_executor(request)
@@ -101,13 +108,20 @@ async def rollback_response_action(
     except json.JSONDecodeError:
         payload = {}
 
+    # AG-R-02: atomically persist first; emit only if persist succeeded.
+    success = await repo.atomic_mark_rolled_back(command_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="action is already rolled_back or not in executed state",
+        )
+
     await executor.emit_rollback(
         cn=row.agent_cn,
         command_id=command_id,
         command_type=row.command_type,
         payload=payload,
     )
-    await repo.mark_rolled_back(command_id)
     _logger.info(
         "response_action_rollback_requested",
         command_id=command_id,
