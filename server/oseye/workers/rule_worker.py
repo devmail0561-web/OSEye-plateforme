@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -69,6 +70,7 @@ class RuleWorker:
             enabled=self._engine.enabled_count,
         )
 
+        last_purge = time.monotonic()
         try:
             async for message in await self._bus.subscribe(CONSUME_TOPIC):
                 try:
@@ -82,6 +84,12 @@ class RuleWorker:
                 if matches:
                     self._total_matches += len(matches)
                     await self._handle_matches(event, matches)
+
+                # Bloc 4b — purge stale temporal windows every 10 minutes
+                if time.monotonic() - last_purge > 600:
+                    removed = await self._engine.purge_stale_windows()
+                    _log.info("rule_engine_purge_stale_windows", removed=removed)
+                    last_purge = time.monotonic()
 
                 if stop_event is not None and stop_event.is_set():
                     break

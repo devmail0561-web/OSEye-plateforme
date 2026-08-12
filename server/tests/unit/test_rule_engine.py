@@ -420,6 +420,92 @@ class TestRuleEngine:
         ev2 = _event(hostname="h", pid=100, ppid=2)
         assert _stable_entity_key(ev1) != _stable_entity_key(ev2)
 
+    # --- Bloc 4b : purge des fenêtres temporelles ---
+
+    @pytest.mark.asyncio
+    async def test_purge_stale_windows_removes_expired_keys(self, tmp_path: Path) -> None:
+        """Keys whose entries are older than max_age_seconds are removed."""
+        import collections
+
+        from oseye.rule_engine import evaluator as ev_mod
+        from oseye.rule_engine.engine import RuleEngine
+
+        (tmp_path / "builtin").mkdir()
+        engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
+
+        old_ts = time.time() - 7200  # 2 hours ago — stale
+        fresh_ts = time.time() - 10  # 10 seconds ago — still fresh
+
+        with ev_mod._temporal_windows_lock:
+            ev_mod._temporal_windows["stale::key"] = collections.deque(
+                [(old_ts, {"hostname": "h"})]
+            )
+            ev_mod._temporal_windows["fresh::key"] = collections.deque(
+                [(fresh_ts, {"hostname": "h"})]
+            )
+
+        try:
+            removed = await engine.purge_stale_windows(max_age_seconds=3600)
+            assert removed == 1
+            with ev_mod._temporal_windows_lock:
+                assert "stale::key" not in ev_mod._temporal_windows
+                assert "fresh::key" in ev_mod._temporal_windows
+        finally:
+            with ev_mod._temporal_windows_lock:
+                ev_mod._temporal_windows.pop("stale::key", None)
+                ev_mod._temporal_windows.pop("fresh::key", None)
+
+    @pytest.mark.asyncio
+    async def test_purge_stale_windows_empty_deque_is_removed(self, tmp_path: Path) -> None:
+        """A key with an empty deque is also purged."""
+        import collections
+
+        from oseye.rule_engine import evaluator as ev_mod
+        from oseye.rule_engine.engine import RuleEngine
+
+        (tmp_path / "builtin").mkdir()
+        engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
+
+        with ev_mod._temporal_windows_lock:
+            ev_mod._temporal_windows["empty::key"] = collections.deque()
+
+        try:
+            removed = await engine.purge_stale_windows(max_age_seconds=3600)
+            assert removed >= 1
+            with ev_mod._temporal_windows_lock:
+                assert "empty::key" not in ev_mod._temporal_windows
+        finally:
+            with ev_mod._temporal_windows_lock:
+                ev_mod._temporal_windows.pop("empty::key", None)
+
+    @pytest.mark.asyncio
+    async def test_purge_stale_windows_returns_zero_when_nothing_stale(
+        self, tmp_path: Path
+    ) -> None:
+        """Returns 0 when all windows are within max_age_seconds."""
+        import collections
+
+        from oseye.rule_engine import evaluator as ev_mod
+        from oseye.rule_engine.engine import RuleEngine
+
+        (tmp_path / "builtin").mkdir()
+        engine = RuleEngine(rules_root=tmp_path, hot_reload=False)
+
+        fresh_ts = time.time() - 5
+        with ev_mod._temporal_windows_lock:
+            ev_mod._temporal_windows["live::key"] = collections.deque(
+                [(fresh_ts, {"hostname": "h"})]
+            )
+
+        try:
+            removed = await engine.purge_stale_windows(max_age_seconds=3600)
+            assert removed == 0
+            with ev_mod._temporal_windows_lock:
+                assert "live::key" in ev_mod._temporal_windows
+        finally:
+            with ev_mod._temporal_windows_lock:
+                ev_mod._temporal_windows.pop("live::key", None)
+
 
 # ---------------------------------------------------------------------------
 # RuleWorker integration

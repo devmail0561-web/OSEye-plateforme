@@ -32,6 +32,7 @@ import asyncio
 import collections
 import json
 import threading
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -248,6 +249,47 @@ class RuleEngine:
         with _eval._temporal_windows_lock:
             _eval._temporal_windows.update(state)
         _log.info("temporal_state_loaded", path=path_str, windows=len(state))
+
+    # ------------------------------------------------------------------
+    # Bloc 4b — temporal window purge
+    # ------------------------------------------------------------------
+
+    async def purge_stale_windows(self, max_age_seconds: int = 3600) -> int:
+        """Remove temporal window entries older than *max_age_seconds*.
+
+        A window key is removed when **all** its entries have a timestamp
+        older than the cutoff (or the deque is empty).  This mirrors the
+        logic of :func:`oseye.rule_engine.evaluator._purge_old_windows` but
+        accepts a configurable TTL and returns the number of keys removed so
+        the caller can log it.
+
+        Thread-safe: acquires ``_eval._temporal_windows_lock``.
+        The method is *async* so it integrates naturally with the asyncio
+        worker loop without introducing a blocking call.
+
+        Parameters
+        ----------
+        max_age_seconds:
+            Keys whose latest entry is older than this value (in seconds)
+            are removed.  Defaults to 3600 s (1 hour).
+
+        Returns
+        -------
+        int
+            Number of window keys deleted.
+        """
+        cutoff = time.time() - max_age_seconds
+        with _eval._temporal_windows_lock:
+            keys_to_delete = [
+                k
+                for k, dq in _eval._temporal_windows.items()
+                if not dq or all(ts < cutoff for ts, _ in dq)
+            ]
+            for k in keys_to_delete:
+                del _eval._temporal_windows[k]
+        removed = len(keys_to_delete)
+        _log.info("rule_engine_purge_stale_windows", removed=removed)
+        return removed
 
     # ------------------------------------------------------------------
     # Hot-reload — watchdog (inotify) with polling fallback
