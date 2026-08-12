@@ -1,9 +1,9 @@
 # OSEye — Suivi de progression
 
-**Version :** 3.6
+**Version :** 3.7
 **Dernière mise à jour :** 2026-08-12
 **Branche active :** `main` (`latest`)
-**Phase courante :** Post-Phase 10 — Corrections audit 2026-08-12 (ROADMAP + Full Audit)
+**Phase courante :** Post-Phase 10 — Audit final COMPLET (25 CRITICAL/HIGH corrigés)
 
 ---
 
@@ -560,6 +560,49 @@ Audit ciblé des modules implémentés dans ROADMAP_REMAINING (Blocs 1-9).
 
 ---
 
+## Audit code — Final Review (2026-08-12)
+
+Audit final complet de tous les modules — 107 findings bruts, 29 CRITICAL/HIGH confirmés après vérification adversariale.
+**25 CRITICAL/HIGH corrigés (commit a7da4b1).** 4 findings différés (PL-01 seccomp, ML-01 hard-block, G-N-01 nosec, PC-04 mode enforcé par config).
+
+### Findings CRITICAL/HIGH résolus
+
+| ID | Sévérité | Fichier | Description |
+|----|----------|---------|-------------|
+| GO-A1 | CRITICAL | `ebpf/loader.go` | `defer closeOut()` dans goroutines eBPF → send-on-closed-channel panic |
+| GO-A2 | CRITICAL | `fanotify/collector.go` | readLoop sans WaitGroup → write après close canal |
+| GO-A3 | CRITICAL | `inotify/collector.go` | même problème que GO-A2 (readLoop non synchronisé) |
+| R-01 | CRITICAL | `rule_engine/{models,parser,engine}.py` | `entity_key` YAML ignoré → toutes les règles temporelles réseau dans un seul bucket |
+| D-01 | HIGH | `decision/human_queue.py` | Replay approbation → double KILL_PROCESS (approve() sur décision déjà traitée) |
+| D-03 | HIGH | `decision/action_executor.py` | dst_ip envoyé à l'agent sans validation de format |
+| D-04 | HIGH | `decision/journal.py` | rollback() accepte prev_hash arbitraire (pas de validation SHA-256) |
+| PC-02 | HIGH | `ingest/grpc_service.py` | CN agent injecté dans topic Redis sans validation regex |
+| PC-04 | HIGH | `ingest/grpc_service.py` | require_agent_keys mode ajouté (rejet agents sans Ed25519 key) |
+| API-02 | HIGH | `api/app.py` | Rate limiting get_remote_address inefficace derrière reverse proxy |
+| API-03 | HIGH | `api/auth/jwt.py` | JWT blocklist dans /tmp world-readable → chmod 0600 |
+| PL-02 | HIGH | `plugin/sandbox.py` | Plugin lancé via PATH 'python' → sys.executable |
+| PL-03 | HIGH | `plugin/manager.py` | TOCTOU verify/copy → verify APRÈS copy (defensive copy) |
+| TI-01 | HIGH | `threat_intel/breaker.py` | Circuit breaker _opened_at réinitialisé par échecs concurrents |
+| ML-02 | HIGH | `ml_engine/classifier.py` | negative_feedback empoisonne tous les classifieurs (pas filtré par technique) |
+| PC-01 | HIGH | `storage/repositories/api_keys.py` | RuntimeError import si OSEYE_SECRET_KEY absent → chargement lazy |
+| F-01 | HIGH | `forensic/case_manager.py` | object.__setattr__ bypass Pydantic validation |
+| F-04 | HIGH | `forensic/exporter/json_export.py` | JSON export sans redaction de champs sensibles |
+| R-02 | MEDIUM→LOW | `defense_evasion.yaml` | rule_timestomp fires on every touch → sevérité réduite, exclusions /tmp |
+| R-03 | HIGH | `privilege_escalation.yaml` | event.type "exec" jamais émis → ajout "execve" |
+| R-04 | MEDIUM | `impact_c2.yaml` | "stratum+tcp" dans executable → noms de mineurs connus |
+| R-05 | MEDIUM | `privilege_escalation.yaml` | sudo contains "-i" trop large → " -i " avec espaces |
+
+### Findings différés (design ou effort élevé)
+
+| ID | Sévérité | Raison |
+|----|----------|--------|
+| PL-01 | HIGH | Sandbox seccomp — nécessite python-seccomp + libseccomp-dev (TODO documenté dans le code) |
+| ML-01 | MEDIUM | HMAC key hard-block mode prod — warning suffit pour l'instant, mode dev fonctionnel |
+| G-N-01 | LOW | nosec annotations Go — faux positifs gosec |
+| PC-04 enforce | MEDIUM | require_agent_keys ajouté mais False par défaut — activation manuelle en prod |
+
+---
+
 ## Failles de sécurité
 
 | ID | Description | Statut |
@@ -904,6 +947,10 @@ Audit complet des communications serveur ↔ agent. 5 findings corrigés.
 
 | Hash | Message | Date |
 |------|---------|------|
+| `a7da4b1` | fix(audit-final): corriger 25 findings CRITICAL/HIGH — panics Go, RuleEngine, Auth, Plugin, Decision | 2026-08-12 |
+| `ce92886` | fix(audit-medium): corriger findings MEDIUM/LOW — workers, decision, storage, Go | 2026-08-12 |
+| `ca31c42` | docs: mise à jour PROGRESS.md et ROADMAP_REMAINING — audits 2026-08-12 + 466 tests | 2026-08-12 |
+| `52716de` | fix(audit-roadmap): corriger 12 findings CRITICAL/HIGH — ML+Decision+NOTIFY+GRPC+Rollback | 2026-08-12 |
 | `28c9185` | feat(M24): P3.12 API Keys + P3.13 RBAC + P3.14 rule_versions — Phase 3 COMPLÈTE | 2026-08-07 |
 | `b9be613` | fix(audit-phase3): corrections Python, règles YAML et adapters | 2026-08-07 |
 | `a2290bd` | fix(audit-phase3): 32 corrections audit — RCE sandbox, auth, eBPF, regles mortes, races Go | 2026-08-07 |
