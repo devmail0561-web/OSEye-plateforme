@@ -1,12 +1,19 @@
 package enrollment_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/oseye/agent/internal/enrollment"
 )
@@ -34,18 +41,76 @@ func TestNeedsEnrollmentCertExists(t *testing.T) {
 }
 
 func TestEnrollSuccess(t *testing.T) {
+	t.Setenv("OSEYE_INSECURE", "true")
 	tmp := t.TempDir()
 
-	// Fake server
+	// Generate a real in-memory CA so the server can sign the CSR and
+	// production-code validation (G-E-04: CN match + CA signature) passes.
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate CA key: %v", err)
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create CA cert: %v", err)
+	}
+	caCert, _ := x509.ParseCertificate(caDER)
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+
+	// Fake enrollment server
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
+			// Step 1 — return real CA cert PEM
 			w.Header().Set("Content-Type", "application/x-pem-file")
-			_, _ = w.Write([]byte("-----BEGIN CERTIFICATE-----\nFAKECA\n-----END CERTIFICATE-----\n"))
+			_, _ = w.Write(caPEM)
+
 		case http.MethodPost:
+			// Step 3 — parse CSR from request, sign with CA, return cert
+			var body struct {
+				CSR      string `json:"csr"`
+				Hostname string `json:"hostname"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			csrBlock, _ := pem.Decode([]byte(body.CSR))
+			if csrBlock == nil {
+				http.Error(w, "bad CSR", http.StatusBadRequest)
+				return
+			}
+			csr, err := x509.ParseCertificateRequest(csrBlock.Bytes)
+			if err != nil {
+				http.Error(w, "parse CSR: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			certTemplate := &x509.Certificate{
+				SerialNumber: big.NewInt(2),
+				Subject:      csr.Subject,
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(24 * time.Hour),
+			}
+			certDER, err := x509.CreateCertificate(rand.Reader, certTemplate, caCert, csr.PublicKey, caKey)
+			if err != nil {
+				http.Error(w, "sign: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"cert": "-----BEGIN CERTIFICATE-----\nFAKECERT\n-----END CERTIFICATE-----\n",
+				"cert": string(certPEM),
 			})
 		}
 	}))

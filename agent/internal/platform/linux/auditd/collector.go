@@ -283,10 +283,8 @@ func parseKV(line string) (m map[string]string, quoted map[string]bool) {
 // decodeComm handles both hex-encoded (62617368) and quoted ("bash") comm values.
 // GO-005: wasQuoted indicates the value was wrapped in double quotes by auditd,
 // meaning it is already a printable ASCII name and must not be hex-decoded.
-// For unquoted values, hex decoding is attempted; if all decoded bytes are
-// printable ASCII the original string is the real name (avoids mis-decoding names
-// like "dead", "cafe", "beef"). If any decoded byte is non-printable, the value
-// is a hex-encoded binary name and the decoded bytes are returned.
+// For unquoted values, auditd always hex-encodes the comm field, so a valid
+// hex string must always be decoded — no printability check is applied.
 func decodeComm(s string, wasQuoted bool) string {
 	if s == "" {
 		return ""
@@ -300,16 +298,8 @@ func decodeComm(s string, wasQuoted bool) string {
 		if err != nil {
 			return s
 		}
-		for _, b := range decoded {
-			if b < 0x20 || b > 0x7e {
-				// Non-printable byte → the original was a hex-encoded binary name.
-				return decoded
-			}
-		}
-		// All decoded bytes are printable ASCII → the original unquoted token IS
-		// the real process name (e.g. "bash" itself is valid hex but decodes to
-		// itself; return the original to avoid an unnecessary round-trip).
-		return s
+		// An unquoted hex token from auditd is always hex-encoded; return decoded.
+		return decoded
 	}
 	return s
 }
