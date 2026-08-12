@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from oseye.api.auth.rbac import require_analyst, require_admin
+from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.observability import get_logger
 from oseye.storage.models import ResponseActionRow
 

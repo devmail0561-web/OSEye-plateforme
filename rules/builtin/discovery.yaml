@@ -45,18 +45,16 @@
   tags: [discovery, process_discovery]
   mitre: [T1057]
   platforms: [linux]
-  # RULE-008: threshold réduit de 10 à 3 — 10 exécutions de `ps aux` en 30s
-  # est quasi impossible en usage légitime non-scripté.
   condition: |
     event.category == "process"
     and event.process_name == "ps"
     and (event.cmdline contains "aux" or event.cmdline contains "-ef")
     and event.uid != 0
   timeframe: 30
-  threshold: 3
+  threshold: 10
   actions: [ALERT]
   explanation: >
-    3+ exécutions de ps aux/ps -ef en 30 secondes par un utilisateur non-root.
+    10+ exécutions de ps aux/ps -ef en 30 secondes par un utilisateur non-root.
     Souvent utilisé pour trouver des cibles d'injection ou des processus privilégiés.
 
 - id: rule_sensitive_file_discovery

@@ -33,10 +33,6 @@
   tags: [lateral_movement, discovery, port_scan]
   mitre: [T1046]
   platforms: [linux]
-  # RULE-011: filtre uid!=0 ajouté — les outils réseau système légitimes (nagios,
-  # monitoring, etc.) tournent souvent en root. Un scan offensif tourne quasi
-  # toujours en non-root. Threshold augmenté à 100 pour réduire les FP trafic
-  # TCP légitime (serveurs web multi-connexions).
   # YAML-007: compte toutes les connexions TCP new, pas les IPs distinctes.
   known_limitation: "counts all TCP new connections, not distinct destination IPs"
   condition: |
@@ -45,10 +41,10 @@
     and event.type == "new"
     and event.uid != 0
   timeframe: 30
-  threshold: 100
+  threshold: 20
   actions: [ALERT]
   explanation: >
-    Plus de 100 connexions TCP new en 30 secondes depuis un utilisateur non-root.
+    Plus de 20 connexions TCP new en 30 secondes depuis un utilisateur non-root.
     Pattern typique d'un scan de ports offensif (nmap, masscan).
     NOTE (YAML-007): compte toutes les connexions TCP new (pas nécessairement
     vers des IPs distinctes) — count_distinct non supporté nativement.

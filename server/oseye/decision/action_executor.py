@@ -313,7 +313,7 @@ class ActionExecutor:
 # Helpers — extract indicators from alerts
 # ------------------------------------------------------------------
 
-def _extract_dst_ip(alert: "Alert | None") -> str | None:
+def _extract_dst_ip(alert: Alert | None) -> str | None:
     if alert is None:
         return None
     # Trigger event metadata is not directly on Alert — check extra fields.
@@ -323,7 +323,7 @@ def _extract_dst_ip(alert: "Alert | None") -> str | None:
     return getattr(alert, "dst_ip", None)
 
 
-def _extract_process(alert: "Alert | None") -> tuple[int | None, str]:
+def _extract_process(alert: Alert | None) -> tuple[int | None, str]:
     if alert is None:
         return None, ""
     pid = getattr(alert, "pid", None)

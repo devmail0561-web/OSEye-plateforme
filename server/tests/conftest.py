@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 # SEC-001 fix: api_keys.py validates OSEYE_SECRET_KEY at import time.
 # Provide a deterministic 32-char test secret so that all test suites can
 # import the module without triggering the RuntimeError guard.
@@ -16,3 +18,19 @@ os.environ.setdefault(
     "OSEYE_SECRET_KEY",
     "test-secret-key-for-pytest-32chars",
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_rate_limiter() -> None:
+    """Reset the module-level slowapi rate-limiter storage before every test.
+
+    The Limiter object in oseye.api.routers.auth is a module-level singleton
+    backed by limits.storage.MemoryStorage.  Without this reset, consecutive
+    test functions that all call POST /api/v1/auth/token from 127.0.0.1 share
+    the same counter and trip the 5-per-minute limit mid-suite.
+    """
+    from oseye.api.routers.auth import limiter  # noqa: PLC0415
+
+    storage = getattr(limiter, "_storage", None)
+    if storage is not None and hasattr(storage, "reset"):
+        storage.reset()

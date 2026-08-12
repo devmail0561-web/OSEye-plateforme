@@ -45,22 +45,44 @@ Depuis la racine du projet :
     make package-all VERSION=x.y.z    — package-agent + package-server
     make init-server                  — initialiser PKI prod + token enrollment (sudo)
 
-Lancer le serveur en dev (avec les variables d'environnement nécessaires) :
+Lancement en développement — étapes à suivre
+==============================================
 
-    cd server && \
-      PYTHONPATH=/chemin/vers/OSEye_project \
-      OSEYE_SECRET_KEY=dev-secret-key-local-testing-only \
-      OSEYE_JWT_PRIVATE_KEY_PATH=$(pwd)/../infra/certs/jwt_private.pem \
-      OSEYE_JWT_PUBLIC_KEY_PATH=$(pwd)/../infra/certs/jwt_public.pem \
-      OSEYE_TLS_CA_CERT_FILE=$(pwd)/../infra/certs/ca.crt \
-      OSEYE_TLS_CA_KEY_FILE=$(pwd)/../infra/certs/ca.key \
-      OSEYE_ENROLLMENT_TOKEN_DIR=/tmp/oseye-dev/tokens \
-      python -m oseye.main
+Prérequis : Docker installé et démarré (pour Redis/Postgres).
 
-    # Puis dans un second terminal :
-    cd ui && VITE_API_URL=http://localhost:8000 npm run dev
+Étape 1 — Générer les stubs protobuf (une seule fois, ou après modif de proto/)
+    bash scripts/generate_proto.sh
 
-    Identifiants dev : admin / admin123  (ou analyst / analyst123)
+Étape 2 — Démarrer Redis et Postgres
+    sudo systemctl start docker   # si le daemon Docker n'est pas lancé
+    make dev-up
+
+Étape 3 — Lancer le serveur (terminal 1)
+    make run-server
+    # génère automatiquement le PKI dev dans infra/certs/ si absent
+    # le serveur écoute sur http://localhost:8000
+
+    Attendre les lignes :
+      INFO: Application startup complete.
+      grpc_server_started port=50051
+
+Étape 4 — Lancer l'UI (terminal 2)
+    make ui-dev
+    # dashboard disponible sur http://localhost:5173
+
+Étape 5 — Se connecter
+    URL      : http://localhost:5173
+    admin    : admin / admin123
+    analyst  : analyst / analyst123
+
+⚠  Notes importantes :
+   - Les stubs proto (étape 1) doivent exister AVANT make run-server, sinon erreur au démarrage.
+   - Si le port 6379 est déjà utilisé (Redis local), arrêter le service local :
+       sudo systemctl stop redis
+     puis relancer make dev-up.
+   - make run-server injecte automatiquement toutes les variables d'environnement nécessaires
+     (SECRET_KEY, JWT keys, enrollment dir). Ne pas les passer manuellement.
+   - Les avertissements "OSEYE_ADMIN_PASSWORD is missing" sont normaux en dev, pas des erreurs.
 
 Tests d'interaction (depuis server/) :
     pytest tests/integration/              — interaction modules (bus, normalizer, storage, API)

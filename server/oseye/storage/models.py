@@ -349,9 +349,9 @@ class ResponseActionRow(Base):
     decision_id:    Mapped[str]            = mapped_column(String(36),  nullable=False, index=True)
     agent_cn:       Mapped[str]            = mapped_column(String(253), nullable=False, index=True)
     command_type:   Mapped[str]            = mapped_column(String(32),  nullable=False)
-    payload:        Mapped[str]            = mapped_column(Text,        nullable=False, default="{}")
+    payload:        Mapped[str]            = mapped_column(Text,        nullable=False, default="{}")  # noqa: E501
     # status: pending_report | executed | failed | rolled_back
-    status:         Mapped[str]            = mapped_column(String(32),  nullable=False, default="pending_report")
+    status:         Mapped[str]            = mapped_column(String(32),  nullable=False, default="pending_report")  # noqa: E501
     created_at:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
     executed_at:    Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
     rolled_back_at: Mapped[datetime | None]= mapped_column(DateTime(timezone=True), nullable=True)
@@ -367,6 +367,6 @@ class AgentRow(Base):
     first_seen:     Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen:      Mapped[datetime]       = mapped_column(DateTime(timezone=True), nullable=False)
     version:        Mapped[str | None]     = mapped_column(String(64),  nullable=True)
-    active_profile: Mapped[str]            = mapped_column(String(64),  nullable=False, default="workstation")
+    active_profile: Mapped[str]            = mapped_column(String(64),  nullable=False, default="workstation")  # noqa: E501
     ip_address:     Mapped[str | None]     = mapped_column(String(45),  nullable=True)
-    online:         Mapped[bool]           = mapped_column(Boolean,     nullable=False, default=False)
+    online:         Mapped[bool]           = mapped_column(Boolean,     nullable=False, default=False)  # noqa: E501

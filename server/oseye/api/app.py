@@ -14,7 +14,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from oseye.api.routers import (
     agents,
     alerts,
-    response_actions,
     api_keys,
     auth,
     cases,
@@ -25,6 +24,7 @@ from oseye.api.routers import (
     incidents,
     plugins,
     policies,
+    response_actions,
     rules,
     snapshots,
     ti,

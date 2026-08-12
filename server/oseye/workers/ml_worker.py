@@ -154,7 +154,7 @@ class MLWorker:
             try:
                 await self._event_repo.update_ml_score(event.event_id, round(ml_score, 3))
             except Exception as exc:  # noqa: BLE001
-                _log.debug("ml_worker_score_persist_error", event_id=str(event.event_id), error=str(exc))
+                _log.debug("ml_worker_score_persist_error", event_id=str(event.event_id), error=str(exc))  # noqa: E501
 
     def checkpoint(self) -> None:
         """Save the model state to disk immediately (idempotent, non-async)."""

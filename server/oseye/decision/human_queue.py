@@ -14,7 +14,7 @@ from uuid import UUID
 from oseye.core.observability import get_logger
 
 if TYPE_CHECKING:
-    from oseye.core.schema import Alert, Decision
+    from oseye.core.schema import Decision
     from oseye.decision.action_executor import ActionExecutor
     from oseye.storage.repositories.decisions import SQLDecisionRepository
 

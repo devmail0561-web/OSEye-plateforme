@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/cilium/ebpf/link"
@@ -131,9 +132,13 @@ func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 	go func() {
 		g, gctx := errgroup.WithContext(ctx)
 
+		var once sync.Once
+		closeOut := func() { once.Do(func() { close(out) }) }
+
 		for i, r := range l.readers {
 			idx, rd := i, r
 			g.Go(func() error {
+				defer closeOut()
 				for {
 					// Unblock rd.Read() when the group context is cancelled.
 					// perf.Reader.SetDeadline is the idiomatic cilium/ebpf way to
@@ -177,7 +182,7 @@ func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 			// a clean shutdown. The caller detects shutdown via channel close.
 			slog.Error("ebpf reader error", slog.String("error", err.Error()))
 		}
-		close(out)
+		closeOut()
 	}()
 
 	return out

@@ -17,6 +17,7 @@ from pathlib import Path
 import httpx
 import redis.asyncio as aioredis
 import uvicorn
+from oseye_sdk.ipc import IPCServer
 
 from oseye.api.app import create_app
 from oseye.api.auth.jwt import JWTHandler
@@ -24,24 +25,28 @@ from oseye.bus.factory import create_bus
 from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.correlation.engine import CorrelationEngine
-from oseye.forensic.case_manager import CaseManager
 from oseye.correlation.linkers.same_host import SameHostLinker
 from oseye.decision.action_executor import ActionExecutor
 from oseye.decision.engine import DecisionEngine, PolicyOverrides
 from oseye.decision.human_queue import HumanApprovalQueue
 from oseye.decision.journal import DecisionJournal
+from oseye.forensic.case_manager import CaseManager
 from oseye.ingest.server import create_grpc_server
+from oseye.ml_engine.engine import MLEngine
 from oseye.normalizer.engine import NormalizerEngine
+from oseye.plugin.manager import PluginManager
+from oseye.plugin.verifier import PluginVerifier
+from oseye.policy.engine import PolicyEngine
 from oseye.rule_engine import RuleEngine
 from oseye.storage.backends.factory import create_backend
+from oseye.storage.repositories.agents import SQLAgentRepository
 from oseye.storage.repositories.alerts import SQLAlertRepository
 from oseye.storage.repositories.api_keys import SQLApiKeyRepository
+from oseye.storage.repositories.blocked_agents import SQLBlockedAgentsRepository
+from oseye.storage.repositories.cases import SQLCaseRepository
 from oseye.storage.repositories.decisions import SQLDecisionRepository
 from oseye.storage.repositories.events import SQLEventRepository
 from oseye.storage.repositories.incidents import SQLIncidentRepository
-from oseye.storage.repositories.agents import SQLAgentRepository
-from oseye.storage.repositories.blocked_agents import SQLBlockedAgentsRepository
-from oseye.storage.repositories.cases import SQLCaseRepository
 from oseye.storage.repositories.response_actions import SQLResponseActionsRepository
 from oseye.storage.repositories.rule_versions import SQLRuleVersionRepository
 from oseye.threat_intel.cache import MemoryTICache, RedisTICache
@@ -49,11 +54,6 @@ from oseye.threat_intel.client import ThreatIntelClient
 from oseye.threat_intel.providers.abuseipdb import AbuseIPDBProvider
 from oseye.threat_intel.providers.misp import MISPProvider
 from oseye.threat_intel.providers.virustotal import VirusTotalProvider
-from oseye.ml_engine.engine import MLEngine
-from oseye.plugin.manager import PluginManager
-from oseye.plugin.verifier import PluginVerifier
-from oseye.policy.engine import PolicyEngine
-from oseye_sdk.ipc import IPCServer
 from oseye.workers.correlation_worker import CorrelationWorker
 from oseye.workers.decision_worker import DecisionWorker
 from oseye.workers.ml_worker import MLWorker
@@ -90,6 +90,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             batch_max_size=settings.batch_max_size,
         )
         rule_engine = RuleEngine(rules_root=_RULES_ROOT, hot_reload=True)
+
+        # ML Engine must be instantiated before RuleWorker (it is injected there
+        # and also into DecisionEngine further below).
+        ml_engine = MLEngine()
+
         rule_worker = RuleWorker(
             bus=bus,
             alert_repo=alert_repo,
@@ -164,10 +169,9 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         )
 
         # ------------------------------------------------------------------
-        # ML Engine — instancié en premier car injecté dans DecisionEngine
+        # ML Worker — ml_engine is already initialised above
         # ------------------------------------------------------------------
 
-        ml_engine = MLEngine()
         ml_worker = MLWorker(
             bus=bus,
             engine=ml_engine,

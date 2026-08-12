@@ -374,7 +374,7 @@ async def export_misp(
 ) -> dict[str, Any]:
     from oseye.forensic.exporter.misp_export import export_misp_event
 
-    case, _, alerts = await _load_case_bundle(case_id, request)
+    case, _events, alerts = await _load_case_bundle(case_id, request)
     return export_misp_event(case, alerts)
 
 
@@ -387,5 +387,5 @@ async def export_thehive(
 ) -> dict[str, Any]:
     from oseye.forensic.exporter.thehive_export import export_thehive_case
 
-    case, _, alerts = await _load_case_bundle(case_id, request)
+    case, _events, alerts = await _load_case_bundle(case_id, request)
     return export_thehive_case(case, alerts)
