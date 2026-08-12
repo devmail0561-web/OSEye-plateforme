@@ -42,12 +42,18 @@ def _load_hmac_secret() -> bytes:
     return raw.encode()
 
 
-_HMAC_SECRET: bytes = _load_hmac_secret()
+_HMAC_SECRET: bytes | None = None
+
+
+def _get_hmac_secret() -> bytes:
+    global _HMAC_SECRET  # noqa: PLW0603
+    if _HMAC_SECRET is None:
+        _HMAC_SECRET = _load_hmac_secret()
+    return _HMAC_SECRET
 
 
 def _hash_key(raw: str) -> str:
-    # F4: HMAC-SHA256 with server secret instead of bare SHA-256
-    return hmac.new(_HMAC_SECRET, raw.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(_get_hmac_secret(), raw.encode(), hashlib.sha256).hexdigest()
 
 
 class SQLApiKeyRepository:

@@ -138,7 +138,6 @@ func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 		for i, r := range l.readers {
 			idx, rd := i, r
 			g.Go(func() error {
-				defer closeOut()
 				for {
 					// Unblock rd.Read() when the group context is cancelled.
 					// perf.Reader.SetDeadline is the idiomatic cilium/ebpf way to

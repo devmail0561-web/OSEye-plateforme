@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+from slowapi.util import get_remote_address as _get_remote_address_raw
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from oseye.api.routers import (
@@ -32,6 +32,14 @@ from oseye.api.routers import (
 from oseye.api.ws.alerts import alerts_ws_manager
 from oseye.api.ws.alerts import router as ws_alerts_router
 from oseye.config import Settings
+
+
+def _get_real_ip(request: Request) -> str:
+    """Extract client IP from X-Forwarded-For when behind a reverse proxy."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return _get_remote_address_raw(request)
 
 
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -83,7 +91,7 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     # -------------------------------------------------------------------
     # Rate limiter (SEC-PREV-002)
     # -------------------------------------------------------------------
-    limiter = Limiter(key_func=get_remote_address)
+    limiter = Limiter(key_func=_get_real_ip)
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 

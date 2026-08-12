@@ -93,7 +93,12 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 	}
 
 	c.running.Store(true)
-	go c.readLoop(ctx, out)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.readLoop(ctx, out)
+	}()
 
 	<-ctx.Done()
 	c.running.Store(false)
@@ -105,6 +110,7 @@ func (c *FanotifyCollector) Start(ctx context.Context, out chan<- collector.RawE
 	if fd := c.fd.Load(); fd >= 0 {
 		c.closeOnce.Do(func() { unix.Close(int(c.fd.Load())) })
 	}
+	wg.Wait()
 	return nil
 }
 

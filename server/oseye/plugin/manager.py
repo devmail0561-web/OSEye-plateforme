@@ -92,41 +92,38 @@ class PluginManager:
         name = path.stem
 
         # SEC-PLUGIN-003: signature enforcement
+        if self._require_signature and self._verifier is None:
+            raise ValueError(
+                "Plugin signature verification is required "
+                "(OSEYE_PLUGIN_REQUIRE_SIGNATURE=true) but no trusted keys are "
+                "configured. Add Ed25519 public keys to plugin_keys_dir."
+            )
+
+        sig_path = path.with_suffix(".sig")
+        needs_verify = False
         if self._require_signature:
-            # Hard requirement — reject if no verifier (keys directory missing)
-            if self._verifier is None:
-                raise ValueError(
-                    "Plugin signature verification is required "
-                    "(OSEYE_PLUGIN_REQUIRE_SIGNATURE=true) but no trusted keys are "
-                    "configured. Add Ed25519 public keys to plugin_keys_dir."
-                )
-            sig_path = path.with_suffix(".sig")
             if not sig_path.exists():
                 raise ValueError(
                     f"Signature file not found: {sig_path}. "
                     "Provide a .sig file alongside the plugin."
                 )
-            if not self._verifier.verify(path, sig_path):
-                raise ValueError(
-                    f"Signature verification failed for plugin {name!r}. "
-                    "Ensure the plugin is signed with a trusted key."
-                )
-        elif verify and self._verifier is not None:
-            # Best-effort: verify if verifier present and caller requested it
-            sig_path = path.with_suffix(".sig")
-            if not sig_path.exists():
-                logger.warning(
-                    "Plugin %r: signature file not found — installing without verification",
-                    name,
-                )
-            elif not self._verifier.verify(path, sig_path):
-                raise ValueError(
-                    f"Signature verification failed for plugin {name!r}"
-                )
+            needs_verify = True
+        elif verify and self._verifier is not None and sig_path.exists():
+            needs_verify = True
 
         dest = self._plugins_dir / path.name
         async with self._lock:
             shutil.copy2(path, dest)
+
+            # PL-03: verify AFTER copy to eliminate TOCTOU window
+            if needs_verify and self._verifier is not None:
+                if not self._verifier.verify(dest, sig_path):
+                    dest.unlink(missing_ok=True)
+                    raise ValueError(
+                        f"Signature verification failed for plugin {name!r}. "
+                        "Ensure the plugin is signed with a trusted key."
+                    )
+
             info = PluginInfo(name=name, path=dest, status=PluginStatus.LOADED)
             self._plugins[name] = info
             logger.info("Installed plugin %r -> %s", name, dest)

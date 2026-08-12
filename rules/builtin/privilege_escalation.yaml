@@ -7,7 +7,7 @@
   platforms: [linux]
   condition: |
     event.category == "process"
-    and event.type == "exec"
+    and (event.type == "execve" or event.type == "exec")
     and event.uid != 0
     and (
       (event.executable contains "find" and event.cmdline contains "-exec")
@@ -36,9 +36,10 @@
   condition: |
     event.category == "process"
     and event.process_name == "sudo"
-    and (event.cmdline contains "bash" or event.cmdline contains "sh"
+    and (event.cmdline contains "bash" or event.cmdline contains "/bin/sh"
          or event.cmdline contains "python" or event.cmdline contains "perl"
-         or event.cmdline contains "-i" or event.cmdline contains "su -")
+         or event.cmdline contains " -i " or event.cmdline ends_with " -i"
+         or event.cmdline contains "su -")
   timeframe: null
   threshold: null
   actions: [ALERT]

@@ -81,8 +81,9 @@ class AsyncCircuitBreaker:
             async with self._lock:
                 self._failure_count += 1
                 if self._state == _HALF_OPEN or self._failure_count >= self._fail_max:
+                    if self._state != _OPEN:
+                        self._opened_at = time.monotonic()
                     self._state = _OPEN
-                    self._opened_at = time.monotonic()
                     logger.warning(
                         "circuit_opened name=%s failures=%d",
                         self._name,

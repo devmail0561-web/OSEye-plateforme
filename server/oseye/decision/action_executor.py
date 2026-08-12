@@ -22,6 +22,7 @@ CIA principles:
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import uuid
 from typing import TYPE_CHECKING
@@ -209,6 +210,16 @@ class ActionExecutor:
                 "action_isolate_no_ip",
                 decision_id=str(decision.decision_id),
                 note="no dst_ip available — BLOCK_IP skipped",
+            )
+            return None
+
+        try:
+            ipaddress.ip_address(dst_ip)
+        except ValueError:
+            _log.warning(
+                "action_isolate_invalid_ip",
+                decision_id=str(decision.decision_id),
+                dst_ip=dst_ip,
             )
             return None
 

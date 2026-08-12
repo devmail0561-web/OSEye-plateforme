@@ -103,7 +103,12 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 	}
 
 	c.running.Store(true)
-	go c.readLoop(ctx, out)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.readLoop(ctx, out)
+	}()
 
 	<-ctx.Done()
 	c.running.Store(false)
@@ -115,6 +120,7 @@ func (c *InotifyCollector) Start(ctx context.Context, out chan<- collector.RawEv
 	if fd := c.fd.Load(); fd >= 0 {
 		c.closeOnce.Do(func() { unix.Close(int(c.fd.Load())) })
 	}
+	wg.Wait()
 	return nil
 }
 

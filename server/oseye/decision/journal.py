@@ -7,6 +7,7 @@ The genesis entry uses a zero hash as prev_hash.
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 import blake3
@@ -53,6 +54,8 @@ class DecisionJournal:
         self._last_hash = new_hash
         return prev, new_hash
 
+    _HASH_RE = re.compile(r"[0-9a-f]{64}")
+
     def rollback(self, prev_hash: str) -> None:
         """Revert _last_hash to *prev_hash* after a failed persist.
 
@@ -60,6 +63,8 @@ class DecisionJournal:
         :meth:`commit` call while the journal lock is still held (or
         re-acquired).
         """
+        if not self._HASH_RE.fullmatch(prev_hash):
+            raise ValueError(f"Invalid prev_hash format: {prev_hash!r}")
         self._last_hash = prev_hash
 
     def verify_chain(self, decisions: list[Decision]) -> list[int]:

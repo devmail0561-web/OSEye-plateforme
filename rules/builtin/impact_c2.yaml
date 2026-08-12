@@ -30,7 +30,9 @@
   condition: |
     event.category == "process"
     and (event.process_name == "xmrig" or event.process_name == "minerd"
-         or event.executable contains "xmrig" or event.executable contains "stratum+tcp"
+         or event.process_name == "cpuminer" or event.process_name == "ethminer"
+         or event.executable contains "xmrig" or event.executable contains "minerd"
+         or event.executable contains "cpuminer" or event.executable contains "ethminer"
          or event.cmdline contains "stratum+tcp" or event.cmdline contains "xmrig"
          or event.cmdline contains "--mining")
   timeframe: null

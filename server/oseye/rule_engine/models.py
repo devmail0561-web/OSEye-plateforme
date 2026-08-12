@@ -24,6 +24,7 @@ class RuleDefinition:
     categories: list[str]  # empty = all categories (used for index-based fast dispatch)
     explanation: str
     source: str  # builtin | custom
+    entity_key: str | None = None  # e.g. "hostname:src_ip" for temporal rules
 
 
 @dataclass(slots=True)

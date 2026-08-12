@@ -195,6 +195,8 @@ class CaseNote(BaseModel):
 
 
 class ForensicCase(BaseModel):
+    model_config = {"validate_assignment": True}
+
     case_id: UUID
     created_at: datetime
     updated_at: datetime

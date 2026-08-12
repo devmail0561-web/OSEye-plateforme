@@ -98,7 +98,7 @@ class CaseManager:
             if case is None:
                 raise ValueError(f"Case {case_id} not found")
             for k, v in fields.items():
-                object.__setattr__(case, k, v)
+                setattr(case, k, v)
             case.updated_at = datetime.now(UTC)
             await self._repo.update(case)
             detail = ", ".join(f"{k}={v}" for k, v in fields.items())

@@ -23,6 +23,9 @@ from oseye.core.observability import get_logger
 
 _logger = get_logger(__name__)
 
+# API-03: default /tmp is world-readable (mode 0644).
+# In production, set OSEYE_DATA_DIR=/var/lib/oseye (owned root:oseye, mode 0750)
+# so that revoked_tokens.json is not accessible to other users on the host.
 _BLOCKLIST_FILE = pathlib.Path(
     os.environ.get("OSEYE_DATA_DIR", "/tmp")  # noqa: S108
 ) / "revoked_tokens.json"
@@ -60,6 +63,13 @@ class JWTHandler:
         # B-05: persisted to disk so the blocklist survives restarts.
         self._revoked_lock = threading.Lock()
         self._revoked: dict[str, datetime] = self._load_blocklist()
+        # API-03: tighten permissions on the existing file so it is not
+        # world-readable even when OSEYE_DATA_DIR defaults to /tmp.
+        if _BLOCKLIST_FILE.exists():
+            try:
+                _BLOCKLIST_FILE.chmod(0o600)
+            except OSError:
+                pass
 
     # ------------------------------------------------------------------
     # Token creation
@@ -207,5 +217,6 @@ class JWTHandler:
             tmp = _BLOCKLIST_FILE.with_suffix(".tmp")
             tmp.write_text(json.dumps(snapshot))
             tmp.rename(_BLOCKLIST_FILE)
+            _BLOCKLIST_FILE.chmod(0o600)
         except Exception as exc:  # noqa: BLE001
             _logger.warning("jwt_blocklist_save_failed", error=str(exc))

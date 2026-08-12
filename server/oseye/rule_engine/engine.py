@@ -96,13 +96,18 @@ class RuleEngine:
                 candidates = candidates + category_rules
 
         # Correction 4 — stable entity_key with PID reuse guard
-        entity_key = _stable_entity_key(event)
+        default_entity_key = _stable_entity_key(event)
 
         matches: list[RuleMatch] = []
         for rule in candidates:
             if not rule.enabled:
                 continue
             try:
+                entity_key = (
+                    _build_entity_key(rule.entity_key, event)
+                    if rule.entity_key
+                    else default_entity_key
+                )
                 if _eval.evaluate(rule, event, entity_key=entity_key):
                     matches.append(
                         RuleMatch(
@@ -391,6 +396,12 @@ class RuleEngine:
                 except OSError:
                     pass
         return total
+
+
+def _build_entity_key(template: str, event: UniversalEvent) -> str:
+    """Build an entity key from a YAML-defined template like 'hostname:src_ip'."""
+    parts = template.split(":")
+    return ":".join(str(getattr(event, p, "") or "") for p in parts)
 
 
 def _stable_entity_key(event: UniversalEvent) -> str:

@@ -38,21 +38,22 @@
 - id: rule_timestomp
   name: "Manipulation des horodatages de fichiers (timestomping)"
   enabled: true
-  severity: medium
+  severity: low
   tags: [defense_evasion, timestomp]
   mitre: [T1070.006]
   platforms: [linux]
   condition: |
     event.category == "process"
-    and (event.process_name == "touch" or event.cmdline contains "touch -t"
-         or event.cmdline contains "touch -d")
+    and (event.cmdline contains "touch -t" or event.cmdline contains "touch -d")
     and event.uid != 0
+    and not(event.resource starts_with "/tmp/")
+    and not(event.resource starts_with "/var/tmp/")
   timeframe: null
   threshold: null
   actions: [ALERT]
   explanation: >
-    Modification des timestamps de fichiers via touch.
-    Permet de masquer les indicateurs de compromission en altérant les dates.
+    Modification explicite des timestamps via touch -t/-d en dehors des
+    répertoires temporaires. Peut masquer des indicateurs de compromission.
 
 - id: rule_disable_selinux_apparmor
   name: "Désactivation de SELinux ou AppArmor"

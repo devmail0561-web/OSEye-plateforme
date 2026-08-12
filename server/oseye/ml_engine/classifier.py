@@ -101,20 +101,26 @@ class MITREClassifier:
 
         return max_prob * 100.0
 
-    def negative_feedback(self, event: UniversalEvent) -> None:
-        """Apply a negative (false-positive) update to every known technique model.
+    def negative_feedback(
+        self, event: UniversalEvent, techniques: list[str] | None = None
+    ) -> None:
+        """Apply a negative (false-positive) update to technique models.
 
-        ML-R-06: called when an alert is marked as a false positive.  Runs
-        learn_one(features, False) on all existing technique models so that future
-        events similar to this one are scored lower across all techniques.
-
-        Unlike learn(event, []) — which exits immediately when techniques is empty —
-        this method always updates models when at least one technique is known.
+        ML-R-06: called when an alert is marked as a false positive.
+        If *techniques* is provided, only those specific technique models are
+        updated (avoids poisoning unrelated classifiers). Falls back to updating
+        all models when techniques is None or empty.
         """
         if not self._models:
             return
         features = extract(event)
-        for model in self._models.values():
+        if techniques:
+            target_models = [
+                self._models[t] for t in techniques if t in self._models
+            ]
+        else:
+            target_models = list(self._models.values())
+        for model in target_models:
             model.learn_one(features, False)  # type: ignore[no-untyped-call]
 
     @property

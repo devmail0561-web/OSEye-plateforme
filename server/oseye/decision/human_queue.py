@@ -113,7 +113,7 @@ class HumanApprovalQueue:
                 decision_id=str(decision_id),
                 existing=decision.human_decision,
             )
-            return decision
+            return None  # D-01: already decided — do not re-trigger execute_after_approval
 
         now = datetime.now(UTC)
         # F-03: update_human_decision uses WHERE human_decision IS NULL — atomic.

@@ -42,10 +42,9 @@ class BatchValidator:
         events = list(request.events)  # type: ignore[attr-defined]
 
         # --- Batch-level signature check ---
-        # When no key is registered for an agent the signature check is skipped
-        # with a WARNING (logged by the caller) to allow mTLS-verified agents
-        # that have not yet uploaded their Ed25519 key.  Only field validation
-        # is enforced in that case.
+        # PC-04: when agent_public_key is None, skip signature verification but
+        # log. The grpc_service layer is responsible for rejecting agents without
+        # keys when require_keys mode is active.
         if events and agent_public_key is not None:
             h = blake3.blake3()
             for ev in events:

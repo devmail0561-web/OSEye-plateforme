@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import resource
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ class PluginSandbox:
                 _move_to_cgroup(self._cgroup_path)
 
         self._process = await asyncio.create_subprocess_exec(
-            "python",
+            sys.executable,
             "-m",
             self._plugin_module,
             "--socket",

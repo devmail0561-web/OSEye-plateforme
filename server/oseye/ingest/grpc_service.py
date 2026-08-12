@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import queue as _queue
+import re
 import threading
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
@@ -71,6 +72,9 @@ def _extract_cn_from_context(context: grpc.ServicerContext) -> str | None:
         return None
 
 
+_CN_RE = re.compile(r"^[a-zA-Z0-9._-]{1,253}$")
+
+
 def _require_cn(
     context: grpc.ServicerContext,
     blocked_cns: set[str] | None = None,
@@ -79,11 +83,16 @@ def _require_cn(
     """Return the CN or abort the RPC with UNAUTHENTICATED / PERMISSION_DENIED.
 
     SEC-PREV-001: agent_id MUST come from the cert CN, never from the payload.
+    PC-02: CN is validated against a strict pattern to prevent injection into
+    Redis topic names (commands:{cn}).
     Revoked agents are rejected with PERMISSION_DENIED.
     """
     cn = _extract_cn_from_context(context)
     if cn is None:
         context.abort(grpc.StatusCode.UNAUTHENTICATED, "mTLS client certificate CN required")
+        return None
+    if not _CN_RE.match(cn):
+        context.abort(grpc.StatusCode.UNAUTHENTICATED, f"Invalid agent CN format: {cn!r}")
         return None
     if blocked_cns is not None and blocked_lock is not None:
         with blocked_lock:
@@ -112,11 +121,14 @@ class AgentServiceServicer:
         loop: asyncio.AbstractEventLoop | None = None,
         agent_keys: dict[str, bytes] | None = None,
         agent_repo: Any | None = None,
+        *,
+        require_agent_keys: bool = False,
     ) -> None:
         self._bus = bus
         self._validator = validator
         self._loop = loop
         self._agent_repo = agent_repo
+        self._require_agent_keys = require_agent_keys
         # Registry of agent CN → DER-encoded Ed25519 public key bytes.
         # Populated via register_agent_key() or passed at construction time.
         # Protected by _agent_keys_lock for concurrent access from gRPC threads.
@@ -188,6 +200,12 @@ class AgentServiceServicer:
             agent_public_key = self._get_agent_key(cn)
             if agent_public_key is None:
                 _logger.warning("agent_key_not_registered", cn=cn)
+                if self._require_agent_keys:
+                    context.abort(
+                        grpc.StatusCode.UNAUTHENTICATED,
+                        f"No Ed25519 public key registered for agent {cn!r}",
+                    )
+                    return
             result = self._validator.validate(request, agent_public_key=agent_public_key)
             total_accepted += result.accepted
             total_rejected += result.rejected

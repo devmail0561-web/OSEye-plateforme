@@ -49,6 +49,8 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
             str(c) for c in (categories_raw if isinstance(categories_raw, list) else [])
         ]
         explanation = str(data.get("explanation", ""))
+        entity_key_raw = data.get("entity_key")
+        entity_key = str(entity_key_raw) if entity_key_raw else None
         return RuleDefinition(
             id=rule_id,
             name=name,
@@ -64,6 +66,7 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
             categories=categories,
             explanation=explanation,
             source=source,
+            entity_key=entity_key,
         )
     except (KeyError, TypeError, ValueError) as exc:
         _log.warning("rule_parse_error", error=str(exc))
