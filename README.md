@@ -35,7 +35,7 @@ Elle collecte les événements système en temps réel (eBPF, auditd, procfs, r�
                                       [SQLite / PostgreSQL / ClickHouse]
 ```
 
-Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) pour la documentation complète.
+Voir la [documentation complète](https://oseye.github.io/oseye/) ou [`docs/internal/ARCHITECTURE.md`](docs/internal/ARCHITECTURE.md) pour les détails techniques.
 
 ## Démarrage rapide
 
@@ -62,7 +62,7 @@ curl http://localhost:8000/api/v1/health
 
 | Composant | Technologie |
 |-----------|-------------|
-| Agent | Go 1.23, eBPF (cilium/ebpf), gRPC, backoff full-jitter |
+| Agent | Go 1.23, eBPF (cilium/ebpf), gRPC, backoff full-jitter, `oseye-config` CLI |
 | Server | Python 3.12, FastAPI, SQLAlchemy 2.0, asyncio |
 | ML | River (HalfSpaceTrees + LogisticRegression online), checkpoint pickle |
 | Bus | InMemoryBus (dev) / Redis Streams (prod) / Kafka (distribué) |
@@ -106,6 +106,26 @@ Upload depuis le dashboard admin → `/api/v1/plugins/upload`. Signature Ed25519
 
 **293 tests Python** (unit + integration + scénarios), **20+ packages Go** — tout vert.
 
+## Configuration agent
+
+L'agent se configure via variables d'environnement (fichier `/etc/oseye/agent.env` chargé par systemd). L'outil CLI `oseye-config` permet de gérer la configuration en toute sécurité :
+
+```bash
+# Afficher la config effective
+oseye-config show
+
+# Valider la configuration courante
+oseye-config validate
+
+# Modifier une valeur (validation + écriture atomique)
+oseye-config set OSEYE_GRPC_ADDR=server.prod:50051
+
+# Vérifier que les certificats existent
+oseye-config check-files
+```
+
+Toutes les valeurs sont validées strictement au démarrage (ports numériques, paths absolus, UUID v4, bounds CPU/RAM/batch).
+
 ## Variables d'environnement clés
 
 | Variable | Défaut dev | Description |
@@ -121,11 +141,12 @@ Upload depuis le dashboard admin → `/api/v1/plugins/upload`. Signature Ed25519
 
 | Document | Description |
 |----------|-------------|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Architecture complète — stack, interfaces, API, sécurité |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Suivi de progression — phases, modules, correctifs |
+| [Site officiel](https://oseye.github.io/oseye/) | Documentation complète — installation, configuration, déploiement |
+| [`docs/DESCRIPTION.md`](docs/DESCRIPTION.md) | Description fonctionnelle du projet |
 | [`SECURITY.md`](SECURITY.md) | Politique de sécurité — signalement, mécanismes CIA |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Workflow de contribution |
+| [`CHANGELOG.md`](CHANGELOG.md) | Historique des versions |
 | [`sdk/README.md`](sdk/README.md) | Documentation du Plugin SDK |
+| [`docs/internal/`](docs/internal/) | Documentation développeur (architecture, plans, progression) |
 
 ## Licence
 

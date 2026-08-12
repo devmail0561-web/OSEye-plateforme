@@ -36,6 +36,12 @@ infra/certs/
 ui/node_modules/
 ui/dist/
 ui/.env.local
+ui/coverage/
+
+# Site docs
+site/node_modules/
+site/dist/
+site/.astro/
 
 # IDE
 .idea/

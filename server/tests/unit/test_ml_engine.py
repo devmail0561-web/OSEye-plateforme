@@ -361,7 +361,8 @@ class TestMLEngine:
         from oseye.decision.journal import DecisionJournal
 
         mock_ml = MagicMock()
-        mock_ml.score_event.return_value = 80.0
+        # Engine prefers score_event_readonly (no training side-effect)
+        mock_ml.score_event_readonly.return_value = 80.0
 
         engine = DecisionEngine(
             journal=DecisionJournal(),
@@ -383,7 +384,7 @@ class TestMLEngine:
         )
 
         decision = asyncio.run(engine.decide(incident, trigger_event=ev))
-        mock_ml.score_event.assert_called_once_with(ev)
+        mock_ml.score_event_readonly.assert_called_once_with(ev)
         assert decision.ml_score == pytest.approx(80.0)
 
     def test_ml_score_zero_without_event(self) -> None:

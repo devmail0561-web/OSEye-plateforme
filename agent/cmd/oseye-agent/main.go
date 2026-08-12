@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -29,15 +30,23 @@ import (
 	"github.com/oseye/agent/internal/watchdog"
 )
 
+var version = "dev"
+
 const (
 	fanInBufSize  = 512
 	shutdownDrain = 5 * time.Second
 )
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Printf("oseye-agent %s\n", version)
+		os.Exit(0)
+	}
+
 	// H2 fix: set as default so all packages (watchdog, policy, commands) use JSON logger.
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(log)
+	log.Info("starting oseye-agent", "version", version)
 
 	cfg, err := config.Load()
 	if err != nil {

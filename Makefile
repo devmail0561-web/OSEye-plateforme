@@ -21,8 +21,9 @@ export VENV_PYTHON := $(PYTHON)
         lint lint-py lint-go typecheck \
         audit dev-up dev-down \
         run-server run-agent run-workers dev-certs \
-        ui-dev ui-build ui-test ui-lint \
-        package-agent package-server package-all init-server
+        ui-dev ui-build ui-test ui-lint site-dev \
+        package-agent package-server package-all init-server \
+        version checksums build-agent build-config
 
 # Variables de contrôle
 PYTEST_OPTS ?=
@@ -77,6 +78,9 @@ help:
 	@echo "  run-server        — serveur FastAPI (SQLite + InMemoryBus, port 8000)"
 	@echo "  run-workers       — workers background"
 	@echo "  run-agent         — agent (buffer SQLite, sans TLS)"
+	@echo ""
+	@echo "Site documentation"
+	@echo "  site-dev          — site docs Starlight (port 4321)"
 	@echo ""
 	@echo "Packaging & déploiement"
 	@echo "  package-agent     — build .deb + .rpm pour oseye-agent (requiert nfpm)"
@@ -208,6 +212,10 @@ ui-dev:
 	@echo "==> Lancement du dashboard UI (port 5173)"
 	cd $(UI_DIR) && npm run dev
 
+site-dev:
+	@echo "==> Lancement du site docs (port 4321)"
+	cd $(CURDIR)/site && npx astro dev --port 4321
+
 ui-build:
 	@echo "==> Build de production UI → ui/dist/"
 	cd $(UI_DIR) && npm ci --ignore-scripts && npm run build
@@ -234,22 +242,40 @@ run-agent-mtls:
 
 # ── Packaging ─────────────────────────────────────────────────────────────────
 
-VERSION  ?= 0.1.0
+VERSION  ?= $(shell cat VERSION 2>/dev/null || echo "0.0.0-dev")
 DIST_DIR := $(CURDIR)/dist
 NFPM     := nfpm
+LDFLAGS  := -s -w -X main.version=$(VERSION)
+
+version:
+	@echo $(VERSION)
+
+# Convenience aliases for relative paths
+build-agent: $(DIST_DIR)/oseye-agent
+build-config: $(DIST_DIR)/oseye-config
 
 # Build the static agent binary
 $(DIST_DIR)/oseye-agent:
-	@echo "==> Build agent Go statique (CGO_ENABLED=0)"
+	@echo "==> Build oseye-agent $(VERSION) (CGO_ENABLED=0, -trimpath)"
 	mkdir -p $(DIST_DIR)
 	cd agent && CGO_ENABLED=0 GOOS=linux \
-	  $(GOBIN)/go build \
-	  -ldflags "-s -w -X main.version=$(VERSION)" \
+	  $(GOBIN)/go build -trimpath \
+	  -ldflags "$(LDFLAGS)" \
 	  -o $(DIST_DIR)/oseye-agent \
 	  ./cmd/oseye-agent
 
+# Build the config CLI binary
+$(DIST_DIR)/oseye-config:
+	@echo "==> Build oseye-config $(VERSION) (CGO_ENABLED=0, -trimpath)"
+	mkdir -p $(DIST_DIR)
+	cd agent && CGO_ENABLED=0 GOOS=linux \
+	  $(GOBIN)/go build -trimpath \
+	  -ldflags "$(LDFLAGS)" \
+	  -o $(DIST_DIR)/oseye-config \
+	  ./cmd/oseye-config
+
 # Build .deb + .rpm packages for the agent
-package-agent: $(DIST_DIR)/oseye-agent
+package-agent: $(DIST_DIR)/oseye-agent $(DIST_DIR)/oseye-config
 	@echo "==> Packaging oseye-agent $(VERSION) (.deb + .rpm)"
 	mkdir -p $(DIST_DIR)
 	VERSION=$(VERSION) $(NFPM) package \
@@ -257,6 +283,11 @@ package-agent: $(DIST_DIR)/oseye-agent
 	  --target $(DIST_DIR)
 	@echo "==> Packages:"
 	@ls -lh $(DIST_DIR)/oseye-agent_* 2>/dev/null || true
+
+# Generate SHA256SUMS for all dist artifacts
+checksums:
+	@echo "==> Generating SHA256SUMS"
+	cd $(DIST_DIR) && sha256sum * > SHA256SUMS
 
 # Build production Docker images for the server stack
 package-server:
