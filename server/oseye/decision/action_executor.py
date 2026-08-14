@@ -48,8 +48,12 @@ class ActionExecutor:
                        and to commands:{cn} for response commands.
     """
 
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, response_actions_repo=None) -> None:
         self._bus = bus
+        # Optional repository for persisting pending response actions.
+        # When provided, every emitted command is recorded so offline agents
+        # don't silently lose commands (D-01 fix).
+        self._response_actions_repo = response_actions_repo
 
     async def execute(self, decision: Decision, alert: Alert | None = None) -> None:
         """Dispatch the decision to the appropriate topic(s)."""
@@ -89,7 +93,25 @@ class ActionExecutor:
         # is persisted); fall back to [decision_type] so side-effects still fire.
         effective_types: list[str] = decision_types if decision_types else [decision_type]
         if "ISOLATE" in effective_types:
-            await self._emit_block_ip_command(decision, alert)
+            command_id = await self._emit_block_ip_command(decision, alert)
+            if command_id and self._response_actions_repo is not None:
+                from oseye.storage.models import ResponseAction
+                import datetime
+                action = ResponseAction(
+                    command_id=command_id,
+                    command_type="BLOCK_IP",
+                    agent_cn=decision.entity_id,
+                    status="pending",
+                    created_at=datetime.datetime.now(datetime.UTC),
+                )
+                try:
+                    await self._response_actions_repo.save(action)
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "action_executor: failed to persist pending BLOCK_IP",
+                        extra={"error": str(exc)},
+                    )
         if "INVESTIGATE" in effective_types:
             await self._request_forensic_snapshot(decision)
         if "COLLECT_MORE" in effective_types:

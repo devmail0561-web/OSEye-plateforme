@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.storage.models import AgentRow
@@ -23,35 +22,38 @@ class SQLAgentRepository:
         version: str | None = None,
         active_profile: str = "workstation",
     ) -> None:
-        """Insert or update an agent record atomically via INSERT OR REPLACE."""
-        now = datetime.now(UTC)
-        # Build the conditional update dict: only overwrite optional fields when provided.
-        update_dict: dict = {"last_seen": now, "online": online}
-        if ip_address is not None:
-            update_dict["ip_address"] = ip_address
-        if version is not None:
-            update_dict["version"] = version
-        if active_profile:
-            update_dict["active_profile"] = active_profile
+        """Insert or update an agent record using a dialect-agnostic select+update/insert.
 
-        stmt = (
-            sqlite_insert(AgentRow)
-            .values(
-                cn=cn,
-                first_seen=now,
-                last_seen=now,
-                version=version,
-                active_profile=active_profile,
-                ip_address=ip_address,
-                online=online,
-            )
-            .on_conflict_do_update(
-                index_elements=["cn"],
-                set_=update_dict,
-            )
-        )
+        Replaces the previous SQLite-specific INSERT OR REPLACE so that this
+        repository works with both SQLite (development) and PostgreSQL (production).
+        """
+        now = datetime.now(UTC)
         async with self._session_factory() as session:
-            await session.execute(stmt)
+            existing = (
+                await session.execute(select(AgentRow).where(AgentRow.cn == cn))
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(
+                    AgentRow(
+                        cn=cn,
+                        first_seen=now,
+                        last_seen=now,
+                        version=version,
+                        active_profile=active_profile,
+                        ip_address=ip_address,
+                        online=online,
+                    )
+                )
+            else:
+                existing.last_seen = now
+                existing.online = online
+                if ip_address is not None:
+                    existing.ip_address = ip_address
+                if version is not None:
+                    existing.version = version
+                if active_profile:
+                    existing.active_profile = active_profile
+            await session.flush()
             await session.commit()
 
     async def set_offline(self, cn: str) -> None:

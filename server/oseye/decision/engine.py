@@ -163,6 +163,18 @@ class DecisionEngine:
         The journal lock is held during hash computation to ensure serial
         ordering of chain entries even under concurrent correlated incidents.
 
+        .. warning:: CALLER MUST NOT CALL decide() CONCURRENTLY without an
+            external asyncio.Lock covering both decide() AND the subsequent DB
+            persist.  The internal ``self._lock`` protects only journal.commit().
+            If two callers each call decide() and the first caller's DB persist
+            fails, rollback_journal() reverts the chain to prev_hash — but the
+            second caller's journal entry was already committed on top of the
+            first one's hash, so the chain becomes inconsistent.
+            To prevent this, DecisionWorker (or any caller handling multiple
+            concurrent incidents) MUST hold a single external lock for the full
+            decide() + decision_repo.create() + (rollback_journal on failure)
+            cycle.  See rollback_journal() for the recovery path.
+
         Parameters
         ----------
         incident:      Correlated incident to decide on.

@@ -218,9 +218,46 @@ class PluginManager:
     # ------------------------------------------------------------------
 
     def _discover(self) -> None:
-        """Scan plugins_dir for existing .py files and register them."""
+        """Scan plugins_dir for existing .py files and register them.
+
+        When require_signature=True, each discovered plugin must have a
+        corresponding .sig file that passes verification.  Plugins without a
+        valid signature are registered with status=ERROR and skipped — they
+        will not be enabled until the signature issue is resolved (PL-02 fix).
+        """
         for py_file in sorted(self._plugins_dir.glob("*.py")):
             name = py_file.stem
+            if self._require_signature:
+                sig_path = py_file.with_suffix(".sig")
+                if not sig_path.exists():
+                    logger.warning(
+                        "plugin_discover_no_sig: signature file missing for %r "
+                        "(require_signature=True) — plugin not loaded",
+                        name,
+                    )
+                    self._plugins[name] = PluginInfo(
+                        name=name,
+                        path=py_file,
+                        status=PluginStatus.ERROR,
+                        error="signature file missing — plugin not loaded (require_signature=True)",
+                    )
+                    continue
+                if self._verifier is not None:
+                    try:
+                        self._verifier.verify(py_file, sig_path)
+                    except Exception as exc:
+                        logger.warning(
+                            "plugin_discover_sig_invalid: signature invalid for %r: %s",
+                            name,
+                            exc,
+                        )
+                        self._plugins[name] = PluginInfo(
+                            name=name,
+                            path=py_file,
+                            status=PluginStatus.ERROR,
+                            error=f"signature invalid: {exc}",
+                        )
+                        continue
             self._plugins[name] = PluginInfo(
                 name=name,
                 path=py_file,
