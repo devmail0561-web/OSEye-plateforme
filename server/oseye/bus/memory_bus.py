@@ -23,9 +23,9 @@ class InMemoryEventBus:
     async def publish(self, topic: str, message: bytes) -> None:
         if self._closed:
             return
-        for queue in self._topic_queues.get(topic, {}).values():
+        for queue in list(self._topic_queues.get(topic, {}).values()):
             await queue.put(message)
-        for pat, pqueue in self._pattern_queues.values():
+        for pat, pqueue in list(self._pattern_queues.values()):
             if fnmatch.fnmatch(topic, pat):
                 await pqueue.put((topic, message))
 

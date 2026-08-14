@@ -35,6 +35,11 @@ func Open(path string) (*Buffer, error) {
 	// Enforce a single writer to avoid SQLITE_BUSY on concurrent access.
 	db.SetMaxOpenConns(1)
 
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("buffer: set wal mode: %w", err)
+	}
+
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("buffer: init schema: %w", err)

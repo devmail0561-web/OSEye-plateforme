@@ -13,6 +13,10 @@ from oseye.core.schema import CaseNote, CustodyEntry, EvidenceItem, ForensicCase
 from oseye.storage.interface import Pagination
 from oseye.storage.repositories.cases import SQLCaseRepository
 
+_UPDATABLE_FIELDS: frozenset[str] = frozenset({
+    "title", "description", "severity", "status", "tags", "assigned_to",
+})
+
 
 def _custody_hash(prev_hash: str, timestamp: str, operator: str, action: str, detail: str) -> str:
     """BLAKE2b-256 of a pipe-delimited string for tamper-evident chaining."""
@@ -98,6 +102,8 @@ class CaseManager:
             if case is None:
                 raise ValueError(f"Case {case_id} not found")
             for k, v in fields.items():
+                if k not in _UPDATABLE_FIELDS:
+                    raise ValueError(f"Field {k!r} cannot be updated via update_case()")
                 setattr(case, k, v)
             case.updated_at = datetime.now(UTC)
             await self._repo.update(case)

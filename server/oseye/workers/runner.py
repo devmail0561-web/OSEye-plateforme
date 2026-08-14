@@ -52,12 +52,15 @@ async def run_workers(settings: Settings) -> None:
             # topic format: events:raw:{agent_id}
             parts = topic.split(":")
             agent_id = parts[2] if len(parts) >= 3 else "unknown"
-            await normalizer.process(
-                raw_payload=message,
-                source="procfs",
-                os_name="linux",
-                agent_id=agent_id,
-            )
+            try:
+                await normalizer.process(
+                    raw_payload=message,
+                    source="procfs",
+                    os_name="linux",
+                    agent_id=agent_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _logger.error("normalizer_loop_error", agent_id=agent_id, error=str(exc))
             if stop.is_set():
                 break
 

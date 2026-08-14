@@ -48,6 +48,10 @@ func OpenStateStore(path string) (*StateStore, error) {
 		return nil, fmt.Errorf("responder: open state db: %w", err)
 	}
 	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("responder: set wal mode: %w", err)
+	}
 	if _, err := db.Exec(stateSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("responder: init state schema: %w", err)

@@ -41,9 +41,6 @@ _W_CLASSIFIER = 0.3
 
 _logger = logging.getLogger(__name__)
 
-_DEFAULT_HMAC_KEY = "dev-insecure-key"
-
-
 # ML-R-03: MAC helpers accept the key as an explicit parameter — no module-level
 # secret.  The key is owned by MLEngine.__init__ and passed here on every call.
 def _compute_mac(path: Path, key: bytes) -> bytes:
@@ -86,10 +83,10 @@ class MLEngine:
         if hmac_key is not None:
             self._hmac_key = hmac_key
         else:
-            raw = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", _DEFAULT_HMAC_KEY)
-            if raw == _DEFAULT_HMAC_KEY:
-                _logger.warning(
-                    "OSEYE_CHECKPOINT_HMAC_KEY is not set — using insecure default key. "
+            raw = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", "")
+            if not raw:
+                raise RuntimeError(
+                    "OSEYE_CHECKPOINT_HMAC_KEY environment variable is not set. "
                     "Generate a secret with: openssl rand -hex 32"
                 )
             self._hmac_key = raw.encode()

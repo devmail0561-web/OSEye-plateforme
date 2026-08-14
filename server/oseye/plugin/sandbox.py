@@ -81,6 +81,17 @@ class PluginSandbox:
         mem_limit = self._mem_limit_bytes
 
         def _preexec() -> None:
+            # Network namespace isolation: CLONE_NEWNET = 0x40000000
+            # Prevents the plugin from making any outbound connections.
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            if libc.unshare(0x40000000) != 0:
+                import errno as _errno
+                err = ctypes.get_errno()
+                # Non-fatal: log and continue. The process will still be sandboxed
+                # by rlimits. Linux < 3.8 or missing CAP_SYS_ADMIN may fail here.
+                import sys
+                print(f"sandbox: unshare(CLONE_NEWNET) failed: {_errno.errorcode.get(err, err)}", file=sys.stderr)
             _apply_rlimits(cpu_limit, mem_limit)
             if self._cgroup_path is not None:
                 _move_to_cgroup(self._cgroup_path)

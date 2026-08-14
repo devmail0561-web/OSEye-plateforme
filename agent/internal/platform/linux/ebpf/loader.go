@@ -53,6 +53,7 @@ type EBPFLoader struct {
 	connectObjs connectObjects
 	links       []link.Link
 	readers     []*perf.Reader
+	closeOnce   sync.Once
 }
 
 // NewLoader loads and attaches all three eBPF programs. Returns an error when
@@ -194,17 +195,20 @@ var pastDeadline = func() time.Time {
 	return t
 }()
 
-// Close releases all eBPF resources.
+// Close releases all eBPF resources. It is safe to call concurrently or more
+// than once; the actual teardown runs exactly once via closeOnce.
 func (l *EBPFLoader) Close() error {
-	for _, r := range l.readers {
-		r.Close()
-	}
-	for _, lnk := range l.links {
-		lnk.Close()
-	}
-	l.execveObjs.Close()
-	l.openatObjs.Close()
-	l.connectObjs.Close()
+	l.closeOnce.Do(func() {
+		for _, r := range l.readers {
+			r.Close()
+		}
+		for _, lnk := range l.links {
+			lnk.Close()
+		}
+		l.execveObjs.Close()
+		l.openatObjs.Close()
+		l.connectObjs.Close()
+	})
 	return nil
 }
 

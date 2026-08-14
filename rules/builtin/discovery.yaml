@@ -13,6 +13,7 @@
     and event.uid != 0
   timeframe: 30
   threshold: 5
+  entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
     Plusieurs commandes d'énumération système en 30 secondes.
@@ -33,6 +34,7 @@
     and event.uid != 0
   timeframe: 10
   threshold: 3
+  entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
     Exécution de commandes de découverte réseau en rafale.
@@ -52,6 +54,7 @@
     and event.uid != 0
   timeframe: 30
   threshold: 10
+  entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
     10+ exécutions de ps aux/ps -ef en 30 secondes par un utilisateur non-root.
@@ -100,6 +103,7 @@
     and event.uid != 0
   timeframe: 60
   threshold: 3
+  entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
     3+ exécutions de sudo -l en 60 secondes par un utilisateur non-root.

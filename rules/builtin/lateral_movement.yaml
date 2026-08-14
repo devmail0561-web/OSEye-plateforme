@@ -64,6 +64,7 @@
     and event.uid != 0
   timeframe: 60
   threshold: 3
+  entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
     Utilisation répétée de rsync ou scp (>3 invocations en 60s) par un utilisateur

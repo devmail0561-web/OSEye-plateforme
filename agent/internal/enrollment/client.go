@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -38,6 +39,8 @@ type EnrollParams struct {
 	EnrollURL     string
 	EnrollToken   string
 	Hostname      string
+	// SHA-256 hex fingerprint of the expected CA cert (e.g. "aa:bb:cc..."). Empty = no pinning (TOFU).
+	CACertFingerprint string
 }
 
 // NeedsEnrollment returns true if enrollment should be attempted.
@@ -75,6 +78,17 @@ func Enroll(p EnrollParams) error {
 	caPEM, err := fetchCACert(p.EnrollURL, p.EnrollToken)
 	if err != nil {
 		return fmt.Errorf("enrollment: fetch CA cert: %w", err)
+	}
+
+	if p.CACertFingerprint != "" {
+		sum := sha256.Sum256(caPEM)
+		got := fmt.Sprintf("%x", sum)
+		// Normalize expected: remove colons and lowercase
+		want := strings.ToLower(strings.ReplaceAll(p.CACertFingerprint, ":", ""))
+		if got != want {
+			return fmt.Errorf("enrollment: CA cert fingerprint mismatch: got %s, want %s", got, want)
+		}
+		slog.Info("enrollment: CA cert fingerprint verified", "fingerprint", got)
 	}
 
 	// Step 2: generate RSA 2048 key + CSR
