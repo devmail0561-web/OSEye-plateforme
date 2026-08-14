@@ -38,6 +38,7 @@ from oseye.normalizer.engine import NormalizerEngine
 from oseye.plugin.manager import PluginManager
 from oseye.plugin.verifier import PluginVerifier
 from oseye.policy.engine import PolicyEngine
+from oseye.policy.rule_signer import RuleSigner
 from oseye.rule_engine import RuleEngine
 from oseye.storage.backends.factory import create_backend
 from oseye.storage.repositories.agents import SQLAgentRepository
@@ -224,9 +225,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # Policy Engine — charge les profils YAML et les pousse aux agents
         # ------------------------------------------------------------------
 
+        rule_signer = RuleSigner(private_key_path=settings.rule_signing_key_path)
         policy_engine = PolicyEngine(
             bus=bus,
             default_profile=settings.default_surveillance_profile,
+            rule_signer=rule_signer,
         )
         await policy_engine.load_profiles()
         _agent_ids_for_policy = await repo.get_distinct_agent_ids()

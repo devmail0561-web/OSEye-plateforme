@@ -125,6 +125,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Autonomous agent — local rule engine
+    rule_signing_key_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to the Ed25519 PEM private key used to sign RuleSets pushed to agents. "
+            "When None, rule sets are pushed unsigned (accepted by agents with nil verify key)."
+        ),
+    )
+    agent_default_autonomy: str = Field(
+        default="critical_only",
+        description="Fallback autonomy level for profiles not listed in PROFILE_AUTONOMY.",
+    )
+
     # ML Engine
     ml_checkpoint_path: str = Field(
         default="/var/lib/oseye/ml_checkpoint.pkl",

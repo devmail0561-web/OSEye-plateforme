@@ -20,9 +20,11 @@ import (
 )
 
 const (
-	cmdSetThrottle   = "SET_THROTTLE"
-	cmdReloadProfile = "RELOAD_PROFILE"
-	cmdTakeSnapshot  = "TAKE_SNAPSHOT"
+	cmdSetThrottle      = "SET_THROTTLE"
+	cmdReloadProfile    = "RELOAD_PROFILE"
+	cmdTakeSnapshot     = "TAKE_SNAPSHOT"
+	cmdDisableAutonomy  = "DISABLE_AUTONOMY"
+	cmdEnableAutonomy   = "ENABLE_AUTONOMY"
 
 	// Response commands — act-then-notify.
 	// BLOCK_IP and QUARANTINE_FILE are executed autonomously by the agent.
@@ -34,16 +36,23 @@ const (
 	cmdKillProcess    = "KILL_PROCESS"
 )
 
+// KillSwitcher allows the command client to toggle the autonomy kill switch.
+type KillSwitcher interface {
+	Disable()
+	Enable()
+}
+
 // CommandClient maintains the server→agent command stream and dispatches
 // commands to the collector manager and response executor.
 type CommandClient struct {
-	svc          gen.AgentServiceClient
-	agentID      []byte
-	mgr          *collector.CollectorManager
-	state        *responder.StateStore
-	dedup        *responder.Deduplicator
-	reporter     *responder.Reporter
+	svc           gen.AgentServiceClient
+	agentID       []byte
+	mgr           *collector.CollectorManager
+	state         *responder.StateStore
+	dedup         *responder.Deduplicator
+	reporter      *responder.Reporter
 	quarantineDir string
+	killSwitch    KillSwitcher
 }
 
 // NewClient returns a CommandClient bound to the given agent service client.
@@ -55,8 +64,9 @@ func NewClient(
 	dedup *responder.Deduplicator,
 	reporter *responder.Reporter,
 	quarantineDir string,
+	killSwitch ...KillSwitcher,
 ) *CommandClient {
-	return &CommandClient{
+	c := &CommandClient{
 		svc:           svc,
 		agentID:       agentID,
 		mgr:           mgr,
@@ -65,6 +75,10 @@ func NewClient(
 		reporter:      reporter,
 		quarantineDir: quarantineDir,
 	}
+	if len(killSwitch) > 0 {
+		c.killSwitch = killSwitch[0]
+	}
+	return c
 }
 
 // Run opens the StreamCommands stream and dispatches each received command.
@@ -144,6 +158,20 @@ func (c *CommandClient) dispatch(cmd *gen.AgentCommand) {
 		// CIA — ask-then-act : kill is only triggered by an explicit server command
 		// (after human approval at score > 80). Never executed autonomously.
 		c.handleKillProcess(cmd)
+
+	case cmdDisableAutonomy:
+		if c.killSwitch != nil {
+			c.killSwitch.Disable()
+		}
+		slog.Warn("autonomy disabled by server command")
+		c.reporter.Send(cmd.GetCommandId(), "executed", "")
+
+	case cmdEnableAutonomy:
+		if c.killSwitch != nil {
+			c.killSwitch.Enable()
+		}
+		slog.Info("autonomy re-enabled by server command")
+		c.reporter.Send(cmd.GetCommandId(), "executed", "")
 
 	default:
 		slog.Warn("unknown command", "type", cmd.GetCommandType())

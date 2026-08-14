@@ -1,0 +1,397 @@
+//go:build linux
+
+package autonomy
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/oseye/agent/internal/hostprofile"
+	"github.com/oseye/agent/internal/localrules"
+	"github.com/oseye/agent/internal/responder"
+)
+
+// Controller is the autonomous decision engine. It evaluates every event
+// against the local rule set and triggers responses based on the autonomy policy.
+type Controller struct {
+	engine       *localrules.Engine
+	ruleStore    *localrules.Store
+	profileStore *hostprofile.ProfileStore
+	stateStore   *responder.StateStore
+	dedup        *responder.Deduplicator
+	reporter     *responder.Reporter
+	killSwitch   *KillSwitch
+	quarantineDir string
+
+	// Rollback tracking.
+	mu             sync.Mutex
+	actionCount    int
+	actionTargets  map[string]bool
+	rollbackWindow time.Duration
+	rollbackThresh int
+	windowStart    time.Time
+	rolledBack     bool
+
+	// Decision log queue.
+	decisions chan Decision
+}
+
+// Decision records a local autonomous decision for server reporting.
+type Decision struct {
+	RuleID    string                 `json:"rule_id"`
+	RuleName  string                 `json:"rule_name"`
+	Severity  string                 `json:"severity"`
+	Response  string                 `json:"response"`
+	Score     float64                `json:"score"`
+	EventData map[string]interface{} `json:"event_data"`
+	Action    string                 `json:"action"` // "executed", "logged", "blocked_by_policy"
+	Timestamp int64                  `json:"timestamp"`
+	GroupKey  string                 `json:"group_key,omitempty"`
+}
+
+// ControllerConfig configures the autonomy controller.
+type ControllerConfig struct {
+	QuarantineDir    string
+	RollbackWindow   time.Duration
+	RollbackThreshold int
+	DecisionQueueSize int
+}
+
+// DefaultControllerConfig returns sane defaults.
+func DefaultControllerConfig() ControllerConfig {
+	return ControllerConfig{
+		QuarantineDir:    "/var/lib/oseye/quarantine",
+		RollbackWindow:   60 * time.Second,
+		RollbackThreshold: 3,
+		DecisionQueueSize: 1024,
+	}
+}
+
+// NewController creates an autonomy controller.
+func NewController(
+	engine *localrules.Engine,
+	ruleStore *localrules.Store,
+	profileStore *hostprofile.ProfileStore,
+	stateStore *responder.StateStore,
+	dedup *responder.Deduplicator,
+	reporter *responder.Reporter,
+	killSwitch *KillSwitch,
+	cfg ControllerConfig,
+) *Controller {
+	return &Controller{
+		engine:         engine,
+		ruleStore:      ruleStore,
+		profileStore:   profileStore,
+		stateStore:     stateStore,
+		dedup:          dedup,
+		reporter:       reporter,
+		killSwitch:     killSwitch,
+		quarantineDir:  cfg.QuarantineDir,
+		actionTargets:  make(map[string]bool),
+		rollbackWindow: cfg.RollbackWindow,
+		rollbackThresh: cfg.RollbackThreshold,
+		decisions:      make(chan Decision, cfg.DecisionQueueSize),
+	}
+}
+
+// ProcessEvent evaluates a single event against all local rules and takes action if warranted.
+// This is called for every event from the collector pipeline.
+func (c *Controller) ProcessEvent(event map[string]interface{}) {
+	if c.killSwitch != nil && c.killSwitch.IsDisabled() {
+		return
+	}
+
+	detections := c.engine.Evaluate(event)
+	if len(detections) == 0 {
+		return
+	}
+
+	profile := c.profileStore.Current()
+	autonomyPolicy := profile.Autonomy
+
+	for _, det := range detections {
+		decision := Decision{
+			RuleID:    det.Rule.ID,
+			RuleName:  det.Rule.Name,
+			Severity:  det.Rule.Severity,
+			Response:  det.Rule.Response,
+			Score:     det.Score,
+			EventData: det.EventData,
+			Timestamp: time.Now().UnixNano(),
+			GroupKey:  det.GroupKey,
+		}
+
+		if !localrules.IsActionAllowed(autonomyPolicy, det.Rule.Severity) {
+			decision.Action = "blocked_by_policy"
+			c.enqueueDecision(decision)
+			slog.Info("autonomy: detection blocked by policy",
+				"rule", det.Rule.Name, "severity", det.Rule.Severity, "policy", autonomyPolicy)
+			continue
+		}
+
+		if c.checkCascade() {
+			decision.Action = "blocked_by_rollback"
+			c.enqueueDecision(decision)
+			slog.Warn("autonomy: action blocked by rollback protection", "rule", det.Rule.Name)
+			continue
+		}
+
+		// Re-check kill switch before executing (close the TOCTOU window).
+		if c.killSwitch != nil && c.killSwitch.IsDisabled() {
+			decision.Action = "blocked_by_killswitch"
+			c.enqueueDecision(decision)
+			return
+		}
+
+		err := c.executeResponse(det)
+		if err != nil {
+			decision.Action = "failed"
+			slog.Error("autonomy: response execution failed", "rule", det.Rule.Name, "err", err)
+		} else {
+			decision.Action = "executed"
+			c.trackAction(det)
+			slog.Info("autonomy: response executed",
+				"rule", det.Rule.Name, "response", det.Rule.Response, "score", det.Score)
+		}
+
+		c.enqueueDecision(decision)
+	}
+}
+
+// Decisions returns the decision log channel for the reporter to consume.
+func (c *Controller) Decisions() <-chan Decision {
+	return c.decisions
+}
+
+// RunCleanup periodically cleans up expired correlation state and resets rollback windows.
+func (c *Controller) RunCleanup(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.engine.Correlator().Cleanup()
+			c.resetRollbackWindow()
+		}
+	}
+}
+
+func (c *Controller) executeResponse(det localrules.Detection) error {
+	rule := det.Rule
+
+	switch rule.Response {
+	case localrules.ResponseBlockIP:
+		return c.execBlockIP(det)
+	case localrules.ResponseKillProcess:
+		return c.execKillProcess(det)
+	case localrules.ResponseQuarantineFile:
+		return c.execQuarantineFile(det)
+	case localrules.ResponseLog:
+		return nil
+	default:
+		return fmt.Errorf("unknown response type: %s", rule.Response)
+	}
+}
+
+func (c *Controller) execBlockIP(det localrules.Detection) error {
+	ip, _ := det.EventData["src_ip"].(string)
+	if ip == "" {
+		ip, _ = det.EventData["dst_ip"].(string)
+	}
+	if ip == "" {
+		return fmt.Errorf("block_ip: no IP found in event data")
+	}
+
+	dedupKey := "auto_block_ip:" + ip
+	if !c.dedup.Allow("BLOCK_IP", dedupKey) {
+		return nil
+	}
+
+	commandID := fmt.Sprintf("auto-%s-%d", det.Rule.ID, time.Now().UnixNano())
+
+	state := responder.ActionState{
+		CommandID:   commandID,
+		CommandType: "BLOCK_IP",
+		Payload:     map[string]any{"ip": ip, "rule_id": det.Rule.ID, "autonomous": true},
+		Status:      "pending",
+		CreatedAt:   time.Now().UnixNano(),
+	}
+	_ = c.stateStore.Save(state)
+
+	handle, err := responder.BlockIP(ip)
+	if err != nil {
+		_ = c.stateStore.MarkFailed(commandID)
+		return err
+	}
+
+	if handle != "" {
+		state.Payload["nft_handle"] = handle
+		_ = c.stateStore.Save(state)
+	}
+
+	_ = c.stateStore.MarkExecuted(commandID, time.Now().UnixNano())
+
+	if c.reporter != nil {
+		c.reporter.Send(commandID, "executed", "")
+	}
+	return nil
+}
+
+func (c *Controller) execKillProcess(det localrules.Detection) error {
+	pidRaw, ok := det.EventData["pid"]
+	if !ok {
+		return fmt.Errorf("kill_process: no pid in event")
+	}
+
+	var pid int
+	switch v := pidRaw.(type) {
+	case float64:
+		pid = int(v)
+	case json.Number:
+		n, _ := v.Int64()
+		pid = int(n)
+	case int:
+		pid = v
+	default:
+		return fmt.Errorf("kill_process: invalid pid type")
+	}
+
+	processName, _ := det.EventData["binary"].(string)
+	if processName == "" {
+		processName, _ = det.EventData["process_name"].(string)
+	}
+
+	if pid < 2 {
+		return fmt.Errorf("kill_process: refusing system pid %d", pid)
+	}
+
+	commandID := fmt.Sprintf("auto-%s-%d", det.Rule.ID, time.Now().UnixNano())
+
+	if err := responder.KillProcess(pid, processName); err != nil {
+		return err
+	}
+
+	if c.reporter != nil {
+		c.reporter.Send(commandID, "executed", "")
+	}
+	return nil
+}
+
+func (c *Controller) execQuarantineFile(det localrules.Detection) error {
+	path, _ := det.EventData["path"].(string)
+	if path == "" {
+		path, _ = det.EventData["file_path"].(string)
+	}
+	if path == "" {
+		return fmt.Errorf("quarantine_file: no path in event")
+	}
+
+	dedupKey := "auto_quarantine:" + path
+	if !c.dedup.Allow("QUARANTINE_FILE", dedupKey) {
+		return nil
+	}
+
+	commandID := fmt.Sprintf("auto-%s-%d", det.Rule.ID, time.Now().UnixNano())
+
+	state := responder.ActionState{
+		CommandID:   commandID,
+		CommandType: "QUARANTINE_FILE",
+		Payload:     map[string]any{"path": path, "rule_id": det.Rule.ID, "autonomous": true},
+		Status:      "pending",
+		CreatedAt:   time.Now().UnixNano(),
+	}
+	_ = c.stateStore.Save(state)
+
+	quarantinePath, err := responder.QuarantineFile(path, c.quarantineDir)
+	if err != nil {
+		_ = c.stateStore.MarkFailed(commandID)
+		return err
+	}
+
+	state.Payload["quarantine_path"] = quarantinePath
+	state.Status = "executed"
+	_ = c.stateStore.Save(state)
+
+	if c.reporter != nil {
+		c.reporter.Send(commandID, "executed", "")
+	}
+	return nil
+}
+
+func (c *Controller) trackAction(det localrules.Detection) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	if c.windowStart.IsZero() || now.Sub(c.windowStart) > c.rollbackWindow {
+		c.windowStart = now
+		c.actionCount = 0
+		c.actionTargets = make(map[string]bool)
+	}
+
+	target := det.Rule.Response + ":" + det.GroupKey
+	c.actionTargets[target] = true
+	c.actionCount++
+
+	// Trigger rollback if cascade threshold reached.
+	if len(c.actionTargets) >= c.rollbackThresh {
+		slog.Warn("autonomy: cascade detected, triggering rollback",
+			"actions", c.actionCount, "targets", len(c.actionTargets))
+		c.actionCount = 0
+		c.actionTargets = make(map[string]bool)
+		// Rollback outside the hot path — do not hold mu during store/engine ops.
+		go c.doRollback()
+	}
+}
+
+// checkCascade returns true if a rollback was recently triggered (block further actions).
+func (c *Controller) checkCascade() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.windowStart.IsZero() {
+		return false
+	}
+	if time.Since(c.windowStart) > c.rollbackWindow {
+		return false
+	}
+	// If targets were just reset by a rollback, block until window expires.
+	return len(c.actionTargets) == 0 && c.actionCount == 0 && !c.windowStart.IsZero() && c.rolledBack
+}
+
+func (c *Controller) doRollback() {
+	if err := c.ruleStore.Rollback(); err != nil {
+		slog.Error("autonomy: rollback failed", "err", err)
+		return
+	}
+	c.engine.Reload()
+	c.mu.Lock()
+	c.rolledBack = true
+	c.mu.Unlock()
+}
+
+func (c *Controller) resetRollbackWindow() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if time.Since(c.windowStart) > c.rollbackWindow*2 {
+		c.actionCount = 0
+		c.actionTargets = make(map[string]bool)
+		c.rolledBack = false
+	}
+}
+
+func (c *Controller) enqueueDecision(d Decision) {
+	select {
+	case c.decisions <- d:
+	default:
+		slog.Warn("autonomy: decision queue full, dropping", "rule", d.RuleName)
+	}
+}

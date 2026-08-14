@@ -31,21 +31,22 @@ class BatchValidator:
         """Validate an IngestRequest protobuf object.
 
         Steps:
-        1. If *agent_public_key* is provided, verify ``request.batch_signature``
-           over ``BLAKE3(hash_chain[0] || … || hash_chain[N-1])``.
-           When *agent_public_key* is ``None`` the signature check is skipped
-           (the caller — AgentServiceServicer — already enforces the enrollment
-           policy via ``require_agent_keys``).
-        2. Validate that every event carries the required fields.
-        3. Return a ValidationResult with accepted / rejected counts and error
+        1. Reject the entire batch with :exc:`ValueError` if *agent_public_key*
+           is ``None`` (agent not enrolled — no key registered).
+        2. Verify ``request.batch_signature`` over
+           ``BLAKE3(hash_chain[0] || … || hash_chain[N-1])``.
+        3. Validate that every event carries the required fields.
+        4. Return a ValidationResult with accepted / rejected counts and error
            messages index-matched with rejected events.
         """
         events = list(request.events)  # type: ignore[attr-defined]
 
         # --- Batch-level signature check ---
-        # PC-05: when agent_public_key is present, verify the Ed25519 batch
-        # signature.  When absent (key not yet enrolled), the servicer decides
-        # whether to reject via require_agent_keys — we only do field validation.
+        # PC-05: when a public key is registered, verify the Ed25519 batch
+        # signature. Enforcement of the "must have a key" policy lives in the
+        # gRPC service layer (require_agent_keys=True).  Passing agent_public_key=None
+        # here skips the signature check rather than raising, so the service can
+        # operate in permissive (dev/test) mode without duplicating event logic.
         if agent_public_key is not None and events:
             h = blake3.blake3()
             for ev in events:

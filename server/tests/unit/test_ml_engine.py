@@ -331,7 +331,7 @@ class TestMITREClassifier:
 
 class TestMLEngine:
     def test_score_returns_zero_before_min_samples(self) -> None:
-        eng = MLEngine()
+        eng = MLEngine(hmac_key=b"test-hmac-key-for-unit-tests-only")
         score = eng.score_event(_make_event())
         assert score == 0.0
 
@@ -344,12 +344,12 @@ class TestMLEngine:
             assert 0.0 <= s <= 100.0
 
     def test_learn_from_alert_populates_classifier(self) -> None:
-        eng = MLEngine()
+        eng = MLEngine(hmac_key=b"test-hmac-key-for-unit-tests-only")
         eng.learn_from_alert(_make_event(), ["T1059.001"])
         assert "T1059.001" in eng.known_techniques
 
     def test_model_count_increments(self) -> None:
-        eng = MLEngine()
+        eng = MLEngine(hmac_key=b"test-hmac-key-for-unit-tests-only")
         eng.score_event(_make_event(hostname="h1", category="process"))
         eng.score_event(_make_event(hostname="h2", category="network"))
         assert eng.model_count == 2
@@ -394,7 +394,7 @@ class TestMLEngine:
         from oseye.core.schema import Incident
         import asyncio
 
-        engine = DecisionEngine(journal=DecisionJournal(), ml_engine=MLEngine())
+        engine = DecisionEngine(journal=DecisionJournal(), ml_engine=MLEngine(hmac_key=b"test-hmac-key-for-unit-tests-only"))
         now = datetime.now(UTC)
         incident = Incident(
             incident_id=uuid4(),

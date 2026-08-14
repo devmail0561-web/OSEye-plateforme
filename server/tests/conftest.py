@@ -19,6 +19,13 @@ os.environ.setdefault(
     "test-secret-key-for-pytest-32chars",
 )
 
+# ML-R-03: MLEngine validates OSEYE_CHECKPOINT_HMAC_KEY at construction time.
+# Provide a deterministic test key so tests can instantiate MLEngine() freely.
+os.environ.setdefault(
+    "OSEYE_CHECKPOINT_HMAC_KEY",
+    "test-checkpoint-hmac-key-for-pytest-only-32b",
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_auth_rate_limiter() -> None:

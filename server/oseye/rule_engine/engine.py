@@ -363,7 +363,7 @@ class RuleEngine:
             mtime = await loop.run_in_executor(None, self._current_mtime)
             if mtime != last_mtime:
                 _log.info("rule_engine_change_detected_poll", rules_root=str(self._rules_root))
-                self.reload()
+                await loop.run_in_executor(None, self.reload)
                 last_mtime = mtime
 
     # ------------------------------------------------------------------

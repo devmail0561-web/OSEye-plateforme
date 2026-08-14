@@ -95,8 +95,9 @@ class ActionExecutor:
         if "ISOLATE" in effective_types:
             command_id = await self._emit_block_ip_command(decision, alert)
             if command_id and self._response_actions_repo is not None:
-                from oseye.storage.models import ResponseAction
                 import datetime
+
+                from oseye.storage.models import ResponseAction
                 action = ResponseAction(
                     command_id=command_id,
                     command_type="BLOCK_IP",

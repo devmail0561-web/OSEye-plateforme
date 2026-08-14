@@ -67,7 +67,7 @@ def _make_alert(event: UniversalEvent) -> Alert:
 @pytest.mark.asyncio
 async def test_ml_score_nonzero_when_engine_wired() -> None:
     """ml_score must be > 0 when ml_engine is passed to DecisionEngine."""
-    ml_engine = MLEngine()
+    ml_engine = MLEngine(hmac_key=b"test-hmac-key-for-unit-tests-only")
 
     # Train the ML engine briefly so it has a baseline
     for _ in range(60):

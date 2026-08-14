@@ -91,7 +91,8 @@ class PluginSandbox:
                 # Non-fatal: log and continue. The process will still be sandboxed
                 # by rlimits. Linux < 3.8 or missing CAP_SYS_ADMIN may fail here.
                 import sys
-                print(f"sandbox: unshare(CLONE_NEWNET) failed: {_errno.errorcode.get(err, err)}", file=sys.stderr)
+                code = _errno.errorcode.get(err, err)
+                print(f"sandbox: unshare(CLONE_NEWNET) failed: {code}", file=sys.stderr)
             _apply_rlimits(cpu_limit, mem_limit)
             if self._cgroup_path is not None:
                 _move_to_cgroup(self._cgroup_path)
