@@ -49,13 +49,16 @@
   tags: [impact, data_destruction]
   mitre: [T1485]
   platforms: [linux]
+  # R-05: uid==0 supprimé de la branche mkfs — toutes les branches (rm, shred, dd, mkfs)
+  # doivent se comporter de façon cohérente. mkfs ne nécessite pas de filtre root séparé
+  # car l'action elle-même est toujours destructrice, quel que soit l'uid.
   condition: |
     event.category == "process"
     and (
       (event.process_name == "rm" and (event.cmdline contains "-rf /" or event.cmdline contains "--no-preserve-root"))
       or (event.process_name == "shred" and event.cmdline contains "-u")
       or (event.cmdline contains "dd if=/dev/zero of=/dev/sd")
-      or (event.cmdline contains "mkfs" and event.uid == 0)
+      or (event.cmdline contains "mkfs")
     )
   timeframe: null
   threshold: null
@@ -94,6 +97,10 @@
   platforms: [linux]
   # RULE-009: ports C2 étendus — ajout de 8443, 8080, 2222, 31337, 12345, 54321
   # qui sont courants dans les frameworks C2 modernes (Cobalt Strike, Sliver, Havoc).
+  # R-10: exclusion des processus légitimes connus pour réduire les faux positifs sur
+  # les ports 8080/8443 (trafic web courant) et 2222 (SSH alternatif).
+  # curl, wget, apt, pip, npm, yarn, docker, java font des connexions légitimes
+  # vers ces ports dans le cadre de téléchargements ou de builds.
   condition: >-
     event.category == "network"
     and event.protocol == "tcp"
@@ -103,6 +110,7 @@
          or event.dst_port == 9001 or event.dst_port == 8443 or event.dst_port == 8080
          or event.dst_port == 2222 or event.dst_port == 31337 or event.dst_port == 12345
          or event.dst_port == 54321)
+    and event.process_name not in ["curl", "wget", "apt", "apt-get", "pip", "pip3", "npm", "yarn", "docker", "java"]
   timeframe: 300
   threshold: 5
   actions: [ALERT, INVESTIGATE]

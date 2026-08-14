@@ -348,6 +348,10 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         if _blocked_cns:
             _logger.info("blocked_agents_loaded", count=len(_blocked_cns))
 
+        # PC-06: reset all agents to offline before accepting connections so
+        # stale online flags from a prior crash are cleared (AG-R-07).
+        await grpc_servicer.startup()
+
         await grpc_server.start()
         _logger.info("grpc_server_started", port=settings.grpc_port)
 

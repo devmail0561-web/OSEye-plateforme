@@ -45,6 +45,14 @@ async def ws_alerts(ws: WebSocket) -> None:
             pass
         return
 
+    # API-09: reject oversized tokens to prevent DoS via memory exhaustion.
+    if len(token) > 4096:
+        try:
+            await ws.close(code=1008)  # 1008 = Policy Violation
+        except Exception:  # noqa: BLE001
+            pass
+        return
+
     # B-18: support both JWT tokens and API Keys (osk_ prefix)
     current_user: dict
     if token.startswith("osk_"):

@@ -82,6 +82,10 @@ class ThreatIntelClient:
                 addr = ipaddress.ip_address(indicator)
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"Invalid IP address: {indicator!r}")
+            # TI-02: normalise IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) to their
+            # IPv4 form before checking non-public ranges, so they cannot bypass
+            # the private-address guard.
+            addr = addr.ipv4_mapped or addr
             if (
                 addr.is_private
                 or addr.is_loopback

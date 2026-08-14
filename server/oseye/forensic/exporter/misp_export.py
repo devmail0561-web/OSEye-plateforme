@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import ipaddress
 
 from oseye.core.schema import Alert, ForensicCase
 
@@ -13,7 +13,13 @@ _SEVERITY_THREAT_LEVEL: dict[str, str] = {
     "low": "4",
 }
 
-_IP_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+def _is_valid_ip(val: str) -> bool:
+    """F-08: use ipaddress.ip_address() instead of a regex that accepts invalid octets."""
+    try:
+        ipaddress.ip_address(val)
+        return True
+    except ValueError:
+        return False
 
 
 def _collect_ips(alerts: list[Alert]) -> list[str]:
@@ -22,7 +28,7 @@ def _collect_ips(alerts: list[Alert]) -> list[str]:
     for alert in alerts:
         entity = alert.entity_id
         candidate = entity.split(":")[0] if ":" in entity else entity
-        if _IP_RE.match(candidate) and candidate not in seen:
+        if _is_valid_ip(candidate) and candidate not in seen:
             seen.add(candidate)
             ips.append(candidate)
     return ips

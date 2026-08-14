@@ -11,9 +11,19 @@ import (
 // Next returns the next backoff delay using full jitter:
 // a random duration in [0, min(current*2, max)].
 func Next(current, max time.Duration) time.Duration {
-	next := current * 2
-	if next > max {
+	// G-B-02: a zero (or negative) current produces permanent zero backoff; seed to 1ns.
+	if current <= 0 {
+		current = 1
+	}
+	// G-B-01: guard int64 overflow when doubling — clamp to max before the multiply.
+	var next time.Duration
+	if current > max/2 {
 		next = max
+	} else {
+		next = current * 2
+		if next > max {
+			next = max
+		}
 	}
 	if next <= 0 {
 		return 0

@@ -93,7 +93,11 @@ class AbuseIPDBProvider:
         seen_categories: set[int] = set()
         for report in raw_reports:
             for cat_id in report.get("categories", []):
-                seen_categories.add(int(cat_id))
+                # TI-06: guard against malformed category IDs from the API
+                try:
+                    seen_categories.add(int(cat_id))
+                except (ValueError, TypeError):
+                    continue
 
         tags: list[str] = [
             _CATEGORY_MAP[cid]

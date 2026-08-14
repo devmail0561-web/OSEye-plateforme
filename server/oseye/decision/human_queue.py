@@ -76,6 +76,9 @@ class HumanApprovalQueue:
         to push KILL_PROCESS (or other post-approval commands) to the agent.
         Returns the updated Decision, or None if not found / already decided.
         """
+        # D-09: sanitise operator name and note before persisting
+        operator = operator.strip()[:200]
+        note = (note or "").strip()[:2000]
         decision = await self._update_decision(decision_id, "approved", operator, note)
         if decision is not None and self._executor is not None:
             try:
@@ -93,6 +96,9 @@ class HumanApprovalQueue:
 
     async def reject(self, decision_id: UUID, operator: str, note: str = "") -> Decision | None:
         """Record an operator rejection for *decision_id*."""
+        # D-09: sanitise operator name and note before persisting
+        operator = operator.strip()[:200]
+        note = (note or "").strip()[:2000]
         return await self._update_decision(decision_id, "rejected", operator, note)
 
     async def _update_decision(

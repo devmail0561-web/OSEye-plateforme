@@ -63,11 +63,13 @@
     and (event.process_name == "rsync" or event.process_name == "scp")
     and event.uid != 0
   timeframe: 60
-  threshold: 3
+  # R-11: seuil relevé de 3 à 10 — 3 invocations en 60s déclenchait des alertes
+  # sur les scripts de sauvegarde légitimes (rsync périodique, scp batch).
+  threshold: 10
   entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
-    Utilisation répétée de rsync ou scp (>3 invocations en 60s) par un utilisateur
+    Utilisation répétée de rsync ou scp (>10 invocations en 60s) par un utilisateur
     non-root. Peut indiquer une exfiltration de données. Aucun filtre horaire n'est
     appliqué — la règle se déclenche 24h/24 ; combiner avec les destinations réseau
     pour affiner le triage.

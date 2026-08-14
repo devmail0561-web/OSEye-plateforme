@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -89,7 +89,8 @@ async def list_rules(
 
 @router.get("/rules/{rule_id}")
 async def get_rule(
-    rule_id: str,
+    # API-07: enforce max length on path param to prevent oversized lookups.
+    rule_id: Annotated[str, Path(max_length=100)],
     request: Request,
     _auth: dict[str, Any] = Depends(require_analyst),
 ) -> Rule:

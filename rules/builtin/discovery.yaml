@@ -43,7 +43,9 @@
 - id: rule_process_discovery
   name: "Énumération des processus (ps aux, /proc scan)"
   enabled: true
-  severity: info
+  # R-12: severity relevée de "info" à "low" — "info" peut être filtré silencieusement
+  # par certaines configurations du moteur de règles, rendant la règle inactive.
+  severity: low
   tags: [discovery, process_discovery]
   mitre: [T1057]
   platforms: [linux]

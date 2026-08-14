@@ -181,11 +181,15 @@ class EntityAnomalyDetector:
     def _get_or_create(self, key: str, category: str) -> _ModelState:
         state = self._store.get(key)
         if state is None:
+            # ML-03: derive a deterministic but entity-unique seed from the key so
+            # that each (hostname, category) model has a distinct random partition,
+            # making adversarial poisoning across entities much harder than seed=42.
+            entity_seed = abs(hash(key)) % (2 ** 31)
             model = HalfSpaceTrees(
                 n_trees=self._n_trees,
                 height=self._height,
                 window_size=self._window_for(category),
-                seed=42,
+                seed=entity_seed,
             )
             state = _ModelState(model=model)
             self._store.put(key, state)

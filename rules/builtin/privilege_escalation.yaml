@@ -52,7 +52,10 @@
   enabled: true
   severity: high
   tags: [privilege_escalation, linux_capabilities]
-  mitre: [T1548.001]
+  # R-09: T1548.001 est spécifique à setuid/setgid et ne correspond pas aux Linux capabilities.
+  # Les capabilities Linux n'ont pas de sous-technique dédiée dans MITRE ATT&CK v14+.
+  # T1548 (parent) couvre tous les mécanismes d'abus d'élévation de contrôle, dont setcap.
+  mitre: [T1548]
   platforms: [linux]
   condition: |
     event.category == "process"
@@ -67,7 +70,7 @@
 - id: rule_ptrace_injection
   name: "Injection de processus via ptrace (wrappers userspace)"
   enabled: true
-  severity: critical
+  severity: high
   tags: [privilege_escalation, process_injection]
   mitre: [T1055.008]
   platforms: [linux]
@@ -93,7 +96,10 @@
   enabled: true
   severity: high
   tags: [privilege_escalation, polkit]
-  mitre: [T1548.003]
+  # R-08: T1548.003 est spécifique à sudo/sudo caching et ne s'applique pas à polkit.
+  # T1548 (parent) couvre l'ensemble des mécanismes d'abus d'élévation de contrôle Linux,
+  # dont polkit/pkexec — plus précis que T1548.003 et moins erroné que T1078.
+  mitre: [T1548]
   platforms: [linux]
   condition: |
     event.category == "process"

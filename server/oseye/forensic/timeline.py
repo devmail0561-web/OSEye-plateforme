@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import timezone
+
 from oseye.core.schema import Alert, ForensicCase, UniversalEvent
+
+# F-04: use an explicit UTC constant so timezone-naive datetimes get a safe tzinfo
+_UTC = timezone.utc
 
 _NS_PER_S = 1_000_000_000
 
@@ -32,7 +37,11 @@ def build_timeline(
         )
 
     for alert in alerts:
-        ts_ns = int(alert.created_at.timestamp() * _NS_PER_S)
+        # F-04: ensure timezone-aware before calling .timestamp() to avoid local-time bias
+        created_at = alert.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=_UTC)
+        ts_ns = int(created_at.timestamp() * _NS_PER_S)
         entries.append(
             {
                 "ts": ts_ns,
@@ -46,7 +55,11 @@ def build_timeline(
         )
 
     for entry in case.custody_log:
-        ts_ns = int(entry.timestamp.timestamp() * _NS_PER_S)
+        # F-04: normalise timezone-naive datetimes before conversion
+        ts = entry.timestamp
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=_UTC)
+        ts_ns = int(ts.timestamp() * _NS_PER_S)
         entries.append(
             {
                 "ts": ts_ns,

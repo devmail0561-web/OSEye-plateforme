@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, StringConstraints
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -114,8 +114,9 @@ class _CloseBody(BaseModel):
 @router.get("")
 async def list_cases(
     request: Request,
-    status_filter: str | None = None,
-    severity: str | None = None,
+    # API-06: cap string filter lengths to prevent oversized DB queries.
+    status_filter: str | None = Query(default=None, max_length=200),
+    severity: str | None = Query(default=None, max_length=200),
     page: int = 1,
     page_size: int = 20,
     _: dict[str, Any] = Depends(_require_reader),

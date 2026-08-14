@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Any
+
+from fastapi import APIRouter, Depends
+
+from oseye.api.auth.rbac import require_analyst
 
 router = APIRouter(prefix="/api/v1")
 
 
 @router.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "oseye-server"}
+    """Public health check — returns minimal status only.
+
+    API-11: version and technology details are omitted from this unauthenticated
+    endpoint to avoid information disclosure. Use /health/detailed (requires auth)
+    for full diagnostics.
+    """
+    return {"status": "ok"}
+
+
+@router.get("/health/detailed")
+async def health_detailed(
+    _auth: dict[str, Any] = Depends(require_analyst),
+) -> dict[str, Any]:
+    """Authenticated health check — includes service name and version.
+
+    Requires at least 'analyst' role.
+    """
+    return {
+        "status": "ok",
+        "service": "oseye-server",
+        "version": "0.1.0",
+    }

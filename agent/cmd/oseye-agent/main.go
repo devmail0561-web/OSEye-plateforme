@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,12 +15,15 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/oseye/agent/gen"
+	"github.com/oseye/agent/internal/autonomy"
 	"github.com/oseye/agent/internal/buffer"
 	"github.com/oseye/agent/internal/chain"
 	"github.com/oseye/agent/internal/collector"
 	"github.com/oseye/agent/internal/commands"
 	"github.com/oseye/agent/internal/config"
 	"github.com/oseye/agent/internal/enrollment"
+	"github.com/oseye/agent/internal/hostprofile"
+	"github.com/oseye/agent/internal/localrules"
 	"github.com/oseye/agent/internal/mapper"
 	"github.com/oseye/agent/internal/platform"
 	_ "github.com/oseye/agent/internal/platform/linux" // register LinuxDriver via init()
@@ -177,32 +181,158 @@ func main() {
 	defer stateStore.Close()
 	dedup := responder.NewDeduplicator(60 * time.Second)
 
+	// ── Autonomous local rule engine ─────────────────────────────────────────
+	dataDir := getenv("OSEYE_DATA_DIR", "/var/lib/oseye")
+
+	profileStore, err := hostprofile.NewProfileStore(dataDir)
+	if err != nil {
+		log.Error("host profile store failed", "err", err)
+		// CORE-005: stateStore was initialised earlier; close it before exit so its
+		// underlying storage is flushed (os.Exit skips deferred calls).
+		stateStore.Close()
+		buf.Close()
+		os.Exit(1)
+	}
+
+	ruleStore, err := localrules.NewStore(dataDir, nil)
+	if err != nil {
+		log.Error("local rule store failed", "err", err)
+		// CORE-005: same stateStore.Close() guard.
+		stateStore.Close()
+		buf.Close()
+		os.Exit(1)
+	}
+
+	profile := profileStore.Current()
+	engineCfg := localrules.EngineConfig{
+		MaxRules:             profile.Budget.MaxRules,
+		BudgetPerEventMicros: profile.Budget.BudgetPerEventMicros,
+		MaxCorrelationGroups: profile.Budget.MaxCorrelationGroups,
+		MaxCorrelationEvents: profile.Budget.MaxCorrelationEvents,
+		RegexCacheSize:       256,
+	}
+	if engineCfg.MaxRules == 0 {
+		engineCfg = localrules.DefaultEngineConfig()
+	}
+	ruleEngine := localrules.NewEngine(ruleStore, engineCfg)
+	ruleEngine.SetProfileRefs(profile.BaselineRefs())
+
+	killSwitch := autonomy.NewKillSwitch()
+
+	var autoReporter *responder.Reporter
+	var autoController *autonomy.Controller
+
 	// ── Policy + command streams ──────────────────────────────────────────────
 	if client != nil {
 		profileHandler := policy.NewHandler(mgr)
-		policyClient := policy.NewClient(client.ServiceClient(), agentIDBytes, profileHandler.Apply)
 
-		reporter := responder.NewReporter(client.ServiceClient(), 256)
+		// Wrap profile handler to also update local profile store, rules, and engine.
+		onProfile := func(p *gen.SurveillanceProfilePB) {
+			profileHandler.Apply(p)
+			if configJSON := p.GetConfigJson(); len(configJSON) > 0 {
+				// Parse the config to check for embedded rule_set updates.
+				var envelope struct {
+					RuleSet json.RawMessage `json:"rule_set,omitempty"`
+				}
+				if err := json.Unmarshal(configJSON, &envelope); err == nil && len(envelope.RuleSet) > 0 {
+					if err := ruleStore.Update(envelope.RuleSet); err != nil {
+						slog.Default().Warn("rule update from policy failed", "err", err)
+					} else {
+						ruleEngine.Reload()
+					}
+				}
+
+				_ = profileStore.Update(configJSON)
+				updated := profileStore.Current()
+				ruleEngine.SetProfileRefs(updated.BaselineRefs())
+			}
+		}
+
+		policyClient := policy.NewClient(client.ServiceClient(), agentIDBytes, onProfile)
+
+		autoReporter = responder.NewReporter(client.ServiceClient(), 256)
 		cmdClient := commands.NewClient(
 			client.ServiceClient(), agentIDBytes, mgr,
-			stateStore, dedup, reporter, cfg.QuarantineDir,
+			stateStore, dedup, autoReporter, cfg.QuarantineDir, killSwitch,
 		)
 		go policyClient.Run(ctx)
 		go cmdClient.Run(ctx)
-		go reporter.Run(ctx)
+		go autoReporter.Run(ctx)
 	}
 
-	// ── Batcher + send loop ───────────────────────────────────────────────────
+	// ── Autonomy controller ──────────────────────────────────────────────────
+	autoCfg := autonomy.DefaultControllerConfig()
+	autoCfg.QuarantineDir = cfg.QuarantineDir
+	autoController = autonomy.NewController(
+		ruleEngine, ruleStore, profileStore,
+		stateStore, dedup, autoReporter, killSwitch, autoCfg,
+	)
+	go autoController.RunCleanup(ctx)
+
+	if client != nil && autoReporter != nil {
+		decisionReporter := autonomy.NewDecisionReporter(
+			autoController.Decisions(), autoReporter, client.ServiceClient(), agentIDBytes,
+		)
+		go decisionReporter.Run(ctx)
+	} else {
+		// Drain decisions to prevent channel fill-up when offline.
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case _, ok := <-autoController.Decisions():
+					if !ok {
+						return
+					}
+				}
+			}
+		}()
+	}
+
+	// ── Event fanout: batcher + local rule engine ────────────────────────────
+	// Events are forwarded to both the batcher (for server send) and the
+	// autonomy controller (for local evaluation). The controller processes
+	// events inline — it parses the raw JSON and evaluates rules.
 	batcher := transport.NewBatcher(cfg.BatchSize, cfg.BatchTimeout)
+	batcherCh := make(chan collector.RawEvent, fanInBufSize)
+
 	var batcherWg sync.WaitGroup
 	batcherWg.Add(1)
 	go func() {
 		defer batcherWg.Done()
-		err := batcher.Run(ctx, mgr.Events(), func(batch []collector.RawEvent) error {
+		err := batcher.Run(ctx, batcherCh, func(batch []collector.RawEvent) error {
 			return sendBatch(ctx, log, client, buf, ch, mp, batch)
 		})
 		if err != nil && err != context.Canceled {
 			log.Error("batcher exited with error", "err", err)
+		}
+	}()
+
+	// Fanout goroutine: reads from collector manager, sends to batcher,
+	// and feeds the autonomy controller.
+	batcherWg.Add(1)
+	go func() {
+		defer batcherWg.Done()
+		defer close(batcherCh)
+		for ev := range mgr.Events() {
+			// Forward to batcher (blocking — batcher drains fast enough in normal operation;
+			// if it blocks, backpressure propagates to collectors which is preferable to event loss).
+			select {
+			case batcherCh <- ev:
+			case <-ctx.Done():
+				return
+			}
+
+			// Feed the autonomy controller with a copy of the parsed event.
+			if autoController != nil && ev.Raw != nil {
+				var parsed map[string]interface{}
+				if err := json.Unmarshal(ev.Raw, &parsed); err == nil {
+					parsed["_source"] = ev.Source
+					parsed["_timestamp"] = ev.Timestamp
+					autoController.ProcessEvent(parsed)
+				}
+			}
 		}
 	}()
 
@@ -283,6 +413,13 @@ func sendBatch(
 	}
 
 	return nil
+}
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // drainBuffer reads buffered events and ships them before shutdown.

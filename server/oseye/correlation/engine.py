@@ -61,6 +61,9 @@ class CorrelationEngine:
         SQLIncidentRepository for persistence.
     min_severity:
         Minimum alert severity to process (default "medium").
+        W-09: setting this to "low" causes every alert to be correlated, which
+        can be very slow on high-volume deployments. "medium" is the recommended
+        default; override via configuration only if full coverage is required.
     auto_close_after_seconds:
         Incidents with no new alert for this duration are auto-closed.
         Set to 0 to disable auto-close.

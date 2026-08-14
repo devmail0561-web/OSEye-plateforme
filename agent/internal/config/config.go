@@ -236,7 +236,9 @@ func requireAbsolutePath(field, path string) error {
 	return nil
 }
 
-var criticalPaths = []string{"/", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/boot", "/dev", "/proc", "/sys"}
+// CORE-007: /proc/self and /proc/1 are added explicitly so that a QuarantineDir
+// targeting these symlink-heavy pseudo-directories is also rejected.
+var criticalPaths = []string{"/", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/boot", "/dev", "/proc", "/sys", "/proc/self", "/proc/1"}
 
 func rejectCriticalPath(field, path string) error {
 	cleaned := filepath.Clean(path)

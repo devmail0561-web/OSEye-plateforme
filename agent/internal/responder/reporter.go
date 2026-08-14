@@ -4,8 +4,8 @@ package responder
 
 import (
 	"context"
-	"io"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	gen "github.com/oseye/agent/gen"
@@ -18,6 +18,8 @@ import (
 type Reporter struct {
 	svc     gen.AgentServiceClient
 	reports chan *gen.ActionReport
+	// G-R-03: closed flag prevents panic when Send() is called after Close().
+	closed atomic.Bool
 }
 
 // NewReporter creates a Reporter with an internal buffer of capacity cap.
@@ -28,13 +30,20 @@ func NewReporter(svc gen.AgentServiceClient, cap int) *Reporter {
 	}
 }
 
-// Send enqueues an ActionReport for delivery. Non-blocking — drops if full and logs.
+// Send enqueues an ActionReport for delivery. Non-blocking — drops if full or if
+// the reporter has been closed, and logs a warning in both cases.
+// G-R-03: closed check prevents a panic when Send() races with Close().
+// G-R-01: explicit slog.Warn on every dropped report so operators can detect loss.
 func (r *Reporter) Send(commandID, status, errMsg string) {
+	if r.closed.Load() {
+		slog.Warn("reporter: closed, dropping report", "command_id", commandID)
+		return
+	}
 	report := &gen.ActionReport{
-		CommandId:     commandID,
-		Status:        status,
-		Error:         errMsg,
-		ExecutedAtNs:  time.Now().UnixNano(),
+		CommandId:    commandID,
+		Status:       status,
+		Error:        errMsg,
+		ExecutedAtNs: time.Now().UnixNano(),
 	}
 	select {
 	case r.reports <- report:
@@ -101,8 +110,11 @@ func (r *Reporter) DrainOnShutdown(timeout time.Duration) {
 	_ = r.runStream(ctx)
 }
 
-// Close the internal channel.
-func (r *Reporter) Close() { close(r.reports) }
-
-// MustSend is a helper for the Recv-less EOF path in ReportActions.
-func ioEOF(err error) bool { return err == io.EOF }
+// Close marks the reporter as closed and closes the internal channel.
+// G-R-03: set the closed flag before closing the channel so concurrent Send() calls
+// see the flag and return early without panicking.
+// G-R-02: ioEOF removed — it was defined but never called.
+func (r *Reporter) Close() {
+	r.closed.Store(true)
+	close(r.reports)
+}

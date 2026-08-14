@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import deque
 from typing import TYPE_CHECKING
 
 import blake3
@@ -33,6 +34,9 @@ class DecisionJournal:
 
     def __init__(self, last_hash: str = _GENESIS_HASH) -> None:
         self._last_hash: str = last_hash
+        # D-06: keep a rolling history of prev hashes so rollback() can validate
+        # that the caller holds a genuine prev_hash from a recent commit().
+        self._commit_history: deque[str] = deque(maxlen=20)
 
     @property
     def last_hash(self) -> str:
@@ -52,6 +56,8 @@ class DecisionJournal:
         payload = json.dumps(decision_fields, sort_keys=True, default=str).encode()
         new_hash = blake3.blake3(prev.encode() + payload).hexdigest()
         self._last_hash = new_hash
+        # D-06: record prev so rollback() can confirm it is a genuine chain point
+        self._commit_history.append(prev)
         return prev, new_hash
 
     _HASH_RE = re.compile(r"[0-9a-f]{64}")
@@ -65,15 +71,31 @@ class DecisionJournal:
         """
         if not self._HASH_RE.fullmatch(prev_hash):
             raise ValueError(f"Invalid prev_hash format: {prev_hash!r}")
+        # D-06: reject a rollback to a hash that was never recorded by commit()
+        # (allows the genesis hash as a valid starting point on a fresh chain).
+        if prev_hash not in self._commit_history and prev_hash != _GENESIS_HASH:
+            raise ValueError(
+                f"rollback refused: prev_hash not found in recent journal history: {prev_hash!r}"
+            )
         self._last_hash = prev_hash
 
-    def verify_chain(self, decisions: list[Decision]) -> list[int]:
+    def verify_chain(
+        self, decisions: list[Decision], start_hash: str | None = None
+    ) -> list[int]:
         """Return the list of indices where the chain is broken.
 
         An empty list means the chain is intact.
+
+        Parameters
+        ----------
+        start_hash:
+            D-05: seed the verification from a known hash instead of the hardcoded
+            genesis.  When *decisions* comes from the DB, pass the first entry's
+            ``prev_journal_hash`` (or the genesis hash for the very first entry)
+            so partial-chain verification is correct.  Defaults to the genesis hash.
         """
         broken: list[int] = []
-        prev = _GENESIS_HASH
+        prev = start_hash if start_hash is not None else _GENESIS_HASH
 
         for i, decision in enumerate(decisions):
             if decision.prev_journal_hash != prev:

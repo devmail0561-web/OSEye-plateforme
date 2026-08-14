@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
+from uuid import UUID
 
 from oseye.bus.factory import create_bus
 from oseye.config import Settings
@@ -51,11 +52,20 @@ async def run_workers(settings: Settings) -> None:
         async for topic, message in await bus.subscribe_pattern("events:raw:*"):
             # topic format: events:raw:{agent_id}
             parts = topic.split(":")
-            agent_id = parts[2] if len(parts) >= 3 else "unknown"
+            agent_id_raw = parts[2] if len(parts) >= 3 else "unknown"
+            # PC-07: validate agent_id is UUID-parseable; keep raw string on failure
+            # so non-UUID CNs (e.g. hostnames) are forwarded as-is rather than dropped.
+            try:
+                UUID(agent_id_raw)
+            except (ValueError, AttributeError):
+                pass  # raw string is still valid; normalizer handles it
+            agent_id = agent_id_raw
             try:
                 await normalizer.process(
                     raw_payload=message,
-                    source="procfs",
+                    # PC-07: source is not encoded in the topic; use generic "grpc"
+                    # instead of hardcoded "procfs" which is incorrect for all agents.
+                    source="grpc",
                     os_name="linux",
                     agent_id=agent_id,
                 )

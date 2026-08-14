@@ -111,6 +111,12 @@ class PluginManager:
         elif verify and self._verifier is not None and sig_path.exists():
             needs_verify = True
 
+        # PL-04: reject oversized plugin files before copying
+        if path.stat().st_size > 10 * 1024 * 1024:
+            raise ValueError(
+                f"Plugin file exceeds 10MB limit: {path} ({path.stat().st_size} bytes)"
+            )
+
         dest = self._plugins_dir / path.name
         async with self._lock:
             shutil.copy2(path, dest)

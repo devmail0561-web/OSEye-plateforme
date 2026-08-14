@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -57,7 +57,9 @@ def _get_alert_repo(request: Request) -> Any:
 @router.get("/alerts")
 async def list_alerts(
     request: Request,
-    alert_status: str | None = Query(default=None, alias="status"),
+    # API-05: restrict status to known values so invalid inputs are rejected at
+    # the FastAPI validation layer rather than being forwarded to the repository.
+    alert_status: Literal["open", "acknowledged", "investigating", "resolved", "false_positive"] | None = Query(default=None, alias="status"),  # noqa: E501
     severity: str | None = Query(default=None),
     hostname: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),

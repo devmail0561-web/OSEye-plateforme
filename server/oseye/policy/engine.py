@@ -86,6 +86,15 @@ class PolicyEngine:
         """Pre-populate the known-agents set from persisted data."""
         self._known_agents.update(agent_ids)
 
+    def unregister_agent(self, agent_id: UUID) -> None:
+        """POL-01: Remove *agent_id* from _known_agents.
+
+        Call this from the gRPC service when an agent's stream disconnects so
+        that _known_agents does not grow indefinitely on long-running servers.
+        """
+        self._known_agents.discard(agent_id)
+        _logger.info("policy.agent_unregistered", agent_id=str(agent_id))
+
     async def push_default_to_agent(self, agent_id: UUID) -> None:
         """Push the default profile to a newly connected agent."""
         if self._default_profile in self._profiles:

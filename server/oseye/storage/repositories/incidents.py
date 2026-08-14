@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.core.pagination import PageResult
@@ -220,6 +220,9 @@ class SQLIncidentRepository:
 
         Used by the CorrelationEngine to select the best match across multiple
         concurrent incidents on the same host.
+
+        PC-09: batch-loads all alert rows in a single IN query (2 queries total)
+        instead of one SELECT per incident (N+1).
         """
         async with self._session_factory() as session:
             result = await session.execute(
@@ -231,25 +234,43 @@ class SQLIncidentRepository:
                 .limit(20)  # safety cap — a host shouldn't have hundreds of open incidents
             )
             rows = result.scalars().all()
-            incidents = []
-            for row in rows:
-                alerts = await _load_alerts(session, row.incident_id)
-                incidents.append(_to_domain(row, alerts))
-            return incidents
+            if not rows:
+                return []
+
+            # PC-09: batch-load all alert rows in one IN query
+            incident_ids = [row.incident_id for row in rows]
+            alerts_by_incident: dict[str, list[IncidentAlertRow]] = {
+                iid: [] for iid in incident_ids
+            }
+            alert_rows = (
+                await session.execute(
+                    select(IncidentAlertRow).where(
+                        IncidentAlertRow.incident_id.in_(incident_ids)
+                    )
+                )
+            ).scalars().all()
+            for ar in alert_rows:
+                alerts_by_incident.setdefault(ar.incident_id, []).append(ar)
+
+            return [
+                _to_domain(row, alerts_by_incident.get(row.incident_id, []))
+                for row in rows
+            ]
 
     async def close_stale(self, cutoff: datetime) -> int:
         """Set status='resolved' on open incidents not updated since *cutoff*.
 
         Returns the number of incidents closed.
+
+        PC-12: uses a single bulk UPDATE instead of loading all rows into memory
+        and updating them one at a time.
         """
         async with self._session_factory() as session:
             async with session.begin():
                 result = await session.execute(
-                    select(IncidentRow)
+                    update(IncidentRow)
                     .where(IncidentRow.status == "open")
                     .where(IncidentRow.updated_at < cutoff.isoformat())
+                    .values(status="resolved")
                 )
-                rows = result.scalars().all()
-                for row in rows:
-                    row.status = "resolved"
-                return len(rows)
+                return result.rowcount

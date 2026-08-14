@@ -35,6 +35,9 @@ func init() {
 // BlockIP adds a DROP rule for the given IP using the available backend.
 // Returns the rule handle (nftables) or empty string (iptables) for later removal.
 // CIA — Disponibilité : the rule is logged before execution so it survives a crash.
+// G-X-01: NOTE — this function only blocks OUTBOUND traffic (OUTPUT chain / hook output).
+// Inbound connections from the blocked IP are NOT affected. Use a separate INPUT/FORWARD
+// rule if inbound blocking is also required.
 func BlockIP(ip string) (handle string, err error) {
 	// G-X-02: validate and canonicalize IP before passing to firewall commands.
 	// net.ParseIP also rejects CIDR notation ("1.2.3.4/24") — it returns nil for those.
@@ -106,8 +109,10 @@ func UnblockIP(ip, handle string) error {
 				return fmt.Errorf("unblock_ip: nft delete rule handle %s: %s: %w", handle, out, err)
 			}
 		} else {
-			// No handle stored (e.g. upgraded from old agent version): log and skip.
-			slog.Warn("unblock_ip: no nft handle available, cannot remove rule surgically", "ip", ip)
+			// G-X-02: no handle stored (e.g. upgraded from old agent version): log and skip.
+			// The IP DROP rule may still be active in the oseye chain.
+			slog.Warn("unblock_ip: no nft handle available, cannot remove rule — IP may still be blocked",
+				"ip", ip)
 		}
 	case backendIptables:
 		out, err := exec.Command("iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP").CombinedOutput()
@@ -176,14 +181,22 @@ func QuarantineFile(path, quarantineDir string) (string, error) {
 }
 
 // RestoreFile moves a quarantined file back to its original location.
+// G-X-03: preserve the permissions of the file that exists at originalPath (if any)
+// instead of always writing hardcoded 0644. Falls back to 0644 when no prior file exists.
 func RestoreFile(quarantinePath, originalPath string) error {
-	if err := os.Chmod(quarantinePath, 0o644); err != nil {
-		slog.Warn("restore: chmod failed", "path", quarantinePath, "err", err)
+	// Determine target permissions: use existing file's mode if it is already present,
+	// otherwise default to 0644.
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(originalPath); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err := os.Chmod(quarantinePath, mode); err != nil {
+		slog.Warn("restore: chmod failed", "path", quarantinePath, "mode", mode, "err", err)
 	}
 	if err := os.Rename(quarantinePath, originalPath); err != nil {
 		return fmt.Errorf("restore: rename %q → %q: %w", quarantinePath, originalPath, err)
 	}
-	slog.Info("file_restored", "original", originalPath)
+	slog.Info("file_restored", "original", originalPath, "mode", mode)
 	return nil
 }
 

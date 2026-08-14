@@ -183,9 +183,17 @@ class RuleWorker:
             return
 
         # Feedback loop: train ML classifier on confirmed positives (rule matches).
+        # W-08: learn_from_alert() is CPU-bound/synchronous — run in a thread executor
+        # so it does not block the asyncio event loop.
         if self._ml_engine is not None and match.mitre:
             try:
-                self._ml_engine.learn_from_alert(event, list(match.mitre))
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None,
+                    self._ml_engine.learn_from_alert,
+                    event,
+                    list(match.mitre),
+                )
             except Exception as exc:  # noqa: BLE001
                 _log.debug("ml_learn_from_alert_error", error=str(exc))
 

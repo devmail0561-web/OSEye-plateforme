@@ -81,6 +81,10 @@ class AlertRow(Base):
     __tablename__ = "alerts"
 
     alert_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # PC-15: timestamps are stored as ISO-8601 strings (String(64)) for SQLite
+    # compatibility. String comparison is correct for ISO-8601 dates (they sort
+    # lexicographically). In a PostgreSQL-only deployment, consider migrating to
+    # DateTime(timezone=True) for native temporal queries and range indexes.
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
 

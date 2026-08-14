@@ -372,6 +372,14 @@ func (c *CommandClient) handleRestoreFile(cmd *gen.AgentCommand) {
 		return
 	}
 
+	// CORE-003: original_path must be absolute before any further validation.
+	if !filepath.IsAbs(payload.OriginalPath) {
+		slog.Warn("restore_file: original path is not absolute", "path", payload.OriginalPath)
+		c.reporter.Send(cmd.GetCommandId(), "failed",
+			fmt.Sprintf("restore_file: original_path must be absolute: %s", payload.OriginalPath))
+		return
+	}
+
 	// GO-004: reject restoration to dangerous system directories.
 	cleanO := filepath.Clean(payload.OriginalPath)
 	if isDangerousPath(cleanO) {

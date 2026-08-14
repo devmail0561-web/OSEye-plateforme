@@ -50,6 +50,9 @@ class JWTHandler:
         self._expire_minutes = expire_minutes
         if secret is not None:
             # HS256 mode — for unit tests without PEM files
+            # API-08: enforce minimum key length to prevent weak secrets.
+            if len(secret) < 32:
+                raise ValueError("HS256 secret must be at least 32 bytes")
             self._algorithm = "HS256"
             self._sign_key: Any = secret
             self._verify_key: Any = secret

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -118,12 +119,16 @@ async def upload_plugin(
             detail="Invalid plugin filename. Must match [a-zA-Z0-9_-]+.py",
         )
 
-    _PLUGIN_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    dest = _PLUGIN_UPLOAD_DIR / filename
-
     content = await file.read()
     if len(content) > 1 * 1024 * 1024:  # 1 MB hard cap
         raise HTTPException(status_code=413, detail="Plugin file exceeds 1 MB limit")
+
+    # API-10: use a per-request private temp directory instead of a shared
+    # world-accessible /tmp path; chmod 0o700 ensures only the server user
+    # can read the staged file.
+    tmpdir = tempfile.mkdtemp(prefix="oseye_plugin_")
+    os.chmod(tmpdir, 0o700)
+    dest = Path(tmpdir) / filename
 
     dest.write_bytes(content)
     _logger.info("plugin_uploaded", filename=filename, size=len(content))
@@ -135,7 +140,11 @@ async def upload_plugin(
         dest.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:
-        dest.unlink(missing_ok=True)  # clean up temp upload after install
+        dest.unlink(missing_ok=True)  # clean up staged file
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
 
     return {"name": info.name, "status": info.status}
 

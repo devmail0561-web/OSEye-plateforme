@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/oseye/agent/internal/collector"
@@ -64,8 +65,19 @@ func (c *AuditdCollector) Start(ctx context.Context, out chan<- collector.RawEve
 		return nil
 	}
 
+	// CORE-004: record the inode of the initially opened file for rotation detection.
+	var openIno uint64
+	if fi, err := f.Stat(); err == nil {
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+			openIno = st.Ino
+		}
+	}
+
 	c.running.Store(true)
 	defer c.running.Store(false)
+
+	// lastRotationCheck tracks when we last compared the log file's inode.
+	lastRotationCheck := time.Now()
 
 	scanner := bufio.NewScanner(f)
 	for {
@@ -90,7 +102,26 @@ func (c *AuditdCollector) Start(ctx context.Context, out chan<- collector.RawEve
 				return nil
 			case <-time.After(100 * time.Millisecond):
 			}
-			// Re-open scanner on the same fd to continue reading new lines.
+			// CORE-004: every 30s check whether the log file has been rotated by
+			// comparing the inode of the path with the inode of our open descriptor.
+			if openIno != 0 && time.Since(lastRotationCheck) >= 30*time.Second {
+				lastRotationCheck = time.Now()
+				if fi, err := os.Stat(c.logPath); err == nil {
+					if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Ino != openIno {
+						slog.Info("auditd: log rotation detected, reopening", "path", c.logPath)
+						f.Close()
+						newF, err := os.Open(c.logPath)
+						if err != nil {
+							slog.Warn("auditd: reopen after rotation failed", "path", c.logPath, "err", err)
+							c.storeError(err.Error())
+							return nil
+						}
+						f = newF
+						openIno = st.Ino
+					}
+				}
+			}
+			// Re-open scanner on the same (possibly rotated) fd to continue reading new lines.
 			scanner = bufio.NewScanner(f)
 			continue
 		}

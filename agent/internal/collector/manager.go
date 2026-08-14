@@ -65,7 +65,9 @@ func (m *CollectorManager) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop cancels all collectors and waits for them to finish.
+// Stop cancels all collectors and waits for all goroutines to exit.
+// CORE-006: m.wg.Wait() ensures no goroutine is still writing to m.out or to
+// collector-owned channels after Stop() returns, preventing use-after-close races.
 func (m *CollectorManager) Stop() {
 	if m.cancel != nil {
 		m.cancel()
@@ -73,6 +75,7 @@ func (m *CollectorManager) Stop() {
 	for _, c := range m.collectors {
 		_ = c.Stop()
 	}
+	m.wg.Wait()
 }
 
 // Events returns the fan-in channel. Closed after Stop() and all goroutines exit.

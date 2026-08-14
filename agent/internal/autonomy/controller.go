@@ -209,8 +209,9 @@ func (c *Controller) execBlockIP(det localrules.Detection) error {
 		return fmt.Errorf("block_ip: no IP found in event data")
 	}
 
-	dedupKey := "auto_block_ip:" + ip
-	if !c.dedup.Allow("BLOCK_IP", dedupKey) {
+	// G-D-03: use the canonical IP as target (no prefix) to share the dedup TTL
+	// with server-issued BLOCK_IP commands on the same IP.
+	if !c.dedup.Allow("BLOCK_IP", ip) {
 		return nil
 	}
 
@@ -293,8 +294,9 @@ func (c *Controller) execQuarantineFile(det localrules.Detection) error {
 		return fmt.Errorf("quarantine_file: no path in event")
 	}
 
-	dedupKey := "auto_quarantine:" + path
-	if !c.dedup.Allow("QUARANTINE_FILE", dedupKey) {
+	// G-D-03: use the path directly (no prefix) to share the dedup TTL with
+	// server-issued QUARANTINE_FILE commands on the same path.
+	if !c.dedup.Allow("QUARANTINE_FILE", path) {
 		return nil
 	}
 

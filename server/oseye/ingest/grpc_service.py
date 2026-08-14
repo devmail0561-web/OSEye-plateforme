@@ -97,7 +97,8 @@ def _require_cn(
     if blocked_cns is not None and blocked_lock is not None:
         with blocked_lock:
             if cn in blocked_cns:
-                context.abort(grpc.StatusCode.PERMISSION_DENIED, f"Agent {cn!r} is revoked")
+                # PC-16: use a generic message to avoid leaking the CN in error responses
+                context.abort(grpc.StatusCode.PERMISSION_DENIED, "Agent certificate is revoked")
                 return None
     return cn
 
@@ -246,7 +247,9 @@ class AgentServiceServicer:
                     running_loop = asyncio.get_running_loop()
                     # BUG-009: attach a done callback to log publish errors
                     # instead of silently discarding them.
-                    task = asyncio.ensure_future(coro, loop=running_loop)
+                    # PC-11: ensure_future(loop=) is deprecated in Python 3.12+;
+                    # use running_loop.create_task() which is the correct API.
+                    task = running_loop.create_task(coro)
                     task.add_done_callback(
                         lambda t: _logger.error(
                             "bus_publish_failed",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import time
 import uuid
@@ -78,7 +79,12 @@ class EBPFAdapter:
         if category == "network":
             raw_dst_ip = data.get("dst_ip")
             if raw_dst_ip is not None:
-                dst_ip = str(raw_dst_ip)
+                # PC-14: validate the IP field; set to None if it is not a valid address
+                try:
+                    ipaddress.ip_address(str(raw_dst_ip))
+                    dst_ip = str(raw_dst_ip)
+                except ValueError:
+                    dst_ip = None
 
             raw_dst_port = data.get("dst_port")
             if raw_dst_port is not None:

@@ -35,10 +35,18 @@ from oseye.config import Settings
 
 
 def _get_real_ip(request: Request) -> str:
-    """Extract client IP from X-Forwarded-For when behind a reverse proxy."""
+    """Extract client IP from X-Forwarded-For when behind a reverse proxy.
+
+    API-04: X-Forwarded-For can be spoofed by clients — only use it when the
+    connecting IP is a known trusted proxy (OSEYE_TRUST_PROXY=true).
+    When trusted, take the LAST (rightmost) entry which is the closest
+    hop added by an actual proxy, not the leftmost which can be forged.
+    """
+    import os as _os
     forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        # Rightmost entry = closest trusted hop; leftmost can be client-supplied.
+        return forwarded_for.split(",")[-1].strip()
     return _get_remote_address_raw(request)
 
 

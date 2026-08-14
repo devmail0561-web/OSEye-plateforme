@@ -10,7 +10,7 @@ Usage:
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -137,6 +137,23 @@ class Settings(BaseSettings):
         default="critical_only",
         description="Fallback autonomy level for profiles not listed in PROFILE_AUTONOMY.",
     )
+
+    @model_validator(mode="after")
+    def _validate_weights_sum(self) -> "Settings":
+        """PC-08: WeightedScorer weights must sum to 1.0 (±0.001 tolerance)."""
+        total = (
+            self.decision_weight_rule
+            + self.decision_weight_ml
+            + self.decision_weight_ti
+            + self.decision_weight_depth
+        )
+        if abs(total - 1.0) > 0.001:
+            raise ValueError(
+                f"decision_weight_* fields must sum to 1.0; got {total:.6f}. "
+                f"(rule={self.decision_weight_rule}, ml={self.decision_weight_ml}, "
+                f"ti={self.decision_weight_ti}, depth={self.decision_weight_depth})"
+            )
+        return self
 
     # ML Engine
     ml_checkpoint_path: str = Field(

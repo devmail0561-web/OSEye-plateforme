@@ -185,6 +185,9 @@ class DecisionEngine:
         """
         # Derive signal scores from incident context
         rule_score = _SEVERITY_SCORE.get(incident.severity, 50.0)
+        # D-08: warn when an unknown severity falls through to the default 50.0
+        if incident.severity not in _SEVERITY_SCORE:
+            _log.warning("decision_engine: unknown severity", severity=incident.severity)
         if self._ml_engine is not None and trigger_event is not None:
             # ML-R-01: prefer score_event_readonly (no training side-effect); fall back
             # to score_event for older MLEngine versions that lack the method.

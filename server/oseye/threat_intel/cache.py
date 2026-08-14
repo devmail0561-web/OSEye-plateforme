@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections import OrderedDict
 from typing import Any, Protocol, runtime_checkable
 
 from oseye.threat_intel.models import ThreatIntelReport
@@ -32,10 +33,13 @@ class TICache(Protocol):
 class MemoryTICache:
     """Thread-safe in-memory TI cache with lazy TTL eviction."""
 
+    _MAX_SIZE = 10_000  # TI-03: cap to prevent unbounded growth
+
     def __init__(self, default_ttl: int = _DEFAULT_TTL) -> None:
         self._default_ttl = default_ttl
+        # TI-03: OrderedDict preserves insertion order for LRU eviction
         # key -> (expires_at: float, report: ThreatIntelReport)
-        self._store: dict[str, tuple[float, ThreatIntelReport]] = {}
+        self._store: OrderedDict[str, tuple[float, ThreatIntelReport]] = OrderedDict()
         self._lock = asyncio.Lock()
 
     @staticmethod
@@ -64,6 +68,12 @@ class MemoryTICache:
         key = self._key(indicator_type, indicator)
         expires_at = time.monotonic() + ttl
         async with self._lock:
+            # TI-03: LRU eviction — remove existing key first (re-insert at end),
+            # then evict the oldest entry if the store is at capacity.
+            if key in self._store:
+                del self._store[key]
+            elif len(self._store) >= self._MAX_SIZE:
+                self._store.popitem(last=False)  # remove oldest entry
             self._store[key] = (expires_at, report)
 
     async def close(self) -> None:

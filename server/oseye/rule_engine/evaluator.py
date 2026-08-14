@@ -76,8 +76,12 @@ def record_event_for_temporal(
         # F-05: delete the key when the window becomes empty after pruning
         if not dq:
             del _temporal_windows[key]
-    _record_count += 1
-    if _record_count % 500 == 0:
+    # W-10: increment _record_count under the lock to avoid a data race with
+    # concurrent threads writing to the same global counter.
+    with _temporal_windows_lock:
+        _record_count += 1
+        _should_purge = (_record_count % 500 == 0)
+    if _should_purge:
         _purge_old_windows()
 
 

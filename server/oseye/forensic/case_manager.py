@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
+from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -16,6 +18,16 @@ from oseye.storage.repositories.cases import SQLCaseRepository
 _UPDATABLE_FIELDS: frozenset[str] = frozenset({
     "title", "description", "severity", "status", "tags", "assigned_to",
 })
+
+# F-03: mask field values whose names suggest sensitive data
+_SENSITIVE_FIELD_RE = re.compile(r"password|token|key|secret|hash", re.IGNORECASE)
+
+
+def _mask_custody_value(field_name: str, value: str) -> str:
+    """Return '***' if *field_name* matches a sensitive pattern, else *value*."""
+    if _SENSITIVE_FIELD_RE.search(field_name):
+        return "***"
+    return value
 
 
 def _custody_hash(prev_hash: str, timestamp: str, operator: str, action: str, detail: str) -> str:
@@ -35,10 +47,20 @@ class CaseManager:
 
     def __init__(self, case_repo: SQLCaseRepository) -> None:
         self._repo = case_repo
-        self._case_locks: dict[UUID, asyncio.Lock] = {}
+        # F-06: use OrderedDict for insertion-order tracking so we can evict the
+        # oldest entries (LRU cap) when the dict exceeds 1 000 entries.
+        self._case_locks: OrderedDict[UUID, asyncio.Lock] = OrderedDict()
 
     async def _get_case_lock(self, case_id: UUID) -> asyncio.Lock:
-        if case_id not in self._case_locks:
+        if case_id in self._case_locks:
+            # Move to end — most recently used
+            self._case_locks.move_to_end(case_id)
+        else:
+            # F-06: evict oldest 100 entries when the cap is reached
+            if len(self._case_locks) >= 1000:
+                for _ in range(100):
+                    if self._case_locks:
+                        self._case_locks.popitem(last=False)
             self._case_locks[case_id] = asyncio.Lock()
         return self._case_locks[case_id]
 
@@ -107,7 +129,10 @@ class CaseManager:
                 setattr(case, k, v)
             case.updated_at = datetime.now(UTC)
             await self._repo.update(case)
-            detail = ", ".join(f"{k}={v}" for k, v in fields.items())
+            # F-03: mask values for fields that look sensitive before logging
+            detail = ", ".join(
+                f"{k}={_mask_custody_value(k, str(v))}" for k, v in fields.items()
+            )
             await self._append_custody(case, operator, "case_updated", detail)
             return case
 

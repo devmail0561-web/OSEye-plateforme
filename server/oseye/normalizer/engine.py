@@ -111,8 +111,14 @@ class NormalizerEngine:
                     instance = obj()
                     self.register_adapter(os_name, source, instance)
                     registered += 1
-                except Exception:
-                    logger.warning("adapter_auto_register_failed", extra={"name": name})
+                except Exception as exc:
+                    # PC-13: log the exception details so adapter failures are diagnosable
+                    logger.warning(
+                        "adapter_auto_register_failed: %s: %s",
+                        name,
+                        exc,
+                        exc_info=True,
+                    )
         return registered
 
     async def process(

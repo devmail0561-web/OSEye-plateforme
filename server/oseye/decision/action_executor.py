@@ -162,12 +162,15 @@ class ActionExecutor:
     # ------------------------------------------------------------------
 
     async def _publish(self, topic: str, decision: Decision) -> None:
+        # D-07: strip internal scoring fields from the bus payload so they are not
+        # accessible to agents that subscribe to decisions:completed / decisions:pending.
+        # Only decision_type, entity_id and explanation are exposed externally;
+        # decision_id / timestamps are included for UI correlation but no raw scores.
         payload = json.dumps(
             {
                 "decision_id":      str(decision.decision_id),
                 "decision_type":    decision.decision_type,
                 "entity_id":        decision.entity_id,
-                "final_score":      decision.final_score,
                 "requires_human":   decision.requires_human,
                 "trigger_alert_id": (
                     str(decision.trigger_alert_id) if decision.trigger_alert_id else None
@@ -237,12 +240,20 @@ class ActionExecutor:
             return None
 
         try:
-            ipaddress.ip_address(dst_ip)
+            addr = ipaddress.ip_address(dst_ip)
         except ValueError:
             _log.warning(
                 "action_isolate_invalid_ip",
                 decision_id=str(decision.decision_id),
                 dst_ip=dst_ip,
+            )
+            return None
+
+        # D-02: refuse to block loopback, link-local, unspecified, or private addresses
+        if addr.is_loopback or addr.is_link_local or addr.is_unspecified or addr.is_private:
+            _log.warning(
+                "action_executor: refusing to block private/loopback IP",
+                ip=dst_ip,
             )
             return None
 

@@ -26,6 +26,7 @@ Typical lifecycle
 from __future__ import annotations
 
 import statistics
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -79,9 +80,10 @@ class ABTestSession:
         self._n_min = n_min_events
         self._threshold = disagree_threshold
         self._max_stored = max_stored_scores
-        self._champion_scores: list[float] = []
-        self._challenger_scores: list[float] = []
-        self._deltas: list[float] = []
+        # ML-04: use deque with maxlen for O(1) popleft instead of O(n) list.pop(0)
+        self._champion_scores: deque[float] = deque(maxlen=max_stored_scores)
+        self._challenger_scores: deque[float] = deque(maxlen=max_stored_scores)
+        self._deltas: deque[float] = deque(maxlen=max_stored_scores)
 
     def score_event(self, event: UniversalEvent) -> float:
         """Score event with both models. Returns champion score (authoritative).
@@ -91,12 +93,7 @@ class ABTestSession:
         champ_score = self._champion.score_event(event)
         chal_score = self._challenger.score_event(event)
 
-        # Evict oldest entry when the cap is reached (sliding window).
-        if len(self._deltas) >= self._max_stored:
-            self._champion_scores.pop(0)
-            self._challenger_scores.pop(0)
-            self._deltas.pop(0)
-
+        # ML-04: deques with maxlen auto-evict the oldest entry on append — no manual pop needed.
         self._champion_scores.append(champ_score)
         self._challenger_scores.append(chal_score)
         self._deltas.append(abs(chal_score - champ_score))
@@ -147,9 +144,10 @@ class ABTestSession:
         """
         self._champion = self._challenger
         self._challenger = _clone_champion(self._champion)
-        self._champion_scores.clear()
-        self._challenger_scores.clear()
-        self._deltas.clear()
+        # Reset accumulated A/B stats — reinitialise as fresh deques with the same maxlen
+        self._champion_scores = deque(maxlen=self._max_stored)
+        self._challenger_scores = deque(maxlen=self._max_stored)
+        self._deltas = deque(maxlen=self._max_stored)
         return self._champion
 
     @property
