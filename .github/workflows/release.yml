@@ -16,7 +16,7 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -32,7 +32,7 @@ jobs:
 
   build:
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -65,7 +65,7 @@ jobs:
 
   package:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -106,7 +106,7 @@ jobs:
 
   docker-agent:
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -135,7 +135,7 @@ jobs:
 
   docker-server:
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -163,7 +163,7 @@ jobs:
 
   release:
     needs: [package, docker-agent, docker-server]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
