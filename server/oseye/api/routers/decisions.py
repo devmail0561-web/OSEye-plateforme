@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
@@ -143,7 +143,7 @@ async def reject_decision(
 @router.get("/journal/verify")
 async def verify_journal_integrity(
     request: Request,
-    limit: int = 1000,
+    limit: int = Query(default=1000, ge=1, le=10000),
     _auth: dict[str, Any] = Depends(_require_reader),
 ) -> dict[str, object]:
     """Verify the BLAKE3 hash chain integrity of the decision journal.
@@ -158,7 +158,7 @@ async def verify_journal_integrity(
 
     repo = _get_decision_repo(request)
     pagination = _Pagination(limit=limit, offset=0)
-    page = await repo.list(filters={}, pagination=pagination)
+    page = await repo.list_decisions(filters={}, pagination=pagination)
     decisions = page.items
 
     journal = DecisionJournal()

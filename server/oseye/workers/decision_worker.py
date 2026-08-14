@@ -186,9 +186,8 @@ class DecisionWorker:
         # Broadcast to WebSocket clients
         if self._ws_decision_manager is not None:
             try:
-                import json as _json
                 await self._ws_decision_manager.broadcast(
-                    _json.dumps({
+                    json.dumps({
                         "decision_id": str(decision.decision_id),
                         "decision_type": decision.decision_type,
                         "risk_score": getattr(decision, "risk_score", None),

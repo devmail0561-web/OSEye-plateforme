@@ -12,7 +12,6 @@ from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_analyst
 from oseye.core.schema import UniversalEvent
-from oseye.storage.repositories.events import EventFilter
 
 router = APIRouter(prefix="/api/v1", tags=["events"])
 
@@ -151,6 +150,7 @@ async def get_event_chain(
     if event.incident_chain_id is None:
         return [event]
 
-    filters = EventFilter(incident_chain_id=event.incident_chain_id)
-    results, _ = await repo.query(filters=filters, limit=limit, offset=0)
-    return sorted(results, key=lambda e: e.timestamp_ns)
+    filters = _Filter(incident_chain_id=event.incident_chain_id)
+    pagination = _Pagination(limit=limit, offset=0)
+    page = await repo.query(filters, pagination)
+    return sorted(page.items, key=lambda e: e.timestamp_ns)

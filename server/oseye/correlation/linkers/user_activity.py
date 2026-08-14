@@ -49,10 +49,14 @@ class UserActivityLinker:
         if not alert.process_name:
             return 0.0
 
-        incident_procs = {e.title for e in incident.events} if incident.events else set()
-
-        # Direct process_name overlap with any incident alert title
-        matched = any(alert.process_name in t for t in incident_procs)
+        timeline = incident.timeline or []
+        # Use word-boundary matching to avoid false positives where a short
+        # process_name (e.g. "su", "bash") appears as a substring in unrelated titles.
+        proc = alert.process_name
+        matched = any(
+            f" {proc} " in f" {e.title} " or e.title == proc or e.title.startswith(f"{proc} ")
+            for e in timeline
+        )
         if not matched:
             return 0.0
 

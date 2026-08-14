@@ -43,16 +43,22 @@ class PidLineageLinker:
 
         base = 0.0
 
-        # Same entity_id → same process instance
-        incident_entities = {e.title for e in incident.events} if incident.events else set()
-        if alert.entity_id and any(alert.entity_id in e for e in incident_entities):
+        timeline = incident.timeline or []
+
+        # Same entity_id prefix in incident timeline titles: entity_id is "hostname:pid",
+        # so we check for exact token match (word-boundary) rather than substring to
+        # avoid spurious matches against arbitrary title text.
+        if alert.entity_id and any(
+            f" {alert.entity_id} " in f" {e.title} " or e.title == alert.entity_id
+            for e in timeline
+        ):
             base = _BASE_ENTITY
         elif alert.pid is not None:
-            # Check if any alert in the incident has the same pid
+            # Parse pids from timeline entries whose title ends with ":PID" (entity_id format).
             incident_pids = {
-                int(e.title.split(":")[-1])
-                for e in incident.events
-                if ":" in e.title and e.title.split(":")[-1].isdigit()
+                int(e.title.rsplit(":", 1)[-1])
+                for e in timeline
+                if ":" in e.title and e.title.rsplit(":", 1)[-1].isdigit()
             }
             if alert.pid in incident_pids:
                 base = _BASE_PID
