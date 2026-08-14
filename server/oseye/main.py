@@ -26,7 +26,10 @@ from oseye.bus.factory import create_bus
 from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.correlation.engine import CorrelationEngine
+from oseye.correlation.linkers.pid_lineage import PidLineageLinker
 from oseye.correlation.linkers.same_host import SameHostLinker
+from oseye.correlation.linkers.temporal import TemporalLinker
+from oseye.correlation.linkers.user_activity import UserActivityLinker
 from oseye.decision.action_executor import ActionExecutor
 from oseye.decision.engine import DecisionEngine, PolicyOverrides
 from oseye.decision.human_queue import HumanApprovalQueue
@@ -176,7 +179,12 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         incident_repo = SQLIncidentRepository(backend.session_factory)
         linker = SameHostLinker(timeframe_seconds=settings.correlation_window_seconds)
         correlation_engine = CorrelationEngine(
-            linkers=[linker],
+            linkers=[
+                linker,
+                TemporalLinker(timeframe_seconds=60),
+                PidLineageLinker(timeframe_seconds=settings.correlation_window_seconds),
+                UserActivityLinker(timeframe_seconds=settings.correlation_window_seconds * 2),
+            ],
             incident_repo=incident_repo,
             min_severity=settings.correlation_min_severity,
         )

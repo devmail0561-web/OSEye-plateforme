@@ -178,3 +178,24 @@ class SQLAlertRepository:
             if filters.get("severity"):
                 stmt = stmt.where(AlertRow.severity == filters["severity"])
             return (await session.execute(stmt)).scalar_one()
+
+    async def list_by_entity(self, entity_id: str) -> list[Alert]:
+        """Return all alerts for a specific entity_id, newest first."""
+        async with self._session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(AlertRow)
+                    .where(AlertRow.entity_id == entity_id)
+                    .order_by(AlertRow.created_at.desc())
+                )
+            ).scalars().all()
+            return [_row_to_alert(r) for r in rows]
+
+    async def list_all(self, hostname: str | None = None, limit: int = 5000) -> list[Alert]:
+        """Return up to *limit* alerts, optionally filtered by hostname."""
+        async with self._session_factory() as session:
+            stmt = select(AlertRow).order_by(AlertRow.created_at.desc()).limit(limit)
+            if hostname:
+                stmt = stmt.where(AlertRow.hostname == hostname)
+            rows = (await session.execute(stmt)).scalars().all()
+            return [_row_to_alert(r) for r in rows]

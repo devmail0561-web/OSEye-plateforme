@@ -19,6 +19,7 @@ from oseye.api.routers import (
     cases,
     decisions,
     enrollment,
+    entities,
     events,
     health,
     incidents,
@@ -122,6 +123,7 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     app.include_router(agents.router)
     app.include_router(response_actions.router)
     app.include_router(events.router)
+    app.include_router(entities.router)
     app.include_router(alerts.router)
     app.include_router(rules.router)
     app.include_router(api_keys.router)

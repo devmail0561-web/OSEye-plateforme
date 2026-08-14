@@ -12,6 +12,7 @@ from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_analyst
 from oseye.core.schema import UniversalEvent
+from oseye.storage.repositories.events import EventFilter
 
 router = APIRouter(prefix="/api/v1", tags=["events"])
 
@@ -126,3 +127,30 @@ async def get_event(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     return event
+
+
+@router.get("/events/{event_id}/chain")
+async def get_event_chain(
+    event_id: UUID,
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=1000),
+    _auth: dict[str, Any] = Depends(require_analyst),
+) -> list[UniversalEvent]:
+    """Return all events in the same incident chain as *event_id*.
+
+    The chain is identified by the ``incident_chain_id`` field set when the
+    Decision Engine escalates a correlated incident.  Events are returned in
+    chronological order (oldest first).  Returns a single-element list when the
+    event has no chain (``incident_chain_id`` is null).
+    """
+    repo = _get_event_repo(request)
+    event: UniversalEvent | None = await repo.get(event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    if event.incident_chain_id is None:
+        return [event]
+
+    filters = EventFilter(incident_chain_id=event.incident_chain_id)
+    results, _ = await repo.query(filters=filters, limit=limit, offset=0)
+    return sorted(results, key=lambda e: e.timestamp_ns)
