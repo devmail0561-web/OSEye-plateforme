@@ -194,135 +194,136 @@ class AgentServiceServicer:
         if cn is None:
             return  # aborted above
 
-        # Track agent connection
+        # Track agent connection — discard in finally to cover all exit paths
+        # (normal end-of-stream, context.abort(), exception).
         with self._active_cns_lock:
             self._active_cns.add(cn)
-        if self._agent_repo is not None and self._loop is not None:
-            _peer = context.peer() or ""
-            _ip = _peer.split(":")[1] if _peer.startswith("ipv4:") else None
-            asyncio.run_coroutine_threadsafe(
-                self._agent_repo.upsert(cn=cn, online=True, ip_address=_ip),
-                self._loop,
-            )
-
-        total_accepted = 0
-        total_rejected = 0
-        all_errors: list[str] = []
-
-        for request in request_iterator:
-            agent_public_key = self._get_agent_key(cn)
-            if agent_public_key is None:
-                _logger.warning("agent_key_not_registered", cn=cn)
-                if self._require_agent_keys:
-                    context.abort(
-                        grpc.StatusCode.UNAUTHENTICATED,
-                        f"No Ed25519 public key registered for agent {cn!r}",
-                    )
-                    return
-            result = self._validator.validate(request, agent_public_key=agent_public_key)
-            total_accepted += result.accepted
-            total_rejected += result.rejected
-            # [MEDIUM-4] cap accumulated errors to avoid unbounded growth
-            if len(all_errors) < 1000:
-                all_errors.extend(result.errors[:10])
-
-            # [HIGH-1] build rejected-index set once — O(M) — instead of O(N×M)
-            rejected_indices: set[int] = set()
-            for err in result.errors:
-                if not err.startswith("event "):
-                    continue
-                parts = err.split(" ")
-                if len(parts) < 2:
-                    continue
-                try:
-                    rejected_indices.add(int(parts[1].rstrip(":")))
-                except ValueError:
-                    pass
-
-            normalized_topic = "events:normalized"
-            for event_index, pb_event in enumerate(request.events):
-                is_rejected = event_index in rejected_indices
-                if is_rejected:
-                    continue
-
-                event = pb_to_event(pb_event, agent_id_override=cn)
-                payload = event.model_dump_json().encode("utf-8")
-                # pb_to_event already normalises the event — publish directly
-                # to events:normalized so the storage writer can persist it
-                # without a second normalisation pass.
-                # [HIGH-2] publish safely regardless of calling context:
-                # - from a running event loop (tests/async): use ensure_future
-                # - from a sync gRPC thread with a known loop: run_coroutine_threadsafe
-                # - fallback: asyncio.run (creates a temporary loop)
-                coro = self._bus.publish(normalized_topic, payload)
-                try:
-                    running_loop = asyncio.get_running_loop()
-                    # BUG-009: attach a done callback to log publish errors
-                    # instead of silently discarding them.
-                    # PC-11: ensure_future(loop=) is deprecated in Python 3.12+;
-                    # use running_loop.create_task() which is the correct API.
-                    task = running_loop.create_task(coro)
-                    task.add_done_callback(
-                        lambda t: _logger.error(
-                            "bus_publish_failed",
-                            topic=normalized_topic,
-                            error=str(t.exception()),
-                        )
-                        if not t.cancelled() and t.exception() is not None
-                        else None
-                    )
-                except RuntimeError:
-                    # No running loop — we are in a sync thread
-                    loop = self._loop
-                    if loop is not None and loop.is_running():
-                        future = asyncio.run_coroutine_threadsafe(coro, loop)
-                        future.add_done_callback(
-                            lambda f: _logger.error(
-                                "bus_publish_failed",
-                                topic=normalized_topic,
-                                error=str(f.exception()),
-                            )
-                            if f.exception() is not None
-                            else None
-                        )
-                    else:
-                        try:
-                            asyncio.run(coro)
-                        except RuntimeError:
-                            _logger.error("bus_publish_failed", topic=normalized_topic)
-
-            _logger.info(
-                "batch_ingested",
-                cn=cn,
-                accepted=result.accepted,
-                rejected=result.rejected,
-            )
-            # AG-R-04: refresh last_seen on every successfully processed batch.
+        try:
             if self._agent_repo is not None and self._loop is not None:
+                _peer = context.peer() or ""
+                _ip = _peer.split(":")[1] if _peer.startswith("ipv4:") else None
                 asyncio.run_coroutine_threadsafe(
-                    self._agent_repo.update_last_seen(cn),
+                    self._agent_repo.upsert(cn=cn, online=True, ip_address=_ip),
                     self._loop,
                 )
 
-        if _pb2 is None:  # pragma: no cover
-            return None
+            total_accepted = 0
+            total_rejected = 0
+            all_errors: list[str] = []
 
-        # Deregister from active set when stream ends
-        with self._active_cns_lock:
-            self._active_cns.discard(cn)
+            for request in request_iterator:
+                agent_public_key = self._get_agent_key(cn)
+                if agent_public_key is None:
+                    _logger.warning("agent_key_not_registered", cn=cn)
+                    if self._require_agent_keys:
+                        context.abort(
+                            grpc.StatusCode.UNAUTHENTICATED,
+                            f"No Ed25519 public key registered for agent {cn!r}",
+                        )
+                        return
+                result = self._validator.validate(request, agent_public_key=agent_public_key)
+                total_accepted += result.accepted
+                total_rejected += result.rejected
+                # [MEDIUM-4] cap accumulated errors to avoid unbounded growth
+                if len(all_errors) < 1000:
+                    all_errors.extend(result.errors[:10])
 
-        # Mark agent offline when stream ends
-        if self._agent_repo is not None and self._loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._agent_repo.set_offline(cn),
-                self._loop,
+                # [HIGH-1] build rejected-index set once — O(M) — instead of O(N×M)
+                rejected_indices: set[int] = set()
+                for err in result.errors:
+                    if not err.startswith("event "):
+                        continue
+                    parts = err.split(" ")
+                    if len(parts) < 2:
+                        continue
+                    try:
+                        rejected_indices.add(int(parts[1].rstrip(":")))
+                    except ValueError:
+                        pass
+
+                normalized_topic = "events:normalized"
+                for event_index, pb_event in enumerate(request.events):
+                    is_rejected = event_index in rejected_indices
+                    if is_rejected:
+                        continue
+
+                    event = pb_to_event(pb_event, agent_id_override=cn)
+                    payload = event.model_dump_json().encode("utf-8")
+                    # pb_to_event already normalises the event — publish directly
+                    # to events:normalized so the storage writer can persist it
+                    # without a second normalisation pass.
+                    # [HIGH-2] publish safely regardless of calling context:
+                    # - from a running event loop (tests/async): use ensure_future
+                    # - from a sync gRPC thread with a known loop: run_coroutine_threadsafe
+                    # - fallback: asyncio.run (creates a temporary loop)
+                    coro = self._bus.publish(normalized_topic, payload)
+                    try:
+                        running_loop = asyncio.get_running_loop()
+                        # BUG-009: attach a done callback to log publish errors
+                        # instead of silently discarding them.
+                        # PC-11: ensure_future(loop=) is deprecated in Python 3.12+;
+                        # use running_loop.create_task() which is the correct API.
+                        task = running_loop.create_task(coro)
+                        task.add_done_callback(
+                            lambda t: _logger.error(
+                                "bus_publish_failed",
+                                topic=normalized_topic,
+                                error=str(t.exception()),
+                            )
+                            if not t.cancelled() and t.exception() is not None
+                            else None
+                        )
+                    except RuntimeError:
+                        # No running loop — we are in a sync thread
+                        loop = self._loop
+                        if loop is not None and loop.is_running():
+                            future = asyncio.run_coroutine_threadsafe(coro, loop)
+                            future.add_done_callback(
+                                lambda f: _logger.error(
+                                    "bus_publish_failed",
+                                    topic=normalized_topic,
+                                    error=str(f.exception()),
+                                )
+                                if f.exception() is not None
+                                else None
+                            )
+                        else:
+                            try:
+                                asyncio.run(coro)
+                            except RuntimeError:
+                                _logger.error("bus_publish_failed", topic=normalized_topic)
+
+                _logger.info(
+                    "batch_ingested",
+                    cn=cn,
+                    accepted=result.accepted,
+                    rejected=result.rejected,
+                )
+                # AG-R-04: refresh last_seen on every successfully processed batch.
+                if self._agent_repo is not None and self._loop is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        self._agent_repo.update_last_seen(cn),
+                        self._loop,
+                    )
+
+            if _pb2 is None:  # pragma: no cover
+                return None
+
+            # Mark agent offline when stream ends
+            if self._agent_repo is not None and self._loop is not None:
+                asyncio.run_coroutine_threadsafe(
+                    self._agent_repo.set_offline(cn),
+                    self._loop,
+                )
+
+            return _pb2.IngestResponse(
+                accepted=total_accepted,
+                rejected=total_rejected,
+                errors=all_errors,
             )
-
-        return _pb2.IngestResponse(
-            accepted=total_accepted,
-            rejected=total_rejected,
-            errors=all_errors,
-        )
+        finally:
+            with self._active_cns_lock:
+                self._active_cns.discard(cn)
 
     # ------------------------------------------------------------------
     # ReceivePolicy — server-streaming RPC

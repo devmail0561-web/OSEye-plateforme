@@ -1,4 +1,9 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: oseye
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: oseye-agent
@@ -96,7 +101,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: oseye-agent
-          image: ghcr.io/oseye/oseye-agent:latest
+          image: ghcr.io/oseye/oseye-agent:v0.1.0-alpha.1
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
@@ -117,6 +122,8 @@ spec:
                 - SYS_PTRACE
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
           resources:
             requests:
               cpu: "50m"
