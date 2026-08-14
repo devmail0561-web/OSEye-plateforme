@@ -199,6 +199,9 @@ class SQLEventRepository:
     async def query(
         self, filters: EventFilter, pagination: Pagination
     ) -> PageResult[UniversalEvent]:
+        # PC-10: cap limit to prevent DoS via arbitrarily large result sets.
+        _limit = min(pagination.limit, 10000)
+        _offset = pagination.offset
         async with self._session_factory() as session:
             base_stmt = _apply_filters(select(EventRow), filters)
             count_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -206,8 +209,8 @@ class SQLEventRepository:
 
             data_stmt = (
                 base_stmt
-                .offset(pagination.offset)
-                .limit(pagination.limit)
+                .offset(_offset)
+                .limit(_limit)
                 .order_by(EventRow.timestamp_ns.desc())
             )
             rows = (await session.execute(data_stmt)).scalars().all()

@@ -139,7 +139,7 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def _validate_weights_sum(self) -> "Settings":
+    def _validate_weights_sum(self) -> Settings:
         """PC-08: WeightedScorer weights must sum to 1.0 (±0.001 tolerance)."""
         total = (
             self.decision_weight_rule

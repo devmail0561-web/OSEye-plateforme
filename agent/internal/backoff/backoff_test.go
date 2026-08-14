@@ -35,8 +35,9 @@ func TestNextIsNonDeterministic(t *testing.T) {
 }
 
 func TestNextWithZeroCurrent(t *testing.T) {
+	// G-B-02: Next(0) now returns 1ns instead of 0 to prevent permanent zero backoff.
 	v := backoff.Next(0, 30*time.Second)
-	if v != 0 {
-		t.Fatalf("expected 0 for zero current, got %v", v)
+	if v <= 0 {
+		t.Fatalf("expected positive duration for zero current, got %v", v)
 	}
 }

@@ -14,7 +14,7 @@ from oseye.api.auth.jwt import JWTHandler
 from oseye.config import Settings
 from oseye.storage.migrations import run_migrations
 
-TEST_SECRET = "test-secret-hs256"
+TEST_SECRET = "test-secret-hs256-for-pytest-32ch"
 
 
 @pytest_asyncio.fixture

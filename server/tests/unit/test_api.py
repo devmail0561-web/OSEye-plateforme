@@ -18,7 +18,7 @@ from oseye.storage.repositories.events import SQLEventRepository
 # Fixtures
 # ---------------------------------------------------------------------------
 
-TEST_SECRET = "test-secret-hs256-not-for-production"
+TEST_SECRET = "test-secret-hs256-not-for-production-x"
 TEST_USER = "analyst"
 TEST_PASSWORD = "analyst123"
 
@@ -88,7 +88,9 @@ async def test_health_endpoint(client: AsyncClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert body["service"] == "oseye-server"
+    # API-11: public health endpoint no longer discloses service/version details
+    assert "service" not in body
+    assert "version" not in body
 
 
 @pytest.mark.asyncio

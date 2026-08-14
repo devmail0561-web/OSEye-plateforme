@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import UTC
 
 from oseye.core.schema import Alert, ForensicCase, UniversalEvent
 
 # F-04: use an explicit UTC constant so timezone-naive datetimes get a safe tzinfo
-_UTC = timezone.utc
+_UTC = UTC
 
 _NS_PER_S = 1_000_000_000
 

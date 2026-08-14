@@ -85,7 +85,8 @@ class ThreatIntelClient:
             # TI-02: normalise IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) to their
             # IPv4 form before checking non-public ranges, so they cannot bypass
             # the private-address guard.
-            addr = addr.ipv4_mapped or addr
+            if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+                addr = addr.ipv4_mapped
             if (
                 addr.is_private
                 or addr.is_loopback
