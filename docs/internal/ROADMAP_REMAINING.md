@@ -3,6 +3,8 @@
 **Date :** 2026-08-11  
 **Base :** Post-Phase 10 + extensions (UI refonte, sécurité CIA, Response Engine, Plugin/ML/Policy câblés)
 
+**Statut au 2026-08-14 :** Moteur d'autonomie locale livré (v0.1.0-alpha.1). Audit complet 94 findings corrigés.
+
 **Statut au 2026-08-12 : TOUS LES BLOCS LIVRÉS ET AUDITÉS — 12+25 findings corrigés (commits 52716de, a7da4b1)**
 
 **Audit final :** 107 findings bruts → 29 CRITICAL/HIGH confirmés → 25 corrigés. 4 différés (seccomp, ML hard-block, nosec, require_keys). Tests : 466 Python + 133 Go — 0 failure.

@@ -1,9 +1,35 @@
 # OSEye — Suivi de progression
 
-**Version :** 3.8
-**Dernière mise à jour :** 2026-08-12
+**Version :** 3.9
+**Dernière mise à jour :** 2026-08-14
 **Branche active :** `main` (`latest`)
-**Phase courante :** Post-Phase 10 — Audit final + hardening config agent
+**Phase courante :** Post-Phase 10 — Autonomie locale + Audit complet 2026-08-14
+
+---
+
+## Session 2026-08-14 — Autonomie locale + Audit complet `[x]` TERMINÉ
+
+### Moteur d'autonomie locale (v0.1.0-alpha.1)
+- Implémentation complète : `agent/internal/localrules/`, `hostprofile/`, `autonomy/`
+- 3 types de règles : Simple, Correlation, Sequence
+- 4 niveaux d'autonomie : `always_act`, `critical_high`, `critical_only`, `log_only`
+- Kill switch double verrou (flag atomique + sentinel file /etc/oseye/disable_autonomy)
+- Rollback automatique cascade (≥3 cibles en 60s)
+- Server-side : `rule_signer.py`, `rules/agent/core.yaml` (10 règles), push dans PolicyEngine
+- CLI `oseye-config`, SAD mis à jour (v1.2)
+
+### Audit complet 2026-08-14 — 94 findings, 94 corrigés
+| Sévérité | Findings | Corrigés |
+|----------|----------|----------|
+| CRITICAL | 5 | 5 |
+| HIGH | 18 | 18 |
+| MEDIUM | 42 | 42 |
+| LOW | 29 | 29 |
+| **Total** | **94** | **94** |
+
+**Commits :** `07e1979` (10 CRITICAL/HIGH) · `4676e80` (4 HIGH) · `b4e427c` (71 MEDIUM/LOW) · `ccf6715` (régressions tests)
+
+**Tests :** Go 31 packages OK (race-free) · Python 451 passed, 0 failed · ruff 0 erreurs · binary 24MB
 
 ---
 

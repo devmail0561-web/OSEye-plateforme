@@ -1,529 +1,393 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OSEye — Description du projet</title>
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>OSEye — Description</title>
   <style>
-  <style>
-/* ============================================================
-   RESET — écrase les styles par défaut de pandoc
-   ============================================================ */
-html, body {
-  margin: 0 !important;
-  padding: 0 !important;
-  max-width: none !important;
-  width: 100%;
-  box-sizing: border-box;
-}
-*, *::before, *::after { box-sizing: border-box; }
-
-/* ============================================================
-   BASE
-   ============================================================ */
-body {
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: #0d1117;
-  color: #c9d1d9;
-  font-size: 15px;
-  line-height: 1.75;
-  display: flex;
-}
-
-/* ============================================================
-   SIDEBAR
-   ============================================================ */
-#sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 268px;
-  height: 100vh;
-  overflow-y: auto;
-  background: #161b22;
-  border-right: 1px solid #21262d;
-  z-index: 100;
-  flex-shrink: 0;
-}
-
-#sidebar::-webkit-scrollbar { width: 3px; }
-#sidebar::-webkit-scrollbar-track { background: transparent; }
-#sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid #21262d;
-  margin-bottom: 6px;
-}
-
-.sidebar-brand .logo-text {
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: #58a6ff;
-}
-
-.sidebar-brand .logo-badge {
-  font-size: 10px;
-  background: #1f3a5f;
-  color: #79c0ff;
-  border: 1px solid #1c4a7a;
-  padding: 2px 7px;
-  border-radius: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
-
-/* pandoc génère <nav id="TOC"> à l'intérieur du sidebar */
-#sidebar nav#TOC { /* conteneur nav pandoc */ }
-
-#sidebar nav#TOC ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-#sidebar nav#TOC li { margin: 0; }
-
-/* Niveau 1 */
-#sidebar nav#TOC > ul > li > a {
-  display: block;
-  padding: 5px 20px;
-  color: #c9d1d9;
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: none;
-  border-left: 2px solid transparent;
-  line-height: 1.45;
-  transition: color 0.12s, background 0.12s, border-color 0.12s;
-}
-
-/* Niveau 2 */
-#sidebar nav#TOC ul ul > li > a {
-  display: block;
-  padding: 4px 20px 4px 34px;
-  color: #8b949e;
-  font-size: 12px;
-  font-weight: 400;
-  text-decoration: none;
-  border-left: 2px solid transparent;
-  line-height: 1.45;
-  transition: color 0.12s, background 0.12s, border-color 0.12s;
-}
-
-/* Niveau 3 */
-#sidebar nav#TOC ul ul ul > li > a {
-  padding-left: 48px;
-  font-size: 11.5px;
-  color: #6e7681;
-}
-
-#sidebar nav#TOC a:hover {
-  color: #e6edf3;
-  background: #1c2128;
-  border-left-color: #3b82f6;
-  text-decoration: none;
-}
-
-/* ============================================================
-   MAIN
-   ============================================================ */
-#main {
-  margin-left: 268px;
-  width: calc(100% - 268px);
-  min-height: 100vh;
-}
-
-/* ============================================================
-   ARTICLE
-   ============================================================ */
-#article {
-  padding: 52px 64px 100px;
-}
-
-/* ============================================================
-   TYPOGRAPHY
-   ============================================================ */
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 700;
-  line-height: 1.3;
-  color: #e6edf3;
-}
-
-/* Premier h1 = titre du document */
-#article h1:first-child {
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: #e6edf3;
-  margin: 0 0 16px 0;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #21262d;
-}
-
-h1 {
-  font-size: 26px;
-  margin: 48px 0 16px;
-}
-
-h2 {
-  font-size: 20px;
-  margin: 44px 0 14px;
-  padding: 0 0 10px 14px;
-  border-left: 4px solid #3b82f6;
-  border-bottom: 1px solid #21262d;
-  color: #e6edf3;
-}
-
-h3 {
-  font-size: 16px;
-  margin: 30px 0 10px;
-  color: #58a6ff;
-}
-
-h4 {
-  font-size: 12px;
-  margin: 22px 0 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: #6e7681;
-  font-weight: 600;
-}
-
-p { margin: 12px 0; }
-ul, ol { margin: 10px 0; padding-left: 22px; }
-li { margin: 4px 0; }
-li > ul, li > ol { margin: 4px 0; }
-strong { color: #e6edf3; font-weight: 600; }
-em { color: #79c0ff; font-style: italic; }
-a { color: #58a6ff; text-decoration: none; }
-a:hover { text-decoration: underline; color: #79c0ff; }
-hr { border: none; border-top: 1px solid #21262d; margin: 36px 0; }
-
-/* ============================================================
-   CODE — override complet des styles pandoc sourceCode
-   ============================================================ */
-
-/* Inline code */
-code {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-  font-size: 13px;
-  background: #161b22;
-  color: #79c0ff;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid #30363d;
-}
-
-/* Pandoc sourceCode container */
-div.sourceCode {
-  background: #161b22 !important;
-  border: 1px solid #21262d !important;
-  border-radius: 8px !important;
-  overflow-x: auto !important;
-  margin: 16px 0 !important;
-}
-
-/* Pre dans sourceCode */
-div.sourceCode pre.sourceCode {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
-  padding: 16px 20px !important;
-  overflow-x: auto !important;
-  white-space: pre !important;
-  word-wrap: normal !important;
-}
-
-/* Pre générique (blocs non-syntaxiques) */
-pre {
-  background: #161b22;
-  border: 1px solid #21262d;
-  border-radius: 8px;
-  padding: 16px 20px;
-  overflow-x: auto;
-  white-space: pre;
-  word-wrap: normal;
-  margin: 16px 0;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-pre > code,
-pre.sourceCode > code.sourceCode {
-  background: none !important;
-  border: none !important;
-  padding: 0 !important;
-  color: #c9d1d9;
-  font-size: 13px;
-  white-space: pre !important;
-}
-
-/* Fix pandoc span layout dans code */
-pre > code.sourceCode > span {
-  display: block !important;
-  line-height: 1.6 !important;
-}
-
-pre > code.sourceCode > span > a:first-child::before {
-  content: '';
-}
-
-/* Numéros de ligne */
-td.lineNumbers {
-  color: #3d444d;
-  border-right: 1px solid #21262d;
-  padding-right: 12px;
-  user-select: none;
-  font-size: 12px;
-}
-
-td.sourceCode { padding-left: 16px; }
-
-/* ============================================================
-   TABLES
-   ============================================================ */
-table {
-  border-collapse: collapse;
-  font-size: 14px;
-  margin: 16px 0;
-  width: 100%;
-  display: block;       /* permet le scroll horizontal */
-  overflow-x: auto;
-}
-
-thead tr {
-  background: #1c2128;
-  border-bottom: 2px solid #3b82f6;
-}
-
-thead th {
-  color: #58a6ff;
-  font-weight: 600;
-  text-align: left;
-  padding: 10px 14px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  white-space: nowrap;
-}
-
-tbody tr {
-  border-bottom: 1px solid #21262d;
-  transition: background 0.1s;
-}
-
-tbody tr:hover { background: #161b22; }
-
-td {
-  padding: 9px 14px;
-  vertical-align: top;
-  color: #c9d1d9;
-}
-
-td:first-child { font-weight: 500; color: #e6edf3; }
-
-/* ============================================================
-   BLOCKQUOTE
-   ============================================================ */
-blockquote {
-  border-left: 3px solid #3b82f6;
-  background: #161b22;
-  margin: 16px 0;
-  padding: 12px 18px;
-  border-radius: 0 6px 6px 0;
-  color: #8b949e;
-}
-
-blockquote p { margin: 4px 0; }
-
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
-@media (max-width: 900px) {
-  #sidebar { display: none; }
-  #main { margin-left: 0; width: 100%; }
-  #article { padding: 28px 24px 60px; }
-}
-
-@media print {
-  #sidebar { display: none; }
-  body { display: block; background: white; color: #111; }
-  #main { margin-left: 0; width: 100%; }
-  a { color: #2563eb; }
-  pre, div.sourceCode { border: 1px solid #ccc; background: #f8f8f8; }
-  code { color: #333; background: #f0f0f0; }
-}
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
 
+  <style>
+    /* ── RESET ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { display: flex; min-height: 100vh; background: #0d1117; color: #c9d1d9;
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+           font-size: 15px; line-height: 1.6; }
+
+    /* ── SIDEBAR ── */
+    #sidebar { position: fixed; top: 0; left: 0; width: 260px; height: 100vh;
+               background: #161b22; border-right: 1px solid #30363d;
+               overflow-y: auto; z-index: 100; padding: 0 0 2rem 0; }
+    #sidebar::-webkit-scrollbar { width: 3px; }
+    #sidebar::-webkit-scrollbar-track { background: transparent; }
+    #sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+    .sidebar-brand { display: flex; align-items: center; gap: 8px; padding: 16px 20px;
+                     border-bottom: 1px solid #30363d; margin-bottom: 8px; }
+    .sidebar-brand .logo-text { font-weight: 700; font-size: 1.1rem; color: #f0f6fc; letter-spacing: -0.3px; }
+    .sidebar-brand .logo-badge { background: #1f6feb; color: #fff; font-size: 0.65rem;
+                                  font-weight: 600; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.3px; }
+    /* TOC nav inside sidebar */
+    #sidebar nav#TOC ul { list-style: none; padding: 0; margin: 0; }
+    #sidebar nav#TOC li { margin: 0; }
+    #sidebar nav#TOC > ul > li > a {
+      display: block; padding: 6px 20px; font-size: 0.82rem; font-weight: 600;
+      color: #8b949e; text-decoration: none; letter-spacing: 0.2px; }
+    #sidebar nav#TOC ul ul > li > a {
+      display: block; padding: 4px 20px 4px 32px; font-size: 0.78rem;
+      color: #8b949e; text-decoration: none; }
+    #sidebar nav#TOC ul ul ul > li > a {
+      padding-left: 44px; font-size: 0.75rem; color: #6e7681; }
+    #sidebar nav#TOC a:hover { color: #58a6ff !important; background: rgba(88,166,255,0.05); }
+
+    /* ── MAIN CONTENT ── */
+    #main { margin-left: 260px; flex: 1; padding: 2.5rem 3rem 4rem 3rem; max-width: 1000px; }
+    article h1 { font-size: 1.75rem; font-weight: 700; color: #f0f6fc;
+                 border-bottom: 2px solid #21262d; padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+    article h2 { font-size: 1.3rem; font-weight: 600; color: #e6edf3;
+                 border-bottom: 1px solid #21262d; padding-bottom: 0.3rem;
+                 margin: 2rem 0 1rem; }
+    article h3 { font-size: 1.05rem; font-weight: 600; color: #cdd9e5; margin: 1.5rem 0 0.75rem; }
+    article h4 { font-size: 0.9rem; font-weight: 600; color: #9198a1; margin: 1rem 0 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    article p { margin-bottom: 0.9rem; color: #c9d1d9; }
+    article a { color: #58a6ff; text-decoration: none; }
+    article a:hover { text-decoration: underline; }
+    article ul, article ol { padding-left: 1.5rem; margin-bottom: 0.9rem; }
+    article li { margin-bottom: 0.2rem; }
+    article hr { border: none; border-top: 1px solid #21262d; margin: 2rem 0; }
+    article blockquote { border-left: 3px solid #30363d; padding: 0.5rem 1rem;
+                         color: #8b949e; margin: 1rem 0; background: #161b22; border-radius: 0 6px 6px 0; }
+    article strong { color: #e6edf3; }
+
+    /* ── TABLES ── */
+    article table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.875rem; }
+    article th { background: #161b22; color: #e6edf3; font-weight: 600;
+                 padding: 8px 12px; text-align: left; border: 1px solid #30363d; }
+    article td { padding: 7px 12px; border: 1px solid #21262d; color: #c9d1d9; }
+    article tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+
+    /* ── CODE ── */
+    article code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+                   font-size: 0.85em; background: #161b22; color: #e6edf3;
+                   padding: 0.15em 0.4em; border-radius: 4px; border: 1px solid #30363d; }
+    article pre { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+                  padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0; }
+    article pre code { background: none; border: none; padding: 0; font-size: 0.82rem;
+                       color: #c9d1d9; line-height: 1.5; }
+
+    @media (max-width: 768px) {
+      #sidebar { width: 100%; height: auto; position: relative; }
+      #main { margin-left: 0; padding: 1.5rem; }
+    }
   </style>
+
 </head>
 <body>
-
 <div id="sidebar">
   <div class="sidebar-brand">
     <span class="logo-text">OSEye</span>
-    <span class="logo-badge">2026</span>
+    <span class="logo-badge">v0.1.0-α1</span>
   </div>
-  <ul>
-  <li><a href="#oseye--description-du-projet"
-  id="toc-oseye--description-du-projet">OSEye — Description du
-  Projet</a>
-  <ul>
-  <li><a href="#vue-densemble" id="toc-vue-densemble">Vue d'ensemble</a>
-  <ul>
-  <li><a href="#mission" id="toc-mission">Mission</a></li>
-  <li><a href="#statut-actuel" id="toc-statut-actuel">Statut
-  actuel</a></li>
-  </ul></li>
-  <li><a href="#objectifs-techniques"
-  id="toc-objectifs-techniques">Objectifs techniques</a>
-  <ul>
-  <li><a href="#cibles-de-performance"
-  id="toc-cibles-de-performance">Cibles de performance</a></li>
-  <li><a href="#compatibilité"
-  id="toc-compatibilité">Compatibilité</a></li>
-  </ul></li>
-  <li><a href="#architecture-fonctionnelle"
-  id="toc-architecture-fonctionnelle">Architecture fonctionnelle</a>
-  <ul>
-  <li><a href="#composants-principaux"
-  id="toc-composants-principaux">Composants principaux</a></li>
-  <li><a href="#collecteurs-9-sources-linux"
-  id="toc-collecteurs-9-sources-linux">Collecteurs (9 sources
-  Linux)</a></li>
-  </ul></li>
-  <li><a href="#moteurs-de-détection"
-  id="toc-moteurs-de-détection">Moteurs de détection</a>
-  <ul>
-  <li><a href="#1-rule-engine-détection-statique"
-  id="toc-1-rule-engine-détection-statique">1. Rule Engine (détection
-  statique)</a></li>
-  <li><a href="#2-ml-engine-détection-comportementale"
-  id="toc-2-ml-engine-détection-comportementale">2. ML Engine (détection
-  comportementale)</a></li>
-  <li><a href="#3-threat-intelligence" id="toc-3-threat-intelligence">3.
-  Threat Intelligence</a></li>
-  <li><a href="#4-correlation-engine" id="toc-4-correlation-engine">4.
-  Correlation Engine</a></li>
-  </ul></li>
-  <li><a href="#decision-engine-nouveau-dans-v4"
-  id="toc-decision-engine-nouveau-dans-v4">Decision Engine (nouveau dans
-  v4)</a>
-  <ul>
-  <li><a href="#8-types-de-décisions-autonomes"
-  id="toc-8-types-de-décisions-autonomes">8 types de décisions
-  autonomes</a></li>
-  <li><a href="#matrice-de-décision"
-  id="toc-matrice-de-décision">Matrice de décision</a></li>
-  <li><a href="#journal-de-décisions-immutable"
-  id="toc-journal-de-décisions-immutable">Journal de décisions
-  immutable</a></li>
-  </ul></li>
-  <li><a href="#plugin-sdk-extensibilité"
-  id="toc-plugin-sdk-extensibilité">Plugin SDK (extensibilité)</a>
-  <ul>
-  <li><a href="#caractéristiques"
-  id="toc-caractéristiques">Caractéristiques</a></li>
-  <li><a href="#cas-dusage" id="toc-cas-dusage">Cas d'usage</a></li>
-  </ul></li>
-  <li><a href="#forensics--case-management"
-  id="toc-forensics--case-management">Forensics &amp; Case
-  Management</a>
-  <ul>
-  <li><a href="#cas-dinvestigation" id="toc-cas-dinvestigation">Cas
-  d'investigation</a></li>
-  <li><a href="#exports-conformes" id="toc-exports-conformes">Exports
-  conformes</a></li>
-  </ul></li>
-  <li><a href="#déploiement" id="toc-déploiement">Déploiement</a>
-  <ul>
-  <li><a href="#modes-supportés" id="toc-modes-supportés">Modes
-  supportés</a></li>
-  <li><a href="#packages-disponibles"
-  id="toc-packages-disponibles">Packages disponibles</a></li>
-  <li><a href="#automation" id="toc-automation">Automation</a></li>
-  </ul></li>
-  <li><a href="#sécurité" id="toc-sécurité">Sécurité</a>
-  <ul>
-  <li><a href="#principe-secure-by-design"
-  id="toc-principe-secure-by-design">Principe "Secure by
-  Design"</a></li>
-  <li><a href="#conformité" id="toc-conformité">Conformité</a></li>
-  </ul></li>
-  <li><a href="#observabilité-plateforme-elle-même"
-  id="toc-observabilité-plateforme-elle-même">Observabilité (plateforme
-  elle-même)</a>
-  <ul>
-  <li><a href="#métriques-exposées"
-  id="toc-métriques-exposées">Métriques exposées</a></li>
-  <li><a href="#logs-structurés" id="toc-logs-structurés">Logs
-  structurés</a></li>
-  <li><a href="#tracing-distribué-roadmap-phase-11"
-  id="toc-tracing-distribué-roadmap-phase-11">Tracing distribué (roadmap
-  Phase 11)</a></li>
-  </ul></li>
-  <li><a href="#modèle-économique-open-core"
-  id="toc-modèle-économique-open-core">Modèle économique (open-core)</a>
-  <ul>
-  <li><a href="#open-source-apache-20"
-  id="toc-open-source-apache-20">Open Source (Apache 2.0)</a></li>
-  <li><a href="#enterprise-licence-commerciale"
-  id="toc-enterprise-licence-commerciale">Enterprise (licence
-  commerciale)</a></li>
-  </ul></li>
-  <li><a href="#roadmap" id="toc-roadmap">Roadmap</a>
-  <ul>
-  <li><a href="#2026-v1x" id="toc-2026-v1x">2026 (v1.x)</a></li>
-  <li><a href="#2027-v2x" id="toc-2027-v2x">2027 (v2.x)</a></li>
-  <li><a href="#2028-v3x" id="toc-2028-v3x">2028+ (v3.x)</a></li>
-  </ul></li>
-  <li><a href="#références" id="toc-références">Références</a></li>
-  </ul></li>
-  </ul>
+  <nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#oseye-description-du-projet"
+id="toc-oseye-description-du-projet">OSEye — Description du Projet</a>
+<ul>
+<li><a href="#vue-densemble" id="toc-vue-densemble">Vue d’ensemble</a>
+<ul>
+<li><a href="#mission" id="toc-mission">Mission</a></li>
+<li><a href="#statut-actuel" id="toc-statut-actuel">Statut
+actuel</a></li>
+</ul></li>
+<li><a href="#objectifs-techniques"
+id="toc-objectifs-techniques">Objectifs techniques</a>
+<ul>
+<li><a href="#cibles-de-performance"
+id="toc-cibles-de-performance">Cibles de performance</a></li>
+<li><a href="#compatibilité"
+id="toc-compatibilité">Compatibilité</a></li>
+</ul></li>
+<li><a href="#architecture-fonctionnelle"
+id="toc-architecture-fonctionnelle">Architecture fonctionnelle</a>
+<ul>
+<li><a href="#composants-principaux"
+id="toc-composants-principaux">Composants principaux</a></li>
+<li><a href="#collecteurs-9-sources-linux"
+id="toc-collecteurs-9-sources-linux">Collecteurs (9 sources
+Linux)</a></li>
+</ul></li>
+<li><a href="#moteurs-de-détection"
+id="toc-moteurs-de-détection">Moteurs de détection</a>
+<ul>
+<li><a href="#rule-engine-détection-statique"
+id="toc-rule-engine-détection-statique">1. Rule Engine (détection
+statique)</a></li>
+<li><a href="#ml-engine-détection-comportementale"
+id="toc-ml-engine-détection-comportementale">2. ML Engine (détection
+comportementale)</a></li>
+<li><a href="#threat-intelligence" id="toc-threat-intelligence">3.
+Threat Intelligence</a></li>
+<li><a href="#correlation-engine" id="toc-correlation-engine">4.
+Correlation Engine</a></li>
+</ul></li>
+<li><a href="#decision-engine-nouveau-dans-v4"
+id="toc-decision-engine-nouveau-dans-v4">Decision Engine (nouveau dans
+v4)</a>
+<ul>
+<li><a href="#types-de-décisions-autonomes"
+id="toc-types-de-décisions-autonomes">8 types de décisions
+autonomes</a></li>
+<li><a href="#matrice-de-décision" id="toc-matrice-de-décision">Matrice
+de décision</a></li>
+<li><a href="#journal-de-décisions-immutable"
+id="toc-journal-de-décisions-immutable">Journal de décisions
+immutable</a></li>
+</ul></li>
+<li><a href="#plugin-sdk-extensibilité"
+id="toc-plugin-sdk-extensibilité">Plugin SDK (extensibilité)</a>
+<ul>
+<li><a href="#caractéristiques"
+id="toc-caractéristiques">Caractéristiques</a></li>
+<li><a href="#cas-dusage" id="toc-cas-dusage">Cas d’usage</a></li>
+</ul></li>
+<li><a href="#forensics-case-management"
+id="toc-forensics-case-management">Forensics &amp; Case Management</a>
+<ul>
+<li><a href="#cas-dinvestigation" id="toc-cas-dinvestigation">Cas
+d’investigation</a></li>
+<li><a href="#exports-conformes" id="toc-exports-conformes">Exports
+conformes</a></li>
+</ul></li>
+<li><a href="#déploiement" id="toc-déploiement">Déploiement</a>
+<ul>
+<li><a href="#modes-supportés" id="toc-modes-supportés">Modes
+supportés</a></li>
+<li><a href="#packages-disponibles"
+id="toc-packages-disponibles">Packages disponibles</a></li>
+<li><a href="#automation" id="toc-automation">Automation</a></li>
+</ul></li>
+<li><a href="#sécurité" id="toc-sécurité">Sécurité</a>
+<ul>
+<li><a href="#principe-secure-by-design"
+id="toc-principe-secure-by-design">Principe “Secure by Design”</a></li>
+<li><a href="#conformité" id="toc-conformité">Conformité</a></li>
+</ul></li>
+<li><a href="#observabilité-plateforme-elle-même"
+id="toc-observabilité-plateforme-elle-même">Observabilité (plateforme
+elle-même)</a>
+<ul>
+<li><a href="#métriques-exposées" id="toc-métriques-exposées">Métriques
+exposées</a></li>
+<li><a href="#logs-structurés" id="toc-logs-structurés">Logs
+structurés</a></li>
+<li><a href="#tracing-distribué-roadmap-phase-11"
+id="toc-tracing-distribué-roadmap-phase-11">Tracing distribué (roadmap
+Phase 11)</a></li>
+</ul></li>
+<li><a href="#modèle-économique-open-core"
+id="toc-modèle-économique-open-core">Modèle économique (open-core)</a>
+<ul>
+<li><a href="#open-source-apache-2.0"
+id="toc-open-source-apache-2.0">Open Source (Apache 2.0)</a></li>
+<li><a href="#enterprise-licence-commerciale"
+id="toc-enterprise-licence-commerciale">Enterprise (licence
+commerciale)</a></li>
+</ul></li>
+<li><a href="#roadmap" id="toc-roadmap">Roadmap</a>
+<ul>
+<li><a href="#v1.x" id="toc-v1.x">2026 (v1.x)</a></li>
+<li><a href="#v2.x" id="toc-v2.x">2027 (v2.x)</a></li>
+<li><a href="#v3.x" id="toc-v3.x">2028+ (v3.x)</a></li>
+</ul></li>
+<li><a href="#références" id="toc-références">Références</a></li>
+</ul></li>
+</ul>
+</nav>
 </div>
-
 <div id="main">
   <article id="article">
-<h1 id="oseye--description-du-projet">OSEye — Description du Projet</h1>
+<h1 id="oseye-description-du-projet">OSEye — Description du Projet</h1>
 <p><strong>Version:</strong> 1.0<br />
 <strong>Date:</strong> 2026-08-06<br />
 <strong>Classification:</strong> Confidentiel — usage interne</p>
 <hr />
-<h2 id="vue-densemble">Vue d'ensemble</h2>
+<h2 id="vue-densemble">Vue d’ensemble</h2>
 <p><strong>OSEye</strong> est une plateforme EDR (Endpoint Detection and
 Response) / SIEM (Security Information and Event Management) open-core
 conçue pour Linux, Windows et macOS. Elle vise à égaler les solutions
 commerciales (CrowdStrike, SentinelOne, Wazuh) tout en restant légère,
 modulaire, extensible et accessible.</p>
 <h3 id="mission">Mission</h3>
-<p>Fournir une solution de détection, d'analyse comportementale et de
-réponse aux incidents qui :</p>
-<ul>
-<li>Collecte les événements système en temps réel à la source (kernel,
-logs, réseau)</li>
-<li>Détecte les menaces via des règles MITRE ATT&amp;CK et du machine
-learning</li>
-<li>Corrèle les événements pour reconstruire les chaînes d'attaque</li>
-<li>Prend des décisions autonomes (alertes, blocages, isolement)</li>
-<li>Offre une interface web intuitive pour l'investigation
-forensique</li>
-</ul>
+<p>Fournir une solution de détection, d’analyse comportementale et de
+réponse aux incidents qui : - Collecte les événements système en temps
+réel à la source (kernel, logs, réseau) - Détecte les menaces via des
+règles MITRE ATT&amp;CK et du machine learning - Corrèle les événements
+pour reconstruire les chaînes d’attaque - Prend des décisions autonomes
+(alertes, blocages, isolement) - Offre une interface web intuitive pour
+l’investigation forensique</p>
 <h3 id="statut-actuel">Statut actuel</h3>
-<p><strong>Phase 1 complétée</strong> (août 2026) :</p>
-<ul>
-<li>Pipeline ingestion → stockage → query opérationnel</li>
-<li>Agent Go avec collecteur eBPF Linux fonctionnel</li>
-<li>Serveur Python avec API REST + gRPC</li>
-<li>Tests de charge validés (100k events/s)</li>
-<li>Communication agent↔︎server sécurisée (mTLS)</li>
-</ul>
+<p><strong>Phase 1 complétée</strong> (août 2026) : - Pipeline ingestion
+→ stockage → query opérationnel - Agent Go avec collecteur eBPF Linux
+fonctionnel - Serveur Python avec API REST + gRPC - Tests de charge
+validés (100k events/s) - Communication agent↔︎server sécurisée
+(mTLS)</p>
 <p><strong>Prochaine étape :</strong> Phase 2 — complétion des 9
 collecteurs Linux et robustesse agent</p>
 <hr />
@@ -551,7 +415,7 @@ collecteurs Linux et robustesse agent</p>
 <tr class="odd">
 <td><strong>Latence détection</strong></td>
 <td>&lt; 500 ms</td>
-<td>De l'événement kernel à l'alerte</td>
+<td>De l’événement kernel à l’alerte</td>
 </tr>
 <tr class="even">
 <td><strong>Débit</strong></td>
@@ -561,7 +425,7 @@ collecteurs Linux et robustesse agent</p>
 <tr class="odd">
 <td><strong>Faux positifs</strong></td>
 <td>&lt; 5%</td>
-<td>Éviter la fatigue d'alerte des SOC</td>
+<td>Éviter la fatigue d’alerte des SOC</td>
 </tr>
 <tr class="even">
 <td><strong>Couverture tests</strong></td>
@@ -661,7 +525,7 @@ Event Log, Registry, Sysmon<br />
 <strong>macOS</strong> : EndpointSecurity, FSEvents, Unified Logging</p>
 <hr />
 <h2 id="moteurs-de-détection">Moteurs de détection</h2>
-<h3 id="1-rule-engine-détection-statique">1. Rule Engine (détection
+<h3 id="rule-engine-détection-statique">1. Rule Engine (détection
 statique)</h3>
 <ul>
 <li><strong>30+ règles YAML/TOML</strong> couvrant MITRE ATT&amp;CK :
@@ -678,7 +542,7 @@ failed SSH en 60s)</li>
 <li><strong>Sévérité</strong> : LOW, MEDIUM, HIGH, CRITICAL</li>
 <li><strong>Actions</strong> : LOG, ALERT, BLOCK, ISOLATE</li>
 </ul>
-<h3 id="2-ml-engine-détection-comportementale">2. ML Engine (détection
+<h3 id="ml-engine-détection-comportementale">2. ML Engine (détection
 comportementale)</h3>
 <ul>
 <li><strong>Baseline comportemental par entité</strong> :
@@ -690,16 +554,16 @@ comportementale)</h3>
 <li><strong>Algorithmes</strong> :
 <ul>
 <li><code>IsolationForest</code> online (River) pour détection
-d'anomalies</li>
+d’anomalies</li>
 <li>Classifier MITRE ATT&amp;CK (phases : Recon → Exploit → Lateral →
 Exfil)</li>
 </ul></li>
 <li><strong>Features</strong> : 23 dimensions (CPU, network bytes, rare
-commands, rare IPs, time-of-day, ...)</li>
+commands, rare IPs, time-of-day, …)</li>
 <li><strong>Retraining</strong> : incrémental toutes les 24h (pas de
 batch lourd)</li>
 </ul>
-<h3 id="3-threat-intelligence">3. Threat Intelligence</h3>
+<h3 id="threat-intelligence">3. Threat Intelligence</h3>
 <ul>
 <li><strong>Enrichissement IP/domaine/hash</strong> via APIs externes :
 <ul>
@@ -712,9 +576,9 @@ batch lourd)</li>
 requêtes API</li>
 <li><strong>Score agrégé</strong> : CLEAN, SUSPICIOUS, MALICIOUS</li>
 </ul>
-<h3 id="4-correlation-engine">4. Correlation Engine</h3>
+<h3 id="correlation-engine">4. Correlation Engine</h3>
 <ul>
-<li><strong>Reconstruction de chaînes d'attaque</strong> :
+<li><strong>Reconstruction de chaînes d’attaque</strong> :
 <ul>
 <li>Process tree (parent → enfant)</li>
 <li>File access chain (qui a modifié quoi)</li>
@@ -722,15 +586,20 @@ requêtes API</li>
 </ul></li>
 <li><strong>Graphes temporels</strong> : timeline unifiée
 multi-events</li>
-<li><strong>Hypothèses d'incidents</strong> : cluster d'événements
+<li><strong>Hypothèses d’incidents</strong> : cluster d’événements
 anormaux groupés</li>
 </ul>
 <hr />
 <h2 id="decision-engine-nouveau-dans-v4">Decision Engine (nouveau dans
 v4)</h2>
-<h3 id="8-types-de-décisions-autonomes">8 types de décisions
+<h3 id="types-de-décisions-autonomes">8 types de décisions
 autonomes</h3>
 <table>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 40%" />
+<col style="width: 28%" />
+</colgroup>
 <thead>
 <tr class="header">
 <th>Décision</th>
@@ -782,14 +651,11 @@ autonomes</h3>
 </tbody>
 </table>
 <h3 id="matrice-de-décision">Matrice de décision</h3>
-<p>Combinaison de :</p>
-<ul>
-<li><strong>Sévérité règle</strong> : LOW/MEDIUM/HIGH/CRITICAL</li>
-<li><strong>Score TI</strong> : CLEAN/SUSPICIOUS/MALICIOUS</li>
-<li><strong>Score ML</strong> : anomalie_score [0-1]</li>
-<li><strong>Contexte</strong> : criticité hôte (prod/dev), horaire
-(working hours), user privilege</li>
-</ul>
+<p>Combinaison de : - <strong>Sévérité règle</strong> :
+LOW/MEDIUM/HIGH/CRITICAL - <strong>Score TI</strong> :
+CLEAN/SUSPICIOUS/MALICIOUS - <strong>Score ML</strong> : anomalie_score
+[0-1] - <strong>Contexte</strong> : criticité hôte (prod/dev), horaire
+(working hours), user privilege</p>
 <p><strong>Exemple</strong> :</p>
 <pre><code>IF severity=CRITICAL AND ti_score=MALICIOUS AND host_criticality=PROD
   THEN decision=ISOLATE_HOST + TRIGGER_FORENSIC
@@ -801,7 +667,7 @@ immutable</h3>
 <li><strong>Hash chain</strong> : chaque décision référence le hash de
 la précédente</li>
 <li><strong>Signatures Ed25519</strong> : intégrité prouvée en cas
-d'audit légal</li>
+d’audit légal</li>
 <li><strong>Exports</strong> : PDF, MISP, TheHive</li>
 </ul>
 <hr />
@@ -829,19 +695,19 @@ temporel</li>
 Slack/email</li>
 </ul></li>
 </ul>
-<h3 id="cas-dusage">Cas d'usage</h3>
+<h3 id="cas-dusage">Cas d’usage</h3>
 <ul>
 <li><strong>Auto-remediation</strong> : kill processus + delete fichiers
 malveillants</li>
-<li><strong>Enrichissement custom</strong> : lookup interne d'asset
+<li><strong>Enrichissement custom</strong> : lookup interne d’asset
 (CMDB)</li>
 <li><strong>Notification</strong> : webhook vers SOAR (TheHive,
 Cortex)</li>
 <li><strong>Forensics</strong> : dump mémoire processus suspect</li>
 </ul>
 <hr />
-<h2 id="forensics--case-management">Forensics &amp; Case Management</h2>
-<h3 id="cas-dinvestigation">Cas d'investigation</h3>
+<h2 id="forensics-case-management">Forensics &amp; Case Management</h2>
+<h3 id="cas-dinvestigation">Cas d’investigation</h3>
 <ul>
 <li><strong>Création manuelle</strong> ou <strong>automatique</strong>
 (règle → case)</li>
@@ -859,7 +725,7 @@ Cortex)</li>
 <ul>
 <li><strong>PDF</strong> : rapport exécutif avec timeline, IOCs,
 décisions</li>
-<li><strong>MISP</strong> : publication d'IOCs vers communauté</li>
+<li><strong>MISP</strong> : publication d’IOCs vers communauté</li>
 <li><strong>TheHive/Cortex</strong> : intégration SOAR</li>
 <li><strong>STIX 2.1</strong> : standard CTI interopérable</li>
 </ul>
@@ -924,7 +790,7 @@ décisions</li>
 </ul>
 <hr />
 <h2 id="sécurité">Sécurité</h2>
-<h3 id="principe-secure-by-design">Principe "Secure by Design"</h3>
+<h3 id="principe-secure-by-design">Principe “Secure by Design”</h3>
 <ol type="1">
 <li><strong>Authentification mutuelle</strong> : agent ↔︎ server via mTLS
 (certificats client)</li>
@@ -939,13 +805,13 @@ Developer)</li>
 <li><strong>Audit log</strong> : toute action admin tracée
 (immutable)</li>
 <li><strong>Plugin sandbox</strong> : <code>RestrictedPython</code>, pas
-d'accès filesystem/network direct</li>
+d’accès filesystem/network direct</li>
 </ol>
 <h3 id="conformité">Conformité</h3>
 <ul>
 <li><strong>RGPD</strong> : anonymisation PII possible (regex sur champs
 sensibles)</li>
-<li><strong>ISO 27001</strong> : logs d'audit centralisés, custody
+<li><strong>ISO 27001</strong> : logs d’audit centralisés, custody
 chain</li>
 <li><strong>SOC 2 Type II</strong> : métriques SLA, disponibilité
 &gt;99.5%</li>
@@ -969,7 +835,7 @@ severity)</li>
 <h3 id="logs-structurés">Logs structurés</h3>
 <ul>
 <li><strong>Format</strong> : JSON avec champs standard (timestamp,
-level, service, event_id, ...)</li>
+level, service, event_id, …)</li>
 <li><strong>Sortie</strong> : stdout (capturé par systemd/Docker), ou
 syslog, ou fichier</li>
 <li><strong>Niveaux</strong> : DEBUG (dev), INFO (prod), WARN, ERROR,
@@ -984,7 +850,7 @@ Phase 11)</h3>
 </ul>
 <hr />
 <h2 id="modèle-économique-open-core">Modèle économique (open-core)</h2>
-<h3 id="open-source-apache-20">Open Source (Apache 2.0)</h3>
+<h3 id="open-source-apache-2.0">Open Source (Apache 2.0)</h3>
 <ul>
 <li><strong>Core engine</strong> : collecteurs, rule engine, API,
 storage, UI basique</li>
@@ -1007,13 +873,13 @@ generator</li>
 </ul>
 <hr />
 <h2 id="roadmap">Roadmap</h2>
-<h3 id="2026-v1x">2026 (v1.x)</h3>
+<h3 id="v1.x">2026 (v1.x)</h3>
 <ul>
 <li><strong>Q3</strong> : Phase 1-3 — pipeline complet + détection
 rule-based</li>
 <li><strong>Q4</strong> : Phase 4-6 — TI + ML + Decision Engine</li>
 </ul>
-<h3 id="2027-v2x">2027 (v2.x)</h3>
+<h3 id="v2.x">2027 (v2.x)</h3>
 <ul>
 <li><strong>Q1</strong> : Phase 7-8 — Forensics + Plugin SDK</li>
 <li><strong>Q2</strong> : Phase 9-10 — UI finale + hardening</li>
@@ -1021,11 +887,11 @@ rule-based</li>
 <li><strong>Q4</strong> : Phase 11 — scaling (multi-region, ClickHouse
 clustering)</li>
 </ul>
-<h3 id="2028-v3x">2028+ (v3.x)</h3>
+<h3 id="v3.x">2028+ (v3.x)</h3>
 <ul>
 <li><strong>Cloud SaaS</strong> : OSEye Cloud (agents → cloud-hosted
 server)</li>
-<li><strong>Managed agents</strong> : agent as a service (pas d'install
+<li><strong>Managed agents</strong> : agent as a service (pas d’install
 local)</li>
 <li><strong>AI Threat Hunter</strong> : LLM pour investigation
 automatique (GPT-4 fine-tuned)</li>
@@ -1036,6 +902,10 @@ firewalls (Palo Alto, Fortinet)</li>
 <hr />
 <h2 id="références">Références</h2>
 <table>
+<colgroup>
+<col style="width: 43%" />
+<col style="width: 56%" />
+</colgroup>
 <thead>
 <tr class="header">
 <th>Document</th>
@@ -1058,7 +928,7 @@ href="DEVELOPMENT_PLAN.md"><code>DEVELOPMENT_PLAN.md</code></a></td>
 </tr>
 <tr class="even">
 <td><a href="PROGRESS.md"><code>PROGRESS.md</code></a></td>
-<td>Suivi hebdomadaire de l'avancement</td>
+<td>Suivi hebdomadaire de l’avancement</td>
 </tr>
 <tr class="odd">
 <td><a href="../CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a></td>
@@ -1071,26 +941,11 @@ href="DEVELOPMENT_PLAN.md"><code>DEVELOPMENT_PLAN.md</code></a></td>
 </tbody>
 </table>
 <hr />
-<p><strong>Auteur :</strong> @virus-one<br />
+<p><strong>Auteur :</strong> <span class="citation"
+data-cites="virus-one">@virus-one</span><br />
 <strong>Dernière mise à jour :</strong> 2026-08-06<br />
 <strong>Statut :</strong> Vivant — mis à jour à chaque phase</p>
   </article>
 </div>
-
-<script>
-const links = document.querySelectorAll('#sidebar a');
-const headings = document.querySelectorAll('#article h1,#article h2,#article h3,#article h4');
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      links.forEach(l => l.classList.remove('active'));
-      const a = document.querySelector('#sidebar a[href="#' + entry.target.id + '"]');
-      if (a) a.classList.add('active');
-    }
-  });
-}, { rootMargin: '-20% 0px -70% 0px' });
-headings.forEach(h => observer.observe(h));
-</script>
-
 </body>
 </html>
