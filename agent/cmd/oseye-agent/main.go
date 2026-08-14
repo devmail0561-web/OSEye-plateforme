@@ -422,9 +422,10 @@ func getenv(key, fallback string) string {
 	return fallback
 }
 
-// drainBuffer reads buffered events and ships them before shutdown.
-// H11 fix: on send failure, payloads are re-pushed to the buffer instead of dropped.
+// drainBuffer ships buffered events before shutdown using Replay+AckUntil so that
+// events are never deleted before successful delivery (no re-push race on failure).
 func drainBuffer(ctx context.Context, log *slog.Logger, client *transport.GRPCClient, buf *buffer.Buffer) {
+	var lastAckID int64
 	for {
 		select {
 		case <-ctx.Done():
@@ -433,33 +434,41 @@ func drainBuffer(ctx context.Context, log *slog.Logger, client *transport.GRPCCl
 		default:
 		}
 
-		payloads, err := buf.Pop(500)
-		if err != nil || len(payloads) == 0 {
+		entries, err := buf.Replay(lastAckID, 500)
+		if err != nil || len(entries) == 0 {
 			return
 		}
 
-		pbEvents := make([]*gen.UniversalEventPB, 0, len(payloads))
-		for _, p := range payloads {
+		pbEvents := make([]*gen.UniversalEventPB, 0, len(entries))
+		for _, e := range entries {
 			var pb gen.UniversalEventPB
-			if err := proto.Unmarshal(p, &pb); err != nil {
+			if err := proto.Unmarshal(e.Payload, &pb); err != nil {
 				log.Warn("proto unmarshal failed during drain, skipping", "err", err)
 				continue
 			}
 			pbEvents = append(pbEvents, &pb)
 		}
 
+		maxID := entries[len(entries)-1].ID
+
 		if len(pbEvents) == 0 {
+			// All entries in this page were corrupt — ack and advance.
+			if err := buf.AckUntil(maxID); err != nil {
+				log.Warn("buffer ack failed after corrupt page", "err", err)
+			}
+			lastAckID = maxID
 			continue
 		}
 
 		if err := client.SendBatch(ctx, pbEvents); err != nil {
-			log.Warn("drain send failed — re-buffering events", "err", err, "count", len(payloads))
-			// Best-effort re-push so events survive a temporary send failure.
-			if pushErr := buf.Push(payloads); pushErr != nil {
-				log.Warn("re-buffer failed — events lost", "err", pushErr)
-			}
+			log.Warn("drain send failed — events remain buffered for next start", "err", err, "count", len(entries))
 			return
 		}
+
+		if err := buf.AckUntil(maxID); err != nil {
+			log.Warn("buffer ack failed after successful send", "err", err)
+		}
+		lastAckID = maxID
 		log.Info("drained buffered events", "count", len(pbEvents))
 	}
 }

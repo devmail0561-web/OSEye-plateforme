@@ -56,6 +56,7 @@ from oseye.threat_intel.client import ThreatIntelClient
 from oseye.threat_intel.providers.abuseipdb import AbuseIPDBProvider
 from oseye.threat_intel.providers.misp import MISPProvider
 from oseye.threat_intel.providers.virustotal import VirusTotalProvider
+from oseye.ingest.backpressure import BackpressureController
 from oseye.workers.correlation_worker import CorrelationWorker
 from oseye.workers.decision_worker import DecisionWorker
 from oseye.workers.ml_worker import MLWorker
@@ -355,6 +356,12 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         await grpc_server.start()
         _logger.info("grpc_server_started", port=settings.grpc_port)
 
+        backpressure = BackpressureController(
+            bus=bus,
+            get_active_cns=lambda: grpc_servicer.active_cns,
+            redis_url=settings.redis_url or None,
+        )
+
         tasks = [
             asyncio.create_task(_normalizer_loop(), name="normalizer"),
             asyncio.create_task(writer.run(stop_event=stop), name="storage_writer"),
@@ -365,6 +372,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             asyncio.create_task(human_queue.run(), name="human_queue"),
             asyncio.create_task(ml_worker.run(), name="ml_worker"),
             asyncio.create_task(notify_worker.run(), name="notify_worker"),
+            asyncio.create_task(backpressure.run(), name="backpressure"),
         ]
         _logger.info("workers_started", count=len(tasks))
 
@@ -406,6 +414,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await backpressure.close()
         await ti_client.close()
         await http_client.aclose()
         await ipc_server.stop()

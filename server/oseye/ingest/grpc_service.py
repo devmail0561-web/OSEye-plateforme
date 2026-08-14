@@ -141,6 +141,16 @@ class AgentServiceServicer:
         self._blocked_cns: set[str] = set()
         self._blocked_lock = threading.Lock()
 
+        # Set of CNs with an active IngestEvents stream (for backpressure).
+        self._active_cns: set[str] = set()
+        self._active_cns_lock = threading.Lock()
+
+    @property
+    def active_cns(self) -> frozenset[str]:
+        """Snapshot of CNs with an active IngestEvents stream."""
+        with self._active_cns_lock:
+            return frozenset(self._active_cns)
+
     def register_agent_key(self, cn: str, der_public_key: bytes) -> None:
         """Register the DER-encoded Ed25519 public key for agent *cn*."""
         with self._agent_keys_lock:
@@ -185,6 +195,8 @@ class AgentServiceServicer:
             return  # aborted above
 
         # Track agent connection
+        with self._active_cns_lock:
+            self._active_cns.add(cn)
         if self._agent_repo is not None and self._loop is not None:
             _peer = context.peer() or ""
             _ip = _peer.split(":")[1] if _peer.startswith("ipv4:") else None
@@ -294,6 +306,10 @@ class AgentServiceServicer:
 
         if _pb2 is None:  # pragma: no cover
             return None
+
+        # Deregister from active set when stream ends
+        with self._active_cns_lock:
+            self._active_cns.discard(cn)
 
         # Mark agent offline when stream ends
         if self._agent_repo is not None and self._loop is not None:

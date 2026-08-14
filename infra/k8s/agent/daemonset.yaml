@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oseye-agent
+  namespace: oseye
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: oseye-agent
+rules:
+  # Required for eBPF map access via /sys/fs/bpf
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oseye-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: oseye-agent
+subjects:
+  - kind: ServiceAccount
+    name: oseye-agent
+    namespace: oseye
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oseye-agent-certs
+  namespace: oseye
+type: Opaque
+# Populate with:
+#   kubectl create secret generic oseye-agent-certs \
+#     --from-file=agent.crt=/etc/oseye/certs/agent.crt \
+#     --from-file=agent.key=/etc/oseye/certs/agent.key \
+#     --from-file=ca.crt=/etc/oseye/certs/ca.crt \
+#     -n oseye
+data: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oseye-agent-config
+  namespace: oseye
+data:
+  # Override per-environment in your Kustomize overlay.
+  OSEYE_GRPC_ADDR: "oseye-server:50051"
+  OSEYE_BATCH_SIZE: "1000"
+  OSEYE_BATCH_TIMEOUT_MS: "1000"
+  OSEYE_MAX_CPU_PCT: "4.0"
+  OSEYE_MAX_MEM_MB: "256"
+  OSEYE_FANOTIFY_PATHS: "/etc/passwd,/etc/shadow,/root/.ssh"
+  OSEYE_INOTIFY_WATCHES: '[{"path":"/tmp","recursive":false,"mask":4095}]'
+  OSEYE_BUFFER_PATH: "/var/lib/oseye/buffer.db"
+  OSEYE_TLS_CERT: "/etc/oseye/certs/agent.crt"
+  OSEYE_TLS_KEY: "/etc/oseye/certs/agent.key"
+  OSEYE_TLS_CA: "/etc/oseye/certs/ca.crt"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: oseye-agent
+  namespace: oseye
+  labels:
+    app.kubernetes.io/name: oseye-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: oseye
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oseye-agent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oseye-agent
+        app.kubernetes.io/component: agent
+    spec:
+      serviceAccountName: oseye-agent
+      hostPID: true   # required for procfs collector
+      hostNetwork: false
+      tolerations:
+        # Run on control-plane nodes too so all nodes are covered.
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: oseye-agent
+          image: ghcr.io/oseye/oseye-agent:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: oseye-agent-config
+          # OSEYE_AGENT_ID is derived from the node name for stable identity.
+          env:
+            - name: OSEYE_AGENT_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: false
+            capabilities:
+              add:
+                - BPF
+                - PERFMON
+                - NET_ADMIN
+                - SYS_PTRACE
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: certs
+              mountPath: /etc/oseye/certs
+              readOnly: true
+            - name: buffer
+              mountPath: /var/lib/oseye
+            - name: bpf
+              mountPath: /sys/fs/bpf
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+          livenessProbe:
+            exec:
+              command: ["/usr/local/bin/oseye-agent", "--version"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/oseye-agent", "--version"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: certs
+          secret:
+            secretName: oseye-agent-certs
+            defaultMode: 0400
+        - name: buffer
+          hostPath:
+            path: /var/lib/oseye
+            type: DirectoryOrCreate
+        - name: bpf
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc

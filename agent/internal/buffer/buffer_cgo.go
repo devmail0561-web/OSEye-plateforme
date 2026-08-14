@@ -145,3 +145,46 @@ func (b *Buffer) Len() (int, error) {
 	}
 	return count, nil
 }
+
+// Entry holds a buffer row with its database ID and serialised payload.
+type Entry struct {
+	ID      int64
+	Payload []byte
+}
+
+// Replay returns up to n entries with id > afterID without removing them.
+func (b *Buffer) Replay(afterID int64, n int) ([]Entry, error) {
+	if n <= 0 {
+		return nil, nil
+	}
+
+	rows, err := b.db.Query(
+		`SELECT id, payload FROM buffer WHERE id > ? ORDER BY id ASC LIMIT ?`,
+		afterID, n,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("buffer: replay query: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.Payload); err != nil {
+			return nil, fmt.Errorf("buffer: replay scan: %w", err)
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("buffer: replay rows: %w", err)
+	}
+	return entries, nil
+}
+
+// AckUntil deletes all buffer entries with id <= maxID.
+func (b *Buffer) AckUntil(maxID int64) error {
+	if _, err := b.db.Exec(`DELETE FROM buffer WHERE id <= ?`, maxID); err != nil {
+		return fmt.Errorf("buffer: ack until %d: %w", maxID, err)
+	}
+	return nil
+}
