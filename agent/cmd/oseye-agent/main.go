@@ -254,7 +254,7 @@ func main() {
 		cmdClient := commands.NewClient(
 			client.ServiceClient(), agentIDBytes, mgr,
 			stateStore, dedup, autoReporter, cfg.QuarantineDir, killSwitch,
-		)
+		).WithConfig(cfg)
 		go policyClient.Run(ctx)
 		go cmdClient.Run(ctx)
 		go autoReporter.Run(ctx)

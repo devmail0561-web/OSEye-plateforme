@@ -16,7 +16,9 @@ import (
 	gen "github.com/oseye/agent/gen"
 	"github.com/oseye/agent/internal/backoff"
 	"github.com/oseye/agent/internal/collector"
+	"github.com/oseye/agent/internal/config"
 	"github.com/oseye/agent/internal/responder"
+	"github.com/oseye/agent/internal/snapshot"
 )
 
 const (
@@ -53,6 +55,7 @@ type CommandClient struct {
 	reporter      *responder.Reporter
 	quarantineDir string
 	killSwitch    KillSwitcher
+	cfg           *config.Config
 }
 
 // NewClient returns a CommandClient bound to the given agent service client.
@@ -78,6 +81,12 @@ func NewClient(
 	if len(killSwitch) > 0 {
 		c.killSwitch = killSwitch[0]
 	}
+	return c
+}
+
+// WithConfig attaches agent config to the client (used for snapshot HTTP post).
+func (c *CommandClient) WithConfig(cfg *config.Config) *CommandClient {
+	c.cfg = cfg
 	return c
 }
 
@@ -140,7 +149,7 @@ func (c *CommandClient) dispatch(cmd *gen.AgentCommand) {
 		slog.Info("reload_profile received — profile delivered via policy stream")
 
 	case cmdTakeSnapshot:
-		slog.Info("snapshot requested")
+		go c.handleTakeSnapshot(cmd)
 
 	case cmdBlockIP:
 		c.handleBlockIP(cmd)
@@ -441,3 +450,56 @@ func isDangerousPath(p string) bool {
 }
 
 func nowNs() int64 { return time.Now().UnixNano() }
+
+func (c *CommandClient) handleTakeSnapshot(cmd *gen.AgentCommand) {
+	var payload struct {
+		CaseID  string `json:"case_id"`
+		APIURL  string `json:"api_url"`
+	}
+	if len(cmd.PayloadJson) > 0 {
+		_ = json.Unmarshal(cmd.PayloadJson, &payload)
+	}
+
+	agentIDStr := fmt.Sprintf("%x", c.agentID)
+
+	snap, err := snapshot.Collect(agentIDStr, payload.CaseID)
+	if err != nil {
+		slog.Error("snapshot_collect_failed", "err", err)
+		return
+	}
+
+	slog.Info("snapshot_collected",
+		"processes", len(snap.Processes),
+		"connections", len(snap.Connections),
+		"case_id", payload.CaseID,
+	)
+
+	if c.cfg == nil {
+		slog.Warn("snapshot_no_config_skip_post")
+		return
+	}
+
+	apiURL := payload.APIURL
+	if apiURL == "" {
+		apiURL = c.cfg.APIAddr
+	}
+	if apiURL == "" {
+		slog.Warn("snapshot_no_api_addr_skip_post")
+		return
+	}
+
+	tlsCfg := snapshot.TLSConfig{
+		CertFile: c.cfg.TLSCertFile,
+		KeyFile:  c.cfg.TLSKeyFile,
+		CAFile:   c.cfg.CACertFile,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := snapshot.Post(ctx, snap, apiURL, tlsCfg); err != nil {
+		slog.Error("snapshot_post_failed", "err", err)
+		return
+	}
+	slog.Info("snapshot_posted", "api_url", apiURL, "snapshot_id", snap.SnapshotID)
+}

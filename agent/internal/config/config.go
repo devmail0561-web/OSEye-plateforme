@@ -48,6 +48,10 @@ type Config struct {
 
 	EnrollServerURL string
 	EnrollToken     string
+
+	// APIAddr is the base URL of the OSEye REST API (for snapshot POST).
+	// Defaults to empty; when empty, the snapshot collector skips the POST.
+	APIAddr string
 }
 
 // InotifyWatch represents an inotify watch configuration.
@@ -106,6 +110,7 @@ func Load() (*Config, error) {
 		SyslogAddr:      getenv("OSEYE_SYSLOG_ADDR", "127.0.0.1:514"),
 		QuarantineDir:   getenv("OSEYE_QUARANTINE_DIR", "/var/lib/oseye/quarantine"),
 		EnrollServerURL: getenv("OSEYE_ENROLL_URL", ""),
+		APIAddr:         getenv("OSEYE_API_ADDR", ""),
 		EnrollToken:     getenv("OSEYE_ENROLL_TOKEN", ""),
 	}
 	if err := cfg.Validate(); err != nil {
