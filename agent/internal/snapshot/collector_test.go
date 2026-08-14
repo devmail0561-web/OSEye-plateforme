@@ -122,6 +122,91 @@ func TestParseHexAddr_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestParseHexAddr_ShortIPv4(t *testing.T) {
+	// Fewer than 4 bytes — must not panic, must return error.
+	_, _, err := parseHexAddr("0102:0050", false) // 2-byte hex = 1 byte
+	if err == nil {
+		t.Error("expected error for short IPv4 hex, got nil")
+	}
+}
+
+func TestParseHexAddr_ShortIPv6(t *testing.T) {
+	// IPv6 needs 16 bytes (32 hex chars); 8 chars = 4 bytes → error.
+	_, _, err := parseHexAddr("0102030405060708:0050", true)
+	if err == nil {
+		t.Error("expected error for short IPv6 hex, got nil")
+	}
+}
+
+func TestCmdlineTruncated(t *testing.T) {
+	// _maxCmdlineBytes must hold; build a string > limit and pass through maskSecrets.
+	long := strings.Repeat("x", _maxCmdlineBytes+100)
+	// maskSecrets should not panic on large input.
+	result := maskSecrets(long)
+	// The snapshot collector caps before calling maskSecrets, so result length
+	// from maskSecrets itself can vary; just verify it doesn't panic.
+	if result == "" {
+		t.Error("maskSecrets returned empty string")
+	}
+}
+
+func TestMaskSecrets(t *testing.T) {
+	cases := []struct {
+		input string
+		mustContain    string
+		mustNotContain string
+	}{
+		{
+			input:          "mysql --password=hunter2 --host=db",
+			mustNotContain: "hunter2",
+			mustContain:    "[REDACTED]",
+		},
+		{
+			input:          "curl -H 'Authorization: Bearer mysecrettoken'",
+			mustNotContain: "mysecrettoken",
+			mustContain:    "[REDACTED]",
+		},
+		{
+			input:          "nginx -c /etc/nginx/nginx.conf",
+			mustContain:    "nginx",
+			mustNotContain: "[REDACTED]",
+		},
+	}
+	for _, tc := range cases {
+		got := maskSecrets(tc.input)
+		if tc.mustNotContain != "" && strings.Contains(got, tc.mustNotContain) {
+			t.Errorf("maskSecrets(%q) still contains %q: %q", tc.input, tc.mustNotContain, got)
+		}
+		if tc.mustContain != "" && !strings.Contains(got, tc.mustContain) {
+			t.Errorf("maskSecrets(%q) missing %q: %q", tc.input, tc.mustContain, got)
+		}
+	}
+}
+
+func TestBuildInodeMap_ReturnsMap(t *testing.T) {
+	m := buildInodeMap()
+	// Map may be empty on a restricted test environment but must not be nil.
+	if m == nil {
+		t.Error("buildInodeMap returned nil")
+	}
+	// All values must be valid PIDs (> 0).
+	for inode, pid := range m {
+		if pid <= 0 {
+			t.Errorf("inode %d maps to invalid PID %d", inode, pid)
+		}
+	}
+}
+
+func TestCollect_ProcessCountCapped(t *testing.T) {
+	snap, err := Collect("agent", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Processes) > _maxProcesses {
+		t.Errorf("process count %d exceeds cap %d", len(snap.Processes), _maxProcesses)
+	}
+}
+
 func TestStateDesc(t *testing.T) {
 	cases := map[byte]string{
 		'R': "running",

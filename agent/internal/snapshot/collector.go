@@ -18,12 +18,27 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const (
+	// _maxProcesses caps the process list to avoid unbounded memory on busy hosts.
+	_maxProcesses = 5000
+	// _maxCmdlineBytes caps cmdline length; CLI args can contain secrets.
+	_maxCmdlineBytes = 4096
+)
+
+// _secretPatterns masks common secret patterns in cmdline strings.
+// Patterns: --password=X, -p X, --token=X, Authorization: Bearer X, etc.
+var _secretPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(--password=|--passwd=|-p\s+|--token=|--secret=|--key=)\S+`),
+	regexp.MustCompile(`(?i)(Bearer\s+|Basic\s+|token[=:\s]+)\S+`),
+}
 
 // ProcessInfo mirrors the server-side schema.ProcessInfo.
 type ProcessInfo struct {
@@ -136,6 +151,10 @@ func collectProcesses() ([]ProcessInfo, error) {
 
 	var procs []ProcessInfo
 	for _, e := range entries {
+		if len(procs) >= _maxProcesses {
+			slog.Warn("snapshot_proc_cap_reached", "cap", _maxProcesses)
+			break
+		}
 		if !e.IsDir() {
 			continue
 		}
@@ -187,11 +206,31 @@ func readProcess(pid int) (ProcessInfo, error) {
 	}
 
 	if cmdRaw, err := os.ReadFile(filepath.Join(base, "cmdline")); err == nil {
-		p.Cmdline = strings.ReplaceAll(string(cmdRaw), "\x00", " ")
-		p.Cmdline = strings.TrimSpace(p.Cmdline)
+		// Truncate before any string operations to bound memory.
+		if len(cmdRaw) > _maxCmdlineBytes {
+			cmdRaw = cmdRaw[:_maxCmdlineBytes]
+		}
+		cmdline := strings.ReplaceAll(string(cmdRaw), "\x00", " ")
+		cmdline = strings.TrimSpace(cmdline)
+		p.Cmdline = maskSecrets(cmdline)
 	}
 
 	return p, nil
+}
+
+// maskSecrets redacts common secret patterns from cmdline strings.
+func maskSecrets(s string) string {
+	for _, re := range _secretPatterns {
+		s = re.ReplaceAllStringFunc(s, func(m string) string {
+			// Keep the flag/prefix, replace the value with [REDACTED].
+			idx := strings.IndexAny(m, "= ")
+			if idx < 0 {
+				return "[REDACTED]"
+			}
+			return m[:idx+1] + "[REDACTED]"
+		})
+	}
+	return s
 }
 
 func stateDesc(s string) string {
@@ -217,16 +256,51 @@ func stateDesc(s string) string {
 }
 
 // collectConnections reads /proc/net/tcp and /proc/net/tcp6.
+// It builds the inode→PID map once (O(N+M)) before parsing connections.
 func collectConnections() ([]ConnectionInfo, error) {
+	// Build inode→PID map once instead of O(N×M) per-connection lookups.
+	inodeMap := buildInodeMap()
+
 	var all []ConnectionInfo
 	for _, path := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
-		conns, err := parseProcNetTCP(path)
+		conns, err := parseProcNetTCP(path, inodeMap)
 		if err != nil {
 			continue
 		}
 		all = append(all, conns...)
 	}
 	return all, nil
+}
+
+// buildInodeMap returns a map from socket inode → PID by scanning /proc/*/fd once.
+func buildInodeMap() map[int]int {
+	m := make(map[int]int)
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return m
+	}
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+		fds, err := os.ReadDir(fdDir)
+		if err != nil {
+			continue
+		}
+		for _, fd := range fds {
+			link, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
+			if err != nil {
+				continue
+			}
+			var inode int
+			if n, _ := fmt.Sscanf(link, "socket:[%d]", &inode); n == 1 && inode > 0 {
+				m[inode] = pid
+			}
+		}
+	}
+	return m
 }
 
 var tcpStates = map[string]string{
@@ -236,7 +310,7 @@ var tcpStates = map[string]string{
 	"0A": "LISTEN", "0B": "CLOSING",
 }
 
-func parseProcNetTCP(path string) ([]ConnectionInfo, error) {
+func parseProcNetTCP(path string, inodeMap map[int]int) ([]ConnectionInfo, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -270,7 +344,7 @@ func parseProcNetTCP(path string) ([]ConnectionInfo, error) {
 		}
 
 		inode, _ := strconv.Atoi(fields[9])
-		pid := inodeToPID(inode)
+		pid := inodeMap[inode] // O(1) lookup
 
 		conns = append(conns, ConnectionInfo{
 			Proto:      "tcp",
@@ -300,7 +374,18 @@ func parseHexAddr(s string, is6 bool) (string, int, error) {
 		return "", 0, err
 	}
 
-	// Reverse byte order (little-endian in /proc/net/tcp)
+	// Validate length before indexing to prevent panic on malformed /proc/net/tcp.
+	if is6 {
+		if len(b) != 16 {
+			return "", 0, fmt.Errorf("IPv6 addr must be 16 bytes, got %d", len(b))
+		}
+	} else {
+		if len(b) != 4 {
+			return "", 0, fmt.Errorf("IPv4 addr must be 4 bytes, got %d", len(b))
+		}
+	}
+
+	// Reverse byte order (little-endian in /proc/net/tcp).
 	for i, j := 0, len(b)-1; i < j; i, j = i+1, j-1 {
 		b[i], b[j] = b[j], b[i]
 	}
@@ -313,37 +398,6 @@ func parseHexAddr(s string, is6 bool) (string, int, error) {
 	}
 
 	return ip.String(), int(portNum), nil
-}
-
-// inodeToPID scans /proc/*/fd/* to map a socket inode to a PID.
-// Returns 0 if not found (best-effort).
-func inodeToPID(inode int) int {
-	if inode == 0 {
-		return 0
-	}
-	target := fmt.Sprintf("socket:[%d]", inode)
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return 0
-	}
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue
-		}
-		fdDir := fmt.Sprintf("/proc/%d/fd", pid)
-		fds, err := os.ReadDir(fdDir)
-		if err != nil {
-			continue
-		}
-		for _, fd := range fds {
-			link, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
-			if err == nil && link == target {
-				return pid
-			}
-		}
-	}
-	return 0
 }
 
 func buildHTTPClient(cfg TLSConfig) (*http.Client, error) {

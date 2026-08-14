@@ -452,9 +452,10 @@ func isDangerousPath(p string) bool {
 func nowNs() int64 { return time.Now().UnixNano() }
 
 func (c *CommandClient) handleTakeSnapshot(cmd *gen.AgentCommand) {
+	// Only extract case_id from the server payload — never accept a server-provided
+	// api_url to prevent a compromised server from exfiltrating snapshot data.
 	var payload struct {
-		CaseID  string `json:"case_id"`
-		APIURL  string `json:"api_url"`
+		CaseID string `json:"case_id"`
 	}
 	if len(cmd.PayloadJson) > 0 {
 		_ = json.Unmarshal(cmd.PayloadJson, &payload)
@@ -479,10 +480,7 @@ func (c *CommandClient) handleTakeSnapshot(cmd *gen.AgentCommand) {
 		return
 	}
 
-	apiURL := payload.APIURL
-	if apiURL == "" {
-		apiURL = c.cfg.APIAddr
-	}
+	apiURL := c.cfg.APIAddr
 	if apiURL == "" {
 		slog.Warn("snapshot_no_api_addr_skip_post")
 		return
