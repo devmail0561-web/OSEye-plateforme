@@ -31,21 +31,22 @@ class BatchValidator:
         """Validate an IngestRequest protobuf object.
 
         Steps:
-        1. *agent_public_key* is mandatory: if absent the batch is rejected
-           immediately to prevent signature-bypass by unknown agents.
-        2. Verify ``request.batch_signature`` over
-           ``BLAKE3(hash_chain[0] || … || hash_chain[N-1])``.
-        3. Validate that every event carries the required fields.
-        4. Return a ValidationResult with accepted / rejected counts and error
+        1. If *agent_public_key* is provided, verify ``request.batch_signature``
+           over ``BLAKE3(hash_chain[0] || … || hash_chain[N-1])``.
+           When *agent_public_key* is ``None`` the signature check is skipped
+           (the caller — AgentServiceServicer — already enforces the enrollment
+           policy via ``require_agent_keys``).
+        2. Validate that every event carries the required fields.
+        3. Return a ValidationResult with accepted / rejected counts and error
            messages index-matched with rejected events.
         """
         events = list(request.events)  # type: ignore[attr-defined]
 
         # --- Batch-level signature check ---
-        # PC-04: when agent_public_key is None, skip signature verification but
-        # log. The grpc_service layer is responsible for rejecting agents without
-        # keys when require_keys mode is active.
-        if events and agent_public_key is not None:
+        # PC-05: when agent_public_key is present, verify the Ed25519 batch
+        # signature.  When absent (key not yet enrolled), the servicer decides
+        # whether to reject via require_agent_keys — we only do field validation.
+        if agent_public_key is not None and events:
             h = blake3.blake3()
             for ev in events:
                 h.update(bytes(ev.hash_chain))

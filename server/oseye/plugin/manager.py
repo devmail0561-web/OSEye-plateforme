@@ -46,7 +46,7 @@ class PluginManager:
         plugins_dir: Path,
         ipc_socket: str = "/var/run/oseye/plugin.sock",
         verifier: PluginVerifier | None = None,
-        require_signature: bool = False,
+        require_signature: bool = True,
     ) -> None:
         self._plugins_dir = plugins_dir
         self._ipc_socket = ipc_socket
@@ -91,17 +91,17 @@ class PluginManager:
 
         name = path.stem
 
-        # SEC-PLUGIN-003: signature enforcement
-        if self._require_signature and self._verifier is None:
-            raise ValueError(
-                "Plugin signature verification is required "
-                "(OSEYE_PLUGIN_REQUIRE_SIGNATURE=true) but no trusted keys are "
-                "configured. Add Ed25519 public keys to plugin_keys_dir."
-            )
-
+        # SEC-PLUGIN-003: signature enforcement.
+        # verify=False is an explicit caller override — skip all signature checks.
         sig_path = path.with_suffix(".sig")
         needs_verify = False
-        if self._require_signature:
+        if verify and self._require_signature:
+            if self._verifier is None:
+                raise ValueError(
+                    "Plugin signature verification is required "
+                    "(OSEYE_PLUGIN_REQUIRE_SIGNATURE=true) but no trusted keys are "
+                    "configured. Add Ed25519 public keys to plugin_keys_dir."
+                )
             if not sig_path.exists():
                 raise ValueError(
                     f"Signature file not found: {sig_path}. "
