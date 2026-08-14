@@ -65,6 +65,7 @@ class DecisionWorker:
         action_executor: ActionExecutor,
         event_repo: SQLEventRepository | None = None,
         stop_event: asyncio.Event | None = None,
+        ws_decision_manager: object | None = None,
     ) -> None:
         self._bus = bus
         self._engine = engine
@@ -74,6 +75,7 @@ class DecisionWorker:
         self._event_repo = event_repo
         self._action_executor = action_executor
         self._stop_event = stop_event or asyncio.Event()
+        self._ws_decision_manager = ws_decision_manager
         self._total_processed = 0
         self._total_decisions = 0
 
@@ -180,6 +182,22 @@ class DecisionWorker:
             return
 
         self._total_decisions += 1
+
+        # Broadcast to WebSocket clients
+        if self._ws_decision_manager is not None:
+            try:
+                import json as _json
+                await self._ws_decision_manager.broadcast(
+                    _json.dumps({
+                        "decision_id": str(decision.decision_id),
+                        "decision_type": decision.decision_type,
+                        "risk_score": getattr(decision, "risk_score", None),
+                        "hostname": getattr(decision, "hostname", None),
+                        "created_at": decision.created_at.isoformat(),
+                    }).encode()
+                )
+            except Exception as exc:  # noqa: BLE001
+                _log.debug("decision_worker_ws_broadcast_error", error=str(exc))
 
         try:
             await self._action_executor.execute(decision)

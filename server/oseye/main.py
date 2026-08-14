@@ -304,6 +304,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             alert_repo=alert_repo,
             stop_event=stop,
         )
+        from oseye.api.ws.decisions import decisions_ws_manager as _ws_dec_mgr
         decision_worker = DecisionWorker(
             bus=bus,
             engine=decision_engine,
@@ -313,6 +314,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             action_executor=action_executor,
             event_repo=repo,
             stop_event=stop,
+            ws_decision_manager=_ws_dec_mgr,
         )
 
         # NE-R-01: NotificationWorker consumes notifications:pending so that

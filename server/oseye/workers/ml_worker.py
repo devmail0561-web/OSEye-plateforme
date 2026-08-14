@@ -31,6 +31,7 @@ from oseye.core.schema import UniversalEvent
 
 if TYPE_CHECKING:
     from oseye.bus.interface import EventBus
+    from oseye.ml_engine.ab_test import ABTestSession
     from oseye.ml_engine.engine import MLEngine
     from oseye.storage.repositories.events import SQLEventRepository
 
@@ -65,6 +66,7 @@ class MLWorker:
         checkpoint_interval_s: float = _DEFAULT_CHECKPOINT_INTERVAL_S,
         stop_event: asyncio.Event | None = None,
         event_repo: SQLEventRepository | None = None,
+        ab_session: ABTestSession | None = None,
     ) -> None:
         self._bus = bus
         self._engine = engine
@@ -72,6 +74,7 @@ class MLWorker:
         self._checkpoint_interval_s = checkpoint_interval_s
         self._stop_event = stop_event or asyncio.Event()
         self._event_repo = event_repo
+        self._ab_session = ab_session
         self._total_scored = 0
         self._total_published = 0
 
@@ -127,7 +130,16 @@ class MLWorker:
             self._try_save_checkpoint()
 
     async def _process(self, event: UniversalEvent) -> None:
-        ml_score = self._engine.score_event(event)
+        # A/B test active: score_event internally scores both champion and
+        # challenger and returns the authoritative champion score.
+        if self._ab_session is not None:
+            try:
+                ml_score = self._ab_session.score_event(event)
+            except Exception as exc:  # noqa: BLE001
+                _log.debug("ml_worker_ab_score_error", error=str(exc))
+                ml_score = self._engine.score_event(event)
+        else:
+            ml_score = self._engine.score_event(event)
         self._total_scored += 1
 
         payload = json.dumps(

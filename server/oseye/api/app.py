@@ -32,6 +32,8 @@ from oseye.api.routers import (
 )
 from oseye.api.ws.alerts import alerts_ws_manager
 from oseye.api.ws.alerts import router as ws_alerts_router
+from oseye.api.ws.decisions import decisions_ws_manager
+from oseye.api.ws.decisions import router as ws_decisions_router
 from oseye.config import Settings
 
 
@@ -136,8 +138,10 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     app.include_router(plugins.router)
     app.include_router(enrollment.router)
     app.include_router(ws_alerts_router)
+    app.include_router(ws_decisions_router)
 
-    # Expose WS alert manager on app state so RuleWorker and alert endpoints can broadcast
+    # Expose WS managers on app state so workers and routers can broadcast
     app.state.ws_alert_manager = alerts_ws_manager
+    app.state.ws_decision_manager = decisions_ws_manager
 
     return app

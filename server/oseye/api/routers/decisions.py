@@ -138,3 +138,34 @@ async def reject_decision(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Decision not found")
     return result
+
+
+@router.get("/journal/verify")
+async def verify_journal_integrity(
+    request: Request,
+    limit: int = 1000,
+    _auth: dict[str, Any] = Depends(_require_reader),
+) -> dict[str, object]:
+    """Verify the BLAKE3 hash chain integrity of the decision journal.
+
+    Returns:
+        ``{"intact": true, "checked": N, "broken_indices": []}`` when the
+        chain is unbroken.  ``broken_indices`` lists the 0-based positions
+        of decisions with a hash mismatch — non-empty means tampering or
+        data corruption.
+    """
+    from oseye.decision.journal import DecisionJournal
+
+    repo = _get_decision_repo(request)
+    pagination = _Pagination(limit=limit, offset=0)
+    page = await repo.list(filters={}, pagination=pagination)
+    decisions = page.items
+
+    journal = DecisionJournal()
+    broken = journal.verify_chain(decisions)
+
+    return {
+        "intact": len(broken) == 0,
+        "checked": len(decisions),
+        "broken_indices": broken,
+    }
