@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  AGENT_IMAGE: ${{ github.repository }}/oseye-agent
+  SERVER_IMAGE: ${{ github.repository }}/oseye-server
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: cd agent && go vet ./...
+      - run: cd agent && go test -race -count=1 ./...
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Build binaries
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          mkdir -p dist/${{ matrix.arch }}
+          cd agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} \
+            go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o ../dist/${{ matrix.arch }}/oseye-agent \
+            ./cmd/oseye-agent
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} \
+            go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o ../dist/${{ matrix.arch }}/oseye-config \
+            ./cmd/oseye-config
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.arch }}
+          path: dist/${{ matrix.arch }}/
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: binaries-${{ matrix.arch }}
+          path: dist/
+      - name: Install nfpm
+        run: |
+          curl -sfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_linux_amd64.tar.gz | tar xz -C /usr/local/bin nfpm
+      - name: Package .deb and .rpm
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          VERSION="${VERSION#v}"
+          chmod +x dist/oseye-agent dist/oseye-config
+          VERSION=$VERSION ARCH=$ARCH nfpm package --config packaging/nfpm-agent.yaml --target dist/ --packager deb
+          VERSION=$VERSION ARCH=$ARCH nfpm package --config packaging/nfpm-agent.yaml --target dist/ --packager rpm
+      - name: Sign packages (GPG)
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          for pkg in dist/*.deb dist/*.rpm; do
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "$GPG_PASSPHRASE" \
+              --detach-sign --armor "$pkg"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.arch }}
+          path: dist/*.deb dist/*.rpm dist/*.asc
+
+  docker-agent:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: agent
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.AGENT_IMAGE }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.AGENT_IMAGE }}:latest
+      - name: Sign with cosign
+        if: env.COSIGN_KEY != ''
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+        run: |
+          cosign sign --key env://COSIGN_KEY \
+            ${{ env.REGISTRY }}/${{ env.AGENT_IMAGE }}:${{ github.ref_name }}
+
+  docker-server:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE }}:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE }}:latest
+      - name: Sign with cosign
+        if: env.COSIGN_KEY != ''
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+        run: |
+          cosign sign --key env://COSIGN_KEY \
+            ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE }}:${{ github.ref_name }}
+
+  release:
+    needs: [package, docker-agent, docker-server]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum *.deb *.rpm 2>/dev/null > SHA256SUMS || true
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            artifacts/*.deb
+            artifacts/*.rpm
+            artifacts/*.asc
+            artifacts/SHA256SUMS

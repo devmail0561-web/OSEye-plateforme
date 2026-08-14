@@ -1,7 +1,7 @@
 # nfpm v2 — oseye-agent package configuration
 # Usage: VERSION=0.1.0 nfpm package --config packaging/nfpm-agent.yaml --target dist/
 name: oseye-agent
-arch: amd64
+arch: ${ARCH}
 platform: linux
 version: "${VERSION}"
 version_schema: semver
@@ -25,6 +25,14 @@ contents:
       owner: root
       group: root
 
+  # Config CLI tool
+  - src: dist/oseye-config
+    dst: /usr/bin/oseye-config
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
   # Systemd unit
   - src: packaging/systemd/oseye-agent.service
     dst: /usr/lib/systemd/system/oseye-agent.service
@@ -38,7 +46,7 @@ contents:
     dst: /etc/oseye/agent.env.example
     type: config|noreplace
     file_info:
-      mode: 0640
+      mode: 0600
       owner: oseye
       group: oseye
 
@@ -69,6 +77,8 @@ contents:
 scripts:
   preinstall: packaging/scripts/preinst
   postinstall: packaging/scripts/postinst
+  preremove: packaging/scripts/prerm
+  postremove: packaging/scripts/postrm
 
 deb:
   fields:

@@ -1,0 +1,105 @@
+---
+title: Data Integrity
+description: Hash chains, signatures, and tamper-evident logging in OSEye.
+---
+
+## Event Integrity
+
+Every event collected by the agent is protected by a BLAKE3 hash chain:
+
+```
+Event N hash = BLAKE3(Event N payload || Event N-1 hash)
+```
+
+This creates a tamper-evident chain: modifying any event invalidates all subsequent hashes.
+
+## Batch Signing
+
+Each batch of events sent to the server is signed with Ed25519:
+
+```
+Signature = Ed25519_Sign(private_key, batch_payload)
+```
+
+The server verifies the signature before processing. A failed verification triggers an alert and drops the batch.
+
+### Key Management
+
+```bash
+# Agent signing key (dedicated, separate from mTLS)
+OSEYE_ED25519_SIGNING_KEY=/etc/oseye/certs/agent.ed25519.key
+
+# Generate a new key
+openssl genpkey -algorithm ed25519 -out agent.ed25519.key
+chmod 0600 agent.ed25519.key
+```
+
+## Decision Audit Journal
+
+The Decision Engine maintains an immutable audit log:
+
+| Field | Description |
+|-------|-------------|
+| `sequence` | Monotonic counter |
+| `timestamp` | ISO 8601 with nanoseconds |
+| `decision_type` | Type of decision made |
+| `risk_level` | Assessed risk |
+| `action` | Response taken |
+| `chain_hash` | BLAKE3(entry || previous_hash) |
+
+### Verification
+
+```bash
+# Verify the decision journal chain
+curl https://server:8000/api/v1/decisions/verify-chain \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Response:
+```json
+{
+  "valid": true,
+  "entries_verified": 1523,
+  "last_hash": "a3b4c5d6..."
+}
+```
+
+## Package Integrity
+
+### Release Artifacts
+
+Every release includes:
+- `SHA256SUMS` — checksums of all artifacts
+- `.asc` files — GPG detached signatures for .deb/.rpm
+- cosign signature for Docker images
+
+### Verification
+
+```bash
+# Verify .deb
+gpg --verify oseye-agent_amd64.deb.asc oseye-agent_amd64.deb
+
+# Verify Docker image
+cosign verify ghcr.io/oseye/oseye/oseye-agent:v0.1.0
+
+# Verify checksums
+sha256sum -c SHA256SUMS
+```
+
+## Build Reproducibility
+
+Agent binaries are built with:
+- `-trimpath` — removes local filesystem paths
+- `CGO_ENABLED=0` — static linking, no system dependencies
+- Pinned Go version and module checksums (`go.sum`)
+- Docker base images pinned by digest (not tag)
+
+## Plugin Signatures
+
+In production mode, all plugins must be signed:
+
+```
+Signature = Ed25519_Sign(developer_key, plugin_package_hash)
+```
+
+The server verifies against registered trusted public keys before loading any plugin.

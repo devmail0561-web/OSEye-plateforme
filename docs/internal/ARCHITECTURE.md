@@ -1,7 +1,7 @@
 # OSEye — Software Architecture Document
 
-**Version:** 1.1  
-**Date:** 2026-08-06  
+**Version:** 1.2  
+**Date:** 2026-08-14  
 **Statut:** Référence de développement  
 **Classification:** Confidentiel — usage interne
 
@@ -12,6 +12,8 @@
 1. [Stack technologique](#1-stack-technologique)
 2. [Structure du monorepo](#2-structure-du-monorepo)
 3. [Architecture des composants](#3-architecture-des-composants)
+   - [3.1 Agent (Go)](#31-agent-go)
+   - [3.1.1 Moteur d'autonomie locale](#311-moteur-dautonomie-locale-v010-alpha1)
 4. [Modèles de données](#4-modèles-de-données)
 5. [Architecture de sécurité](#5-architecture-de-sécurité)
 6. [Schémas de stockage](#6-schémas-de-stockage)
@@ -75,6 +77,8 @@ oseye/
 ├── agent/                          # Binaire Go — déployé sur chaque machine surveillée
 │   ├── cmd/oseye-agent/
 │   │   └── main.go                 # Entry point unique ; plateforme résolue à l'exécution
+│   ├── cmd/oseye-config/           # CLI de configuration (variables, certs, token enrollment)
+│   │   └── main.go
 │   ├── internal/
 │   │   ├── platform/               # *** Couche d'abstraction plateforme ***
 │   │   │   ├── interface.go        # PlatformDriver interface + RawEvent
@@ -137,6 +141,22 @@ oseye/
 │   │   │   └── receiver.go         # Réception et application des profils
 │   │   ├── watchdog/
 │   │   │   └── resource.go         # CPU/mem self-monitoring, throttling adaptatif
+│   │   ├── localrules/             # *** Moteur de règles local (autonomie) ***
+│   │   │   ├── rule.go             # Types (Simple, Correlation, Sequence), compilation regex LRU
+│   │   │   ├── store.go            # Persistance JSON + vérification Ed25519 + versioning monotone
+│   │   │   ├── engine.go           # Engine — évaluation race-free (RWMutex + atomic)
+│   │   │   ├── correlator.go       # Compteurs et séquences sur fenêtres temporelles bornées
+│   │   │   └── engine_test.go
+│   │   ├── hostprofile/            # *** Profil hôte + budgets ressources ***
+│   │   │   ├── profile.go          # Profile, ResourceBudget, ProfileStore (persistance JSON)
+│   │   │   ├── inventory.go        # HostInventory — collecte CPU/RAM/ports/services (linux)
+│   │   │   └── profile_test.go
+│   │   ├── autonomy/               # *** Contrôleur d'autonomie ***
+│   │   │   ├── controller.go       # Controller — évaluation → réponse + cascade rollback
+│   │   │   ├── killswitch.go       # KillSwitch — flag atomique + sentinel file (rate-limited)
+│   │   │   ├── reporter.go         # DecisionReporter — forward décisions vers server
+│   │   │   ├── controller_test.go
+│   │   │   └── killswitch_test.go
 │   │   └── config/
 │   │       └── config.go
 │   ├── go.mod
@@ -367,7 +387,9 @@ oseye/
 
 ### 3.1 Agent (Go)
 
-Le cœur de l'agent est **OS-agnostique**. Toute la logique de collecte spécifique à un OS est encapsulée dans un `PlatformDriver`, sélectionné automatiquement à la compilation via build tags Go.
+Le cœur de l'agent est **OS-agnostique**. Toute la logique de collecte spécifique à un OS est encapsulée dans un `PlatformDriver`, sélectionné automatiquement à la compilation via build tags Go. Depuis v0.1.0-alpha.1, l'agent embarque également un **moteur d'autonomie locale** qui évalue des règles directement sur l'hôte, sans attendre le serveur.
+
+**Pipeline de collecte et d'autonomie (Vue d'ensemble) :**
 
 ```
 main.go
@@ -382,17 +404,26 @@ CollectorManager
  │     Windows : ETWCollector, WinLogCollector, RegistryCollector, WMICollector, SysmonCollector
  │     macOS   : EndpointSecurityCollector, FSEventsCollector, OpenBSMCollector, UnifiedLogCollector
  │
- │           ↓ chan RawEvent  (format identique quel que soit l'OS)
-HashChainer (BLAKE3, per-event)
- │           ↓ chan RawEvent (avec hash_chain)
-LocalBuffer (SQLite — queue offline)
- │           ↓ batch de N events
-BatchSigner (Ed25519 — toutes les 1000 events ou 1s)
- │           ↓ IngestRequest (Protobuf)
-GRPCClient ──→ server:50051 (mTLS)
+ │           ↓ chan RawEvent
  │
-ResourceWatchdog ──→ throttle les collectors si CPU >4%
-PolicyReceiver ──→ reçoit SurveillanceProfile, active/désactive collectors
+ ├── [Fanout goroutine]  ← nouvelle architecture v0.1.0-alpha.1
+ │     ├──────────────────────────────────────────────────────────────────────
+ │     │                                                                      │
+ │     ↓ batcherCh                                                            ↓ autonomy
+ │
+HashChainer (BLAKE3, per-event)                                  [AutonomyController]
+ │           ↓ chan RawEvent (avec hash_chain)                         ↓
+LocalBuffer (SQLite — queue offline)                         [LocalRuleEngine]  ← évalue les règles
+ │           ↓ batch de N events                               RWMutex snapshot pattern
+BatchSigner (Ed25519 — toutes les 1000 events ou 1s)              ↓
+ │           ↓ IngestRequest (Protobuf)                     [Correlator] ← fenêtres temporelles
+GRPCClient ──→ server:50051 (mTLS)                                ↓
+ │                                                           [KillSwitch] ← flag atomique + sentinel file
+ResourceWatchdog ──→ throttle les collectors si CPU >4%           ↓
+PolicyReceiver ──→ reçoit SurveillanceProfile + RuleSet    [Response execution]
+                        ├── ProfileStore (persistance JSON)   BLOCK_IP | KILL_PROCESS | QUARANTINE_FILE
+                        └── RuleStore   (persistance JSON)         ↓
+                                                             [DecisionReporter] ──→ server (gRPC)
 ```
 
 **Interface PlatformDriver (Go) :**
@@ -468,6 +499,183 @@ func init() { platform.Register(&LinuxDriver{}) }
 // //go:build windows
 func init() { platform.Register(&WindowsDriver{}) }
 ```
+
+### 3.1.1 Moteur d'autonomie locale (v0.1.0-alpha.1)
+
+L'agent peut détecter des menaces et déclencher des réponses **sans aucune connexion au serveur**. Le serveur pousse des règles signées et un profil hôte ; l'agent les applique localement de façon permanente.
+
+#### Types de règles locales
+
+| Type | Description | Usage typique |
+|------|-------------|---------------|
+| `simple` | Condition unique sur un event (`field op value`, regex, `not_in` baseline) | Exécution suspecte, lecture `/etc/shadow` |
+| `correlation` | Compteur sur fenêtre temporelle (`count > N in window`) | Brute-force, scan de ports |
+| `sequence` | Chaîne ordonnée d'events dans une fenêtre | Reconnaisance → exploitation → exfiltration |
+
+Chaque règle porte un `severity` (`critical`, `high`, `medium`, `low`) et une `response` (`BLOCK_IP`, `KILL_PROCESS`, `QUARANTINE_FILE`, `LOG_ONLY`).
+
+#### Niveaux d'autonomie
+
+| Niveau | Comportement |
+|--------|-------------|
+| `always_act` | Toutes les règles déclenchent une action immédiate |
+| `critical_high` | Action immédiate pour `critical` et `high`, log pour le reste |
+| `critical_only` | Action immédiate uniquement pour `critical` (défaut) |
+| `log_only` | Jamais d'action — log et report au serveur uniquement |
+
+Le niveau est fixé par le serveur via le `HostProfile` poussé sur le stream `ReceivePolicy`.
+
+#### Packages Go
+
+```go
+// agent/internal/localrules
+
+// RuleSet poussé par le serveur (JSON signé Ed25519).
+type RuleSet struct {
+    Version   int64   `json:"version"`    // monotone croissant
+    Signature string  `json:"signature"`  // Ed25519 hex-encoded
+    Rules     []Rule  `json:"rules"`
+}
+
+// Rule types: "simple" | "correlation" | "sequence"
+type Rule struct {
+    ID        string            `json:"id"`
+    Type      string            `json:"type"`
+    Severity  string            `json:"severity"`
+    Response  string            `json:"response"`
+    Conditions []Condition      `json:"conditions"`
+    Window    int               `json:"window_s,omitempty"`
+    Threshold int               `json:"threshold,omitempty"`
+    Sequence  []string          `json:"sequence,omitempty"`
+}
+
+// Engine — thread-safe, zéro allocation sur le chemin chaud.
+// Utilise RWMutex pour compiled/profileRefs et atomic.Int32 pour degradeLevel.
+type Engine struct { /* ... */ }
+func (e *Engine) Evaluate(event map[string]any) []Match
+func (e *Engine) SetDegradeLevel(level int32) // 0=full, 1=high+, 2=critical only
+func (e *Engine) SetProfileRefs(refs map[string][]string) // baselines
+func (e *Engine) Reload()
+```
+
+```go
+// agent/internal/hostprofile
+
+// Profile poussé par le serveur, persisté localement.
+type Profile struct {
+    Name             string         `json:"name"`
+    Version          int64          `json:"version"`
+    Autonomy         string         `json:"autonomy"`
+    BaselineApps     []string       `json:"baseline_apps"`
+    BaselineNetDests []string       `json:"baseline_net_dests"`
+    BaselinePorts    []int          `json:"baseline_ports"`
+    BaselineUsers    []string       `json:"baseline_users"`
+    SetuidBinaries   []string       `json:"setuid_binaries"`
+    Budget           ResourceBudget `json:"budget"`
+}
+
+// ResourceBudget calculé par le serveur depuis les specs hôte (CPU, RAM, cores).
+type ResourceBudget struct {
+    MaxRules             int     `json:"max_rules"`
+    CPUBudgetPct         float64 `json:"cpu_budget_pct"`
+    BudgetPerEventMicros int64   `json:"budget_per_event_micros"`
+    MaxCorrelationGroups int     `json:"max_correlation_groups"`
+    MaxCorrelationEvents int     `json:"max_correlation_events"`
+}
+```
+
+```go
+// agent/internal/autonomy
+
+// Controller orchestre l'évaluation locale et l'exécution des réponses.
+type Controller struct { /* engine, stores, dedup, killSwitch, ... */ }
+func NewController(engine *localrules.Engine, ruleStore *localrules.Store,
+    profileStore *hostprofile.ProfileStore, stateStore *responder.StateStore,
+    dedup *responder.Deduplicator, reporter *responder.Reporter,
+    ks *KillSwitch, cfg ControllerConfig) *Controller
+func (c *Controller) ProcessEvent(event map[string]any) // appelé sur chaque event
+func (c *Controller) Decisions() <-chan Decision        // consommé par DecisionReporter
+func (c *Controller) RunCleanup(ctx context.Context)    // goroutine périodique
+```
+
+#### Sécurité des règles
+
+```
+Réception d'un RuleSet depuis le serveur (dans PolicyReceiver)
+  1. Vérification signature Ed25519 (clé publique stockée dans le binaire)
+  2. Vérification version monotone croissante (anti-rollback)
+  3. Chargement atomique dans le Store (swap current → previous)
+
+Rollback automatique (cascade guard) :
+  Si ≥ 3 cibles distinctes actionnées dans une fenêtre de 60s
+  → rollback automatique vers la version précédente
+  → log CRITICAL + report au serveur
+
+Rollback manuel :
+  Commande serveur : ROLLBACK_RULES (StreamCommands gRPC)
+  Fichier local : /var/lib/oseye/local_rules_prev.json
+```
+
+#### Kill Switch (double verrou)
+
+```
+1. Flag atomique (atomic.Bool) — set par commande serveur DISABLE_AUTONOMY
+2. Sentinel file /etc/oseye/disable_autonomy — vérifié toutes les 2s (rate-limited)
+   → os.Stat() coûteux : résultat mis en cache atomic, refresh max 1/2s
+
+IsDisabled() :
+  if disabled.Load() → true (fast path, O(1))
+  if now - lastCheck >= 2s → stat + cache refresh
+  return sentinelCached.Load()
+
+Re-enable : commande ENABLE_AUTONOMY ou suppression du sentinel file
+```
+
+#### Dégradation gracieuse sous charge CPU
+
+```
+ResourceWatchdog → SetDegradeLevel(level)
+  level=0 : toutes les règles évaluées (normal)
+  level=1 : règles severity >= high uniquement
+  level=2 : règles severity == critical uniquement
+
+Principe : réduire le nombre de règles, JAMAIS ignorer des events.
+Ignorer des events serait exploitable (blind-spot délibéré).
+Budget par event : BudgetPerEventMicros (défaut 100µs)
+Tri par priorité de sévérité avant évaluation.
+```
+
+#### Fanout d'events (main.go)
+
+```go
+// Goroutine fanout : un event va dans les deux pipelines.
+for ev := range mgr.Events() {
+    // Pipeline 1 : batcher → gRPC → serveur (avec hash chain + signature)
+    batcherCh <- ev
+
+    // Pipeline 2 : évaluation locale immédiate (parsing JSON inline)
+    if ev.Raw != nil {
+        var parsed map[string]any
+        if json.Unmarshal(ev.Raw, &parsed) == nil {
+            parsed["_source"] = ev.Source
+            parsed["_timestamp"] = ev.Timestamp
+            autoController.ProcessEvent(parsed)
+        }
+    }
+}
+```
+
+#### Persistance locale
+
+| Fichier | Contenu |
+|---------|---------|
+| `/var/lib/oseye/local_rules.json` | RuleSet courant (signé) |
+| `/var/lib/oseye/local_rules_prev.json` | RuleSet précédent (pour rollback) |
+| `/var/lib/oseye/host_profile.json` | HostProfile courant |
+| `/var/lib/oseye/oseye_buffer.db` | Buffer SQLite offline events |
+| `/etc/oseye/disable_autonomy` | Sentinel file kill switch (absent = actif) |
+
+---
 
 ### 3.2 Normalizer (Python)
 
@@ -1778,9 +1986,25 @@ Sur Kafka : key = `hostname:pid`, value = payload Protobuf.
 
 ```
 [Agent Go]
-  BLAKE3 hash chain calculé par event
-  Ed25519 batch-sign toutes les 1000 events ou toutes les 1s
-  gRPC stream : IngestEvents(stream UniversalEventPB) → IngestResponse
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  CollectorManager → chan RawEvent                                    │
+  │         ↓ (fanout goroutine)                                        │
+  │  ┌──────────────────────────┬───────────────────────────────────┐   │
+  │  ↓ Pipeline 1               ↓ Pipeline 2                        │   │
+  │  BLAKE3 hash chain          AutonomyController.ProcessEvent()   │   │
+  │  Ed25519 batch-sign          │                                  │   │
+  │  LocalBuffer SQLite          ├── LocalRuleEngine.Evaluate()     │   │
+  │  gRPC IngestEvents           │   (règles signées Ed25519,       │   │
+  │    → server:50051 mTLS       │    correlator, dégradation)      │   │
+  │                              ├── KillSwitch.IsDisabled()        │   │
+  │                              ├── execBlockIP / execKillProcess  │   │
+  │                              │   / execQuarantineFile           │   │
+  │                              └── DecisionReporter → server gRPC │   │
+  └─────────────────────────────────────────────────────────────────┘   │
+                                                                         │
+  Streams entrants (gRPC ReceivePolicy / StreamCommands) :               │
+    ← SurveillanceProfile + RuleSet (signé) + ResourceBudget            │
+    ← DISABLE_AUTONOMY | ENABLE_AUTONOMY | ROLLBACK_RULES               │
         ↓
 [Server gRPC service: agent_service.py]
   Valide CN du cert mTLS = agent_id
@@ -1807,6 +2031,8 @@ rules:{host}                      (events + ti_tags)   toutes les 500ms
                       ↓
                [Action Executor]  +  [WS Manager]
 ```
+
+**Note :** Le pipeline 2 (autonomie locale) s'exécute sur **chaque event**, indépendamment de la connectivité réseau. Le pipeline 1 envoie les mêmes events au serveur pour analyse ML, corrélation et décision enrichie. Les deux pipelines sont complémentaires : l'autonomie locale réagit en millisecondes, le serveur apporte la profondeur (ML, TI, corrélation multi-hôtes).
 
 ### Protobuf — schémas principaux
 
@@ -2282,6 +2508,13 @@ Toutes les métriques sont exposées sur `GET /metrics` (format Prometheus text)
 | `oseye_agent_buffer_size` | Gauge | — | Events en attente dans SQLite local |
 | `oseye_agent_cpu_usage_pct` | Gauge | — | CPU utilisé par l'agent |
 | `oseye_agent_grpc_reconnects_total` | Counter | — | Reconnexions gRPC |
+| `oseye_agent_autonomy_rules_total` | Gauge | — | Règles locales actives (après dégradation) |
+| `oseye_agent_autonomy_matches_total` | Counter | `rule_id`, `severity`, `response` | Matches règles locales |
+| `oseye_agent_autonomy_actions_total` | Counter | `action`, `result` | Actions autonomes exécutées (BLOCK_IP, KILL_PROCESS, QUARANTINE_FILE) |
+| `oseye_agent_autonomy_degrade_level` | Gauge | — | Niveau de dégradation courant (0=full, 1=high+, 2=critical) |
+| `oseye_agent_autonomy_rollbacks_total` | Counter | `reason` | Rollbacks de règles (cascade ou commande serveur) |
+| `oseye_agent_autonomy_kill_switch` | Gauge | — | 1 si le kill switch est actif, 0 sinon |
+| `oseye_agent_rule_engine_eval_us` | Histogram | — | Durée d'évaluation par event (microsecondes) |
 
 **Métriques server :**
 
@@ -2699,6 +2932,43 @@ func init() { platform.Register(&FreeBSDDriver{}) }
 | Privilege escalation | auditd | WinLog 4672 | OpenBSM | auditpipe |
 
 *FreeBSD : driver non livré en v1.0, interface prête.
+
+---
+
+### Phase 11 — Moteur d'autonomie locale (v0.1.0-alpha.1) `[x]` COMPLÈTE
+
+**Objectif :** L'agent peut détecter et répondre à des menaces sans connectivité serveur, avec des garanties de sécurité strictes (règles signées, kill switch, rollback automatique).
+
+**Livré (2026-08-14) :**
+
+- `agent/internal/localrules/` — moteur d'évaluation local race-free (RWMutex + atomic.Int32)
+  - Trois types de règles : Simple, Correlation (fenêtre temporelle), Sequence (chaîne ordonnée)
+  - Vérification Ed25519 des RuleSets poussés par le serveur
+  - Versioning monotone anti-rollback + rollback 2-versions
+  - Correlator borné (max groupes/events, eviction LRU)
+  - Cache regex LRU (256 entrées)
+- `agent/internal/hostprofile/` — profil hôte persisté
+  - `Profile` avec baselines (apps, réseau, ports, users, setuid)
+  - `ResourceBudget` calculé par le serveur depuis specs hôte
+  - `HostInventory` (Linux) : collecte CPU/RAM/kernel/ports/services au démarrage
+- `agent/internal/autonomy/` — contrôleur d'autonomie
+  - 4 niveaux d'autonomie : `always_act`, `critical_high`, `critical_only`, `log_only`
+  - Kill switch double verrou : flag atomique + sentinel file `/etc/oseye/disable_autonomy` (cache 2s)
+  - Cascade rollback : ≥ 3 cibles distinctes en 60s → rollback automatique vers version précédente
+  - Re-check kill switch avant exécution (protection TOCTOU)
+  - `DecisionReporter` : forward des décisions autonomes vers le serveur via gRPC
+- `cmd/oseye-config/` — CLI de configuration (variables d'environnement, certs, token enrollment)
+- Fanout d'events dans `main.go` : chaque event va simultanément au batcher gRPC ET au contrôleur autonome
+- Commandes gRPC étendues : `DISABLE_AUTONOMY`, `ENABLE_AUTONOMY`, `ROLLBACK_RULES`
+- 466 tests Go (`go test -race ./...` — zéro data race)
+
+**Garanties de sécurité :**
+- Les règles ne sont jamais exécutées sans signature Ed25519 valide
+- En cas de surcharge CPU, réduction du périmètre de règles — jamais d'ignorance d'events (blind-spot exploitable)
+- L'opérateur peut désactiver l'autonomie immédiatement via commande serveur ou fichier local
+- Le rollback automatique protège contre les règles mal calibrées qui déclencheraient une tempête d'actions
+
+**Livrable :** Agent déconnecté du serveur → attaque détectée par règle locale → KILL_PROCESS exécuté en < 50ms, décision reportée au serveur dès reconnexion.
 
 ---
 

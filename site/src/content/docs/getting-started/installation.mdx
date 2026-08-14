@@ -1,0 +1,147 @@
+---
+title: Installation
+description: Install OSEye agent and server.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Agent Installation
+
+<Tabs>
+  <TabItem label="Debian/Ubuntu">
+    ```bash
+    # Download the .deb package
+    curl -LO https://github.com/oseye/oseye/releases/latest/download/oseye-agent_amd64.deb
+    curl -LO https://github.com/oseye/oseye/releases/latest/download/oseye-agent_amd64.deb.asc
+
+    # Verify GPG signature
+    gpg --verify oseye-agent_amd64.deb.asc oseye-agent_amd64.deb
+
+    # Install
+    sudo dpkg -i oseye-agent_amd64.deb
+    ```
+  </TabItem>
+  <TabItem label="RHEL/Fedora">
+    ```bash
+    # Download the .rpm package
+    curl -LO https://github.com/oseye/oseye/releases/latest/download/oseye-agent_amd64.rpm
+    curl -LO https://github.com/oseye/oseye/releases/latest/download/oseye-agent_amd64.rpm.asc
+
+    # Verify GPG signature
+    gpg --verify oseye-agent_amd64.rpm.asc oseye-agent_amd64.rpm
+
+    # Install
+    sudo rpm -i oseye-agent_amd64.rpm
+    ```
+  </TabItem>
+  <TabItem label="Docker">
+    ```bash
+    docker pull ghcr.io/oseye/oseye/oseye-agent:latest
+
+    # Verify cosign signature
+    cosign verify ghcr.io/oseye/oseye/oseye-agent:latest
+
+    docker run -d --name oseye-agent \
+      --privileged \
+      -v /etc/oseye:/etc/oseye:ro \
+      -v /var/lib/oseye:/var/lib/oseye \
+      ghcr.io/oseye/oseye/oseye-agent:latest
+    ```
+  </TabItem>
+  <TabItem label="From Source">
+    ```bash
+    git clone https://github.com/oseye/oseye.git
+    cd oseye
+
+    # Build agent binaries
+    make dist/oseye-agent dist/oseye-config
+
+    # Install manually
+    sudo cp dist/oseye-agent /usr/bin/
+    sudo cp dist/oseye-config /usr/bin/
+    sudo cp packaging/systemd/oseye-agent.service /usr/lib/systemd/system/
+    sudo systemctl daemon-reload
+    ```
+  </TabItem>
+</Tabs>
+
+## Verify Installation
+
+```bash
+# Check version
+oseye-agent --version
+
+# Validate configuration
+sudo oseye-config validate
+```
+
+## Verify Package Integrity
+
+Every release includes a `SHA256SUMS` file:
+
+```bash
+curl -LO https://github.com/oseye/oseye/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+## Server Installation
+
+<Tabs>
+  <TabItem label="Docker Compose (Recommended)">
+    ```bash
+    # Clone and initialize PKI
+    git clone https://github.com/oseye/oseye.git
+    cd oseye
+    sudo bash scripts/init-server.sh
+
+    # Configure secrets
+    sudo cp packaging/config/server.env.example /etc/oseye/server.env
+    sudo cp packaging/config/secrets.env.example /etc/oseye/secrets.env
+    # Edit secrets.env with strong passwords
+    sudo nano /etc/oseye/secrets.env
+
+    # Start all services (server + PostgreSQL + Redis + UI)
+    docker compose -f infra/docker/docker-compose.prod.yml up -d
+
+    # Verify
+    curl http://localhost:8000/api/v1/health
+    ```
+  </TabItem>
+  <TabItem label="Manual (pip + systemd)">
+    ```bash
+    # Prerequisites: Python 3.12+, PostgreSQL, Redis
+    git clone https://github.com/oseye/oseye.git
+    cd oseye/server
+
+    # Create virtual environment
+    python3.12 -m venv .venv
+    source .venv/bin/activate
+    pip install -e ".[prod]"
+
+    # Initialize PKI and first admin
+    sudo bash ../scripts/init-server.sh
+
+    # Configure
+    sudo cp ../packaging/config/server.env.example /etc/oseye/server.env
+    sudo cp ../packaging/config/secrets.env.example /etc/oseye/secrets.env
+    sudo nano /etc/oseye/secrets.env
+
+    # Start
+    python -m oseye.main
+    ```
+  </TabItem>
+</Tabs>
+
+## System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| Agent CPU | 1 core | 2 cores |
+| Agent RAM | 128 MB | 256 MB |
+| Agent Disk | 500 MB | 2 GB (buffer) |
+| Server CPU | 2 cores | 4 cores |
+| Server RAM | 2 GB | 8 GB |
+| Server Disk | 10 GB | 100 GB (events) |
+| OS | Linux 5.10+ (kernel) | Linux 6.x |
+| Go | 1.23+ (build only) | — |
+| Python | 3.12+ (server) | — |

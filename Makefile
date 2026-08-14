@@ -243,6 +243,7 @@ run-agent-mtls:
 # ── Packaging ─────────────────────────────────────────────────────────────────
 
 VERSION  ?= $(shell cat VERSION 2>/dev/null || echo "0.0.0-dev")
+ARCH     ?= $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 DIST_DIR := $(CURDIR)/dist
 NFPM     := nfpm
 LDFLAGS  := -s -w -X main.version=$(VERSION)
@@ -278,7 +279,7 @@ $(DIST_DIR)/oseye-config:
 package-agent: $(DIST_DIR)/oseye-agent $(DIST_DIR)/oseye-config
 	@echo "==> Packaging oseye-agent $(VERSION) (.deb + .rpm)"
 	mkdir -p $(DIST_DIR)
-	VERSION=$(VERSION) $(NFPM) package \
+	VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
 	  --config packaging/nfpm-agent.yaml \
 	  --target $(DIST_DIR)
 	@echo "==> Packages:"

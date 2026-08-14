@@ -1,5 +1,7 @@
 # Go
 agent/bin/
+agent/oseye-agent
+agent/oseye-config
 agent/*.test
 agent/coverage.out
 agent/internal/platform/linux/ebpf/*_bpfel.go

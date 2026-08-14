@@ -51,10 +51,15 @@ install -d -m 700 "$(dirname "$AGENT_ENV")"
 # The server's TLS cert is signed by the OSEye CA, which is not yet trusted on
 # this host. We use --insecure ONLY for this first request to bootstrap trust.
 # All subsequent requests use --cacert to enforce certificate verification.
+#
+# SECURITY NOTE: TOFU is vulnerable to MITM during this single request.
+# For high-security environments, pre-distribute the CA cert via configuration
+# management (Ansible, Puppet) and skip this step.
 echo "==> Fetching CA certificate (TOFU)..."
 curl --fail --silent --insecure \
+    --header "X-Enrollment-Token: ${OSEYE_TOKEN}" \
     --output "$CERTS_DIR/ca.crt" \
-    "${API_BASE}/api/v1/enroll/${OSEYE_TOKEN}"
+    "${API_BASE}/api/v1/enroll/ca"
 chmod 644 "$CERTS_DIR/ca.crt"
 echo "    Saved to $CERTS_DIR/ca.crt"
 
@@ -78,8 +83,9 @@ RESPONSE=$(curl --fail --silent \
     --cacert "$CERTS_DIR/ca.crt" \
     --request POST \
     --header "Content-Type: application/json" \
+    --header "X-Enrollment-Token: ${OSEYE_TOKEN}" \
     --data "{\"csr\": ${CSR_JSON}, \"hostname\": ${HOSTNAME_JSON}}" \
-    "${API_BASE}/api/v1/enroll/${OSEYE_TOKEN}")
+    "${API_BASE}/api/v1/enroll/sign")
 
 # Extract cert field from {"cert": "<PEM>"}
 echo "$RESPONSE" | python3 -c "

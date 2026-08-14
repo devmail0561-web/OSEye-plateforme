@@ -1,0 +1,92 @@
+---
+title: Server Configuration Reference
+description: All environment variables for the OSEye server.
+---
+
+## Configuration
+
+The server reads environment variables at startup. Use a `.env` file or systemd `EnvironmentFile=`.
+
+## Core
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_SECRET_KEY` | — | **Required**. Application secret (hex, 32+ bytes) |
+| `OSEYE_HOST` | `0.0.0.0` | Listen address |
+| `OSEYE_PORT` | `8000` | HTTP/REST port |
+| `OSEYE_GRPC_PORT` | `50051` | gRPC port for agents |
+| `OSEYE_DEBUG` | `false` | Enable debug logging |
+
+## Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_DATABASE_URL` | `sqlite:///./oseye.db` | SQLAlchemy database URL |
+| `OSEYE_DATABASE_POOL_SIZE` | `10` | Connection pool size |
+
+Supported backends: SQLite (dev), PostgreSQL (prod), ClickHouse (events archive).
+
+## Message Bus
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_BUS_BACKEND` | `memory` | Bus backend: `memory`, `redis`, `kafka` |
+| `OSEYE_REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
+| `OSEYE_KAFKA_BROKERS` | — | Comma-separated Kafka broker addresses |
+
+## TLS / mTLS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_TLS_CERT_FILE` | — | Server TLS certificate |
+| `OSEYE_TLS_KEY_FILE` | — | Server TLS private key |
+| `OSEYE_TLS_CA_CERT_FILE` | — | CA certificate for agent verification |
+| `OSEYE_GRPC_INSECURE_DEV` | `false` | Allow insecure gRPC (dev only) |
+
+## Authentication
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_JWT_PRIVATE_KEY_PATH` | — | RSA private key for JWT signing |
+| `OSEYE_JWT_PUBLIC_KEY_PATH` | — | RSA public key for JWT verification |
+| `OSEYE_JWT_EXPIRY_MINUTES` | `60` | JWT token expiry |
+
+## ML Engine
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_ML_CHECKPOINT_PATH` | `/var/lib/oseye/ml_checkpoint.pkl` | Model persistence path |
+| `OSEYE_ML_CHECKPOINT_INTERVAL` | `300` | Checkpoint interval (seconds) |
+| `OSEYE_ML_ANOMALY_THRESHOLD` | `0.7` | Anomaly score threshold |
+
+## Plugins
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_PLUGINS_DIR` | `/var/lib/oseye/plugins` | Plugin storage directory |
+| `OSEYE_PLUGIN_IPC_SOCKET` | `/var/run/oseye/plugin.sock` | IPC socket path |
+| `OSEYE_PLUGIN_REQUIRE_SIGNATURE` | `false` | Require Ed25519 signature |
+| `OSEYE_PLUGIN_KEYS_DIR` | `/etc/oseye/plugin_keys` | Trusted public keys directory |
+
+## Surveillance
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_DEFAULT_SURVEILLANCE_PROFILE` | `workstation` | Profile pushed to new agents |
+
+## Enrollment
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_ENROLLMENT_TOKEN_DIR` | `/var/lib/oseye/enrollment_tokens` | Token storage |
+| `OSEYE_ENROLLMENT_TOKEN_EXPIRY` | `86400` | Token validity (seconds) |
+
+## Threat Intelligence
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_TI_ABUSEIPDB_KEY` | — | AbuseIPDB API key |
+| `OSEYE_TI_VIRUSTOTAL_KEY` | — | VirusTotal API key |
+| `OSEYE_TI_MISP_URL` | — | MISP instance URL |
+| `OSEYE_TI_MISP_KEY` | — | MISP API key |
+| `OSEYE_TI_CIRCUIT_BREAKER_THRESHOLD` | `5` | Failures before circuit opens |

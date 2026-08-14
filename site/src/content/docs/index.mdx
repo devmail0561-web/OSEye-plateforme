@@ -1,0 +1,88 @@
+---
+title: OSEye
+description: Open-source multi-platform EDR/SIEM — lightweight, modular, intelligent.
+template: splash
+hero:
+  tagline: "Multi-platform endpoint detection and response. Native OS telemetry (eBPF, ETW, Endpoint Security), ML-based anomaly detection, autonomous response."
+  actions:
+    - text: Get Started
+      link: /oseye/getting-started/installation/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/oseye/oseye
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Features
+
+<CardGrid>
+  <Card title="Multi-Platform" icon="laptop">
+    Linux (eBPF, auditd, fanotify, netlink), Windows (ETW, Sysmon, WMI), macOS (Endpoint Security, FSEvents). One agent, native collectors per OS.
+  </Card>
+  <Card title="9+ Collectors" icon="list-format">
+    eBPF, auditd, fanotify, inotify, procfs, netlink, journald, udev, syslog — full Linux visibility. Windows and macOS drivers in active development.
+  </Card>
+  <Card title="Detection Rules" icon="warning">
+    35+ YAML rules mapped to MITRE ATT&CK, hot-reload, timeframe correlation.
+  </Card>
+  <Card title="ML Anomaly Detection" icon="random">
+    Online HalfSpaceTrees (River) per entity, automatic baseline, MITRE classifier.
+  </Card>
+  <Card title="Response Engine" icon="rocket">
+    Block IP (nftables), quarantine file, kill process — act-then-notify with admin rollback.
+  </Card>
+  <Card title="Decision Engine" icon="approve-check">
+    8 decision types, risk matrix, immutable BLAKE3 audit journal.
+  </Card>
+  <Card title="Plugin SDK" icon="puzzle">
+    Python extensions (Analyzer, Exporter, Collector) sandboxed with Ed25519 signature.
+  </Card>
+  <Card title="Threat Intelligence" icon="magnifier">
+    AbuseIPDB, VirusTotal, MISP with circuit breaker per provider.
+  </Card>
+  <Card title="Zero-Dependency Agent" icon="rocket">
+    Single static Go binary — .deb, .rpm, Docker, or curl-install. No runtime dependencies.
+  </Card>
+  <Card title="Dashboard" icon="laptop">
+    React/TypeScript UI with analyst and admin RBAC views, real-time WebSocket.
+  </Card>
+</CardGrid>
+
+## Architecture
+
+```
+[Agent Go — static binary]  ──gRPC/mTLS──►  [Server Python — Docker or pip]
+  Linux: eBPF, auditd, procfs,               Rule Engine (35+ YAML rules)
+         fanotify, inotify, netlink,          ML Engine (online HalfSpaceTrees)
+         journald, udev, syslog               TI Engine (AbuseIPDB, VT, MISP)
+  Windows: ETW, Sysmon, WMI (roadmap)         Correlation → Decision → Response
+  macOS: Endpoint Security (roadmap)          Plugin System (IPC socket)
+  Buffer SQLite (offline resilience)          PostgreSQL + Redis + Dashboard
+  Responder (kill/block/quarantine)           FastAPI + WebSocket → React UI
+```
+
+## Quick Start
+
+```bash
+# Install agent on Debian/Ubuntu (single binary, no dependencies)
+curl -fsSL https://oseye.github.io/oseye/install.sh | sudo bash
+
+# Or download the .deb/.rpm directly from GitHub Releases
+curl -LO https://github.com/oseye/oseye/releases/latest/download/oseye-agent_amd64.deb
+sudo dpkg -i oseye-agent_amd64.deb
+
+# Deploy server with Docker Compose (recommended)
+git clone https://github.com/oseye/oseye.git && cd oseye
+sudo bash scripts/init-server.sh
+docker compose -f infra/docker/docker-compose.prod.yml up -d
+
+# Enroll the agent
+sudo oseye-config set OSEYE_GRPC_ADDR=server.example.com:50051
+sudo systemctl start oseye-agent
+
+# Check status
+sudo oseye-config validate
+```

@@ -1,0 +1,225 @@
+- id: agent_shadow_read
+  name: Shadow File Read Detected
+  version: 1
+  severity: critical
+  autonomy: critical_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: in
+      value:
+        - open
+        - access
+      weight: 1.0
+    - field: path
+      op: eq
+      value: /etc/shadow
+      weight: 1.0
+
+- id: agent_shadow_write
+  name: Shadow File Write Detected
+  version: 1
+  severity: critical
+  autonomy: critical_only
+  threshold: 0.7
+  response: quarantine_file
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: eq
+      value: close_write
+      weight: 1.0
+    - field: path
+      op: eq
+      value: /etc/shadow
+      weight: 1.0
+
+- id: agent_passwd_write
+  name: Passwd File Write Detected
+  version: 1
+  severity: critical
+  autonomy: critical_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: eq
+      value: close_write
+      weight: 1.0
+    - field: path
+      op: eq
+      value: /etc/passwd
+      weight: 1.0
+
+- id: agent_sudoers_modify
+  name: Sudoers File Modification Detected
+  version: 1
+  severity: critical
+  autonomy: critical_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: eq
+      value: close_write
+      weight: 1.0
+    - field: path
+      op: contains
+      value: sudoers
+      weight: 1.0
+
+- id: agent_ld_preload_write
+  name: LD Preload File Write Detected
+  version: 1
+  severity: high
+  autonomy: log_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: eq
+      value: close_write
+      weight: 1.0
+    - field: path
+      op: contains
+      value: ld.so.preload
+      weight: 1.0
+
+- id: agent_ssh_authorized_keys_write
+  name: SSH Authorized Keys Write Detected
+  version: 1
+  severity: high
+  autonomy: log_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: eq
+      value: close_write
+      weight: 1.0
+    - field: path
+      op: contains
+      value: authorized_keys
+      weight: 1.0
+
+- id: agent_cron_backdoor
+  name: Cron Directory Write Detected
+  version: 1
+  severity: high
+  autonomy: log_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: fanotify
+      weight: 1.0
+    - field: event_type
+      op: eq
+      value: close_write
+      weight: 1.0
+    - field: path
+      op: contains
+      value: /cron
+      weight: 1.0
+
+- id: agent_ptrace_nonroot
+  name: Ptrace Syscall by Non-Root Process
+  version: 1
+  severity: critical
+  autonomy: critical_only
+  threshold: 0.7
+  response: kill_process
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: auditd
+      weight: 1.0
+    - field: syscall
+      op: regex
+      value: "^(101|ptrace)$"
+      weight: 1.0
+    - field: uid
+      op: neq
+      value: "0"
+      weight: 1.0
+
+- id: agent_setuid_binary_exec
+  name: Privileged Shell Execution Outside Baseline
+  version: 1
+  severity: high
+  autonomy: log_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  conditions:
+    - field: _source
+      op: eq
+      value: auditd
+      weight: 1.0
+    - field: type
+      op: eq
+      value: EXECVE
+      weight: 1.0
+    - field: comm
+      op: regex
+      value: "^(bash|sh|dash|zsh|ksh)$"
+      weight: 1.0
+    - field: uid
+      op: eq
+      value: "0"
+      weight: 1.0
+    - field: exe
+      op: not_in
+      value:
+        ref: baseline_apps
+      weight: 1.0
+
+- id: agent_network_flood
+  name: Network Connection Flood Detected
+  version: 1
+  severity: high
+  autonomy: log_only
+  threshold: 0.7
+  response: log
+  confidence: 0.9
+  correlation:
+    event_type: ""
+    group_by: _source
+    count_threshold: 30
+    timeframe_seconds: 30
+    conditions:
+      event: "new"
+      _source: "netlink"

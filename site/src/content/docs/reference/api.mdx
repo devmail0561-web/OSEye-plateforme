@@ -1,0 +1,148 @@
+---
+title: REST API Reference
+description: Complete reference for the OSEye REST API.
+---
+
+## Base URL
+
+```
+https://server:8000/api/v1
+```
+
+## Authentication
+
+All endpoints require a JWT Bearer token (except `/health` and `/auth/login`).
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" https://server:8000/api/v1/...
+```
+
+## Endpoints
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Server health check |
+
+### Authentication
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/login` | Obtain JWT token |
+| POST | `/auth/refresh` | Refresh JWT token |
+| GET | `/auth/me` | Current user info |
+
+### Events
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/events` | List events (paginated) |
+| GET | `/events/{id}` | Get event detail |
+| GET | `/events/stream` | WebSocket real-time stream |
+
+Query parameters:
+- `page`, `per_page` — pagination
+- `event_type` — filter by type
+- `severity` — filter by severity
+- `agent_id` — filter by agent
+- `since`, `until` — time range (ISO 8601)
+
+### Alerts
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/alerts` | List alerts |
+| GET | `/alerts/{id}` | Get alert detail |
+| PATCH | `/alerts/{id}` | Update alert status |
+| POST | `/alerts/{id}/escalate` | Escalate to incident |
+
+### Incidents
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/incidents` | List incidents |
+| GET | `/incidents/{id}` | Get incident with timeline |
+| PATCH | `/incidents/{id}` | Update status |
+| POST | `/incidents/{id}/close` | Close incident |
+
+### Decisions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/decisions` | List decisions |
+| GET | `/decisions/{id}` | Get decision detail |
+| POST | `/responses/{id}/rollback` | Rollback a response action |
+
+### Agents
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/agents` | List connected agents |
+| GET | `/agents/{cn}` | Get agent detail |
+| DELETE | `/agents/{cn}` | Revoke agent |
+| POST | `/agents/{cn}/profile` | Push surveillance profile |
+
+### Rules
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/rules` | List all rules |
+| GET | `/rules/{id}` | Get rule detail |
+| PUT | `/rules/{id}` | Update rule |
+| POST | `/rules/{id}/toggle` | Enable/disable rule |
+| POST | `/rules/test` | Dry-run rule against sample event |
+
+### Plugins
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/plugins` | List installed plugins |
+| POST | `/plugins/upload` | Upload plugin package |
+| DELETE | `/plugins/{name}` | Uninstall plugin |
+| POST | `/plugins/keys` | Register signing key |
+
+### Enrollment
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/enroll` | Agent enrollment (mTLS provisioning) |
+| GET | `/enrollment/tokens` | List enrollment tokens |
+| POST | `/enrollment/tokens` | Create enrollment token |
+| DELETE | `/enrollment/tokens/{id}` | Revoke token |
+
+### Forensics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/cases` | List cases |
+| POST | `/cases` | Create case |
+| GET | `/cases/{id}` | Get case detail |
+| POST | `/cases/{id}/evidence` | Attach evidence |
+| GET | `/cases/{id}/export/pdf` | Export case as PDF |
+| GET | `/cases/{id}/export/misp` | Export as MISP event |
+
+## WebSocket
+
+```javascript
+const ws = new WebSocket('wss://server:8000/api/v1/events/stream');
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log(data.event_type, data.severity);
+};
+```
+
+## Error Format
+
+```json
+{
+  "detail": "Error description",
+  "status_code": 400
+}
+```
+
+## Rate Limiting
+
+- Default: 100 requests/minute per IP
+- WebSocket: 1 connection per authenticated user
+- Plugin upload: 10/hour

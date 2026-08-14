@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+BUFFER_DIR="/var/lib/oseye"
+
+systemctl daemon-reload 2>/dev/null || true
+
+if [ "$1" = "purge" ] || [ "$1" = "2" ]; then
+    # Backup buffer if non-empty before purge
+    if [ -d "$BUFFER_DIR" ] && [ "$(ls -A "$BUFFER_DIR" 2>/dev/null)" ]; then
+        BACKUP="/tmp/oseye-buffer-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+        echo "WARNING: buffer directory is not empty — backing up to $BACKUP"
+        tar czf "$BACKUP" -C "$BUFFER_DIR" . 2>/dev/null || true
+    fi
+
+    rm -rf "$BUFFER_DIR"
+    rm -rf /etc/oseye
+    userdel oseye 2>/dev/null || true
+    groupdel oseye 2>/dev/null || true
+fi

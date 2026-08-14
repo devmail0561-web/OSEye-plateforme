@@ -1,0 +1,129 @@
+---
+title: Agent Enrollment
+description: Automatically provision agents with TLS certificates on first boot.
+---
+
+## Overview
+
+OSEye supports automatic agent enrollment: on first boot, the agent contacts the enrollment server, presents a one-time token via HTTP header, and receives its mTLS certificates. No manual certificate distribution needed.
+
+## How It Works
+
+```
+┌─────────┐  1. GET /api/v1/enroll/ca   ┌──────────┐
+│  Agent  │ ────(X-Enrollment-Token)───► │  Server  │
+│(no cert)│ ◄───────────────────────────  │  (CA)    │
+│         │     CA cert PEM              │          │
+│         │                              │          │
+│         │  2. POST /api/v1/enroll/sign │          │
+│         │ ────(token + CSR + hostname)─►│          │
+│         │ ◄───────────────────────────  │          │
+│         │     Signed agent cert PEM    │          │
+└─────────┘                             └──────────┘
+     │
+     │ 3. Writes certs to /etc/oseye/certs/
+     │ 4. Starts gRPC with mTLS
+     ▼
+  [Normal operation]
+```
+
+## Setup
+
+### 1. Generate Enrollment Token (Server)
+
+Tokens are created on the server filesystem via the init script:
+
+```bash
+# On the server — generates a 64-char hex token, valid 24 hours
+sudo bash scripts/init-server.sh
+```
+
+The token is stored as a file in `/etc/oseye/enrollment_tokens/`. Copy it to use during agent enrollment.
+
+```bash
+# View the generated token
+sudo ls /etc/oseye/enrollment_tokens/
+# The filename IS the token (64-char hex string)
+```
+
+### 2. Configure Agent
+
+```bash
+sudo oseye-config set OSEYE_ENROLL_URL=https://server.example.com:8000
+sudo oseye-config set OSEYE_ENROLL_TOKEN=<64-char-hex-token>
+```
+
+### 3. Start Agent
+
+```bash
+sudo systemctl start oseye-agent
+```
+
+On first boot:
+1. Agent detects no TLS cert exists at `OSEYE_TLS_CERT`
+2. GET `/api/v1/enroll/ca` with token in `X-Enrollment-Token` header — fetches CA cert
+3. Generates RSA 2048 key pair + PKCS#10 CSR (CN = hostname)
+4. POST `/api/v1/enroll/sign` with token + CSR — server validates, signs, and **consumes** the token (one-time use)
+5. Agent validates returned cert (CN match + CA signature)
+6. Writes certs atomically to `/etc/oseye/certs/` (key at 0600)
+7. Normal gRPC/mTLS connection begins
+
+### 4. Verify
+
+```bash
+sudo oseye-config check-files
+# All certificates should show "OK"
+```
+
+## Bulk Enrollment
+
+For automated deployments (Ansible, Terraform):
+
+```bash
+# In your provisioning script
+sudo oseye-config set OSEYE_ENROLL_URL=https://oseye-server:8000
+sudo oseye-config set OSEYE_ENROLL_TOKEN=$ENROLLMENT_TOKEN
+sudo systemctl enable --now oseye-agent
+```
+
+## Alternative: Shell Script Enrollment
+
+For environments without the Go agent binary available yet:
+
+```bash
+OSEYE_SERVER=server.example.com:8000 \
+OSEYE_TOKEN=<64-char-hex-token> \
+sudo bash scripts/enroll-agent.sh
+```
+
+This script performs the same steps as the built-in Go enrollment client, generating certs and writing `/etc/oseye/agent.env`.
+
+## Token Management
+
+Tokens are managed as files on the server filesystem:
+
+```bash
+# Create a new token manually (on the server)
+TOKEN=$(openssl rand -hex 32)
+echo "$(date +%s)" | sudo tee /etc/oseye/enrollment_tokens/$TOKEN > /dev/null
+sudo chmod 600 /etc/oseye/enrollment_tokens/$TOKEN
+echo "Token: $TOKEN"
+
+# List active tokens
+sudo ls /etc/oseye/enrollment_tokens/
+
+# Revoke a token (delete the file)
+sudo rm /etc/oseye/enrollment_tokens/<token-value>
+```
+
+## Security Notes
+
+- Tokens are transmitted in the `X-Enrollment-Token` HTTP header (never in URL paths)
+- Tokens are one-time use — consumed atomically on successful signing (TOCTOU-safe with lock)
+- Tokens expire after 24 hours
+- Rate limited: 5 enrollment requests per minute per IP
+- Token format is strictly validated (64 lowercase hex chars only — path traversal safe)
+- The enrollment endpoint enforces HTTPS (`OSEYE_INSECURE=true` disables this for dev only)
+- After enrollment, the token env var is cleared from agent config
+- Revoked agents (via `DELETE /api/v1/agents/{cn}`) cannot re-enroll without a new token
+- No API endpoint lists or returns active enrollment tokens — tokens are only accessible on the server filesystem

@@ -1,0 +1,98 @@
+---
+title: Single Node Deployment
+description: Deploy OSEye server and agent on a single machine.
+---
+
+## Overview
+
+The simplest deployment runs all components on one server. Suitable for small environments (up to ~50 agents).
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│  Single Server                              │
+│                                             │
+│  ┌──────────┐  gRPC   ┌──────────────────┐ │
+│  │  Agent   │────────►│  OSEye Server    │ │
+│  │  (local) │         │  (FastAPI)       │ │
+│  └──────────┘         │  + Workers       │ │
+│                       │  + Dashboard     │ │
+│                       └────────┬─────────┘ │
+│                                │            │
+│                       ┌────────▼─────────┐ │
+│                       │  PostgreSQL      │ │
+│                       │  + Redis         │ │
+│                       └──────────────────┘ │
+└─────────────────────────────────────────────┘
+```
+
+## Installation
+
+### 1. System Setup
+
+```bash
+# Install PostgreSQL and Redis
+sudo apt install postgresql redis-server
+
+# Create database
+sudo -u postgres createdb oseye
+sudo -u postgres createuser oseye --pwprompt
+```
+
+### 2. Server Setup
+
+```bash
+git clone https://github.com/oseye/oseye.git /opt/oseye
+cd /opt/oseye
+
+# Initialize PKI
+sudo bash scripts/init-server.sh
+
+# Install Python dependencies
+python3.12 -m venv /opt/oseye/.venv
+source /opt/oseye/.venv/bin/activate
+pip install -e "server/[prod]"
+```
+
+### 3. Configure Server
+
+```bash
+cat > /etc/oseye/server.env << 'EOF'
+OSEYE_SECRET_KEY=<generate-with-openssl-rand-hex-32>
+OSEYE_DATABASE_URL=postgresql://oseye:password@localhost/oseye
+OSEYE_REDIS_URL=redis://localhost:6379/0
+OSEYE_TLS_CERT_FILE=/etc/oseye/certs/server.crt
+OSEYE_TLS_KEY_FILE=/etc/oseye/certs/server.key
+OSEYE_TLS_CA_CERT_FILE=/etc/oseye/certs/ca.crt
+EOF
+chmod 0600 /etc/oseye/server.env
+```
+
+### 4. Install Agent
+
+```bash
+# Install from .deb
+sudo dpkg -i /opt/oseye/dist/oseye-agent_*.deb
+
+# Configure
+sudo oseye-config set OSEYE_GRPC_ADDR=localhost:50051
+sudo systemctl enable --now oseye-agent
+```
+
+### 5. Start Server
+
+```bash
+sudo systemctl enable --now oseye-server
+```
+
+## Verification
+
+```bash
+# Server health
+curl https://localhost:8000/api/v1/health
+
+# Agent status
+sudo systemctl status oseye-agent
+sudo oseye-config validate
+```
