@@ -4,23 +4,37 @@ on:
   push:
     branches: [main]
     paths: ['site/**']
+  workflow_dispatch:
 
 permissions:
+  contents: read
   pages: write
   id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
+
+      - name: Install dependencies
         working-directory: site
-      - run: npm run build
+        run: npm ci
+
+      - name: Build site
         working-directory: site
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist
