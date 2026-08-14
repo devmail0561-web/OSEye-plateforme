@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSEye — Contributing Guide</title>
+<style>
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { color: #008000; } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { color: #008000; font-weight: bold; } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style>
+/* ============================================================
+   RESET — écrase les styles par défaut de pandoc
+   ============================================================ */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ============================================================
+   BASE
+   ============================================================ */
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+  font-size: 15px;
+  line-height: 1.75;
+  display: flex;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+#sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 268px;
+  height: 100vh;
+  overflow-y: auto;
+  background: #161b22;
+  border-right: 1px solid #21262d;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+#sidebar::-webkit-scrollbar { width: 3px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 6px;
+}
+
+.sidebar-brand .logo-text {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #58a6ff;
+}
+
+.sidebar-brand .logo-badge {
+  font-size: 10px;
+  background: #1f3a5f;
+  color: #79c0ff;
+  border: 1px solid #1c4a7a;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* pandoc génère <nav id="TOC"> à l'intérieur du sidebar */
+#sidebar nav#TOC { /* conteneur nav pandoc */ }
+
+#sidebar nav#TOC ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#sidebar nav#TOC li { margin: 0; }
+
+/* Niveau 1 */
+#sidebar nav#TOC > ul > li > a {
+  display: block;
+  padding: 5px 20px;
+  color: #c9d1d9;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+/* Niveau 2 */
+#sidebar nav#TOC ul ul > li > a {
+  display: block;
+  padding: 4px 20px 4px 34px;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  line-height: 1.45;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+/* Niveau 3 */
+#sidebar nav#TOC ul ul ul > li > a {
+  padding-left: 48px;
+  font-size: 11.5px;
+  color: #6e7681;
+}
+
+#sidebar nav#TOC a:hover {
+  color: #e6edf3;
+  background: #1c2128;
+  border-left-color: #3b82f6;
+  text-decoration: none;
+}
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+#main {
+  margin-left: 268px;
+  width: calc(100% - 268px);
+  min-height: 100vh;
+}
+
+/* ============================================================
+   ARTICLE
+   ============================================================ */
+#article {
+  padding: 52px 64px 100px;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.3;
+  color: #e6edf3;
+}
+
+/* Premier h1 = titre du document */
+#article h1:first-child {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #e6edf3;
+  margin: 0 0 16px 0;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #21262d;
+}
+
+h1 {
+  font-size: 26px;
+  margin: 48px 0 16px;
+}
+
+h2 {
+  font-size: 20px;
+  margin: 44px 0 14px;
+  padding: 0 0 10px 14px;
+  border-left: 4px solid #3b82f6;
+  border-bottom: 1px solid #21262d;
+  color: #e6edf3;
+}
+
+h3 {
+  font-size: 16px;
+  margin: 30px 0 10px;
+  color: #58a6ff;
+}
+
+h4 {
+  font-size: 12px;
+  margin: 22px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #6e7681;
+  font-weight: 600;
+}
+
+p { margin: 12px 0; }
+ul, ol { margin: 10px 0; padding-left: 22px; }
+li { margin: 4px 0; }
+li > ul, li > ol { margin: 4px 0; }
+strong { color: #e6edf3; font-weight: 600; }
+em { color: #79c0ff; font-style: italic; }
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; color: #79c0ff; }
+hr { border: none; border-top: 1px solid #21262d; margin: 36px 0; }
+
+/* ============================================================
+   CODE — override complet des styles pandoc sourceCode
+   ============================================================ */
+
+/* Inline code */
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  background: #161b22;
+  color: #79c0ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #30363d;
+}
+
+/* Pandoc sourceCode container */
+div.sourceCode {
+  background: #161b22 !important;
+  border: 1px solid #21262d !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+  margin: 16px 0 !important;
+}
+
+/* Pre dans sourceCode */
+div.sourceCode pre.sourceCode {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 16px 20px !important;
+  overflow-x: auto !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+}
+
+/* Pre générique (blocs non-syntaxiques) */
+pre {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  white-space: pre;
+  word-wrap: normal;
+  margin: 16px 0;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+pre > code,
+pre.sourceCode > code.sourceCode {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  color: #c9d1d9;
+  font-size: 13px;
+  white-space: pre !important;
+}
+
+/* Fix pandoc span layout dans code */
+pre > code.sourceCode > span {
+  display: block !important;
+  line-height: 1.6 !important;
+}
+
+pre > code.sourceCode > span > a:first-child::before {
+  content: '';
+}
+
+/* Numéros de ligne */
+td.lineNumbers {
+  color: #3d444d;
+  border-right: 1px solid #21262d;
+  padding-right: 12px;
+  user-select: none;
+  font-size: 12px;
+}
+
+td.sourceCode { padding-left: 16px; }
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+table {
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 16px 0;
+  width: 100%;
+  display: block;       /* permet le scroll horizontal */
+  overflow-x: auto;
+}
+
+thead tr {
+  background: #1c2128;
+  border-bottom: 2px solid #3b82f6;
+}
+
+thead th {
+  color: #58a6ff;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid #21262d;
+  transition: background 0.1s;
+}
+
+tbody tr:hover { background: #161b22; }
+
+td {
+  padding: 9px 14px;
+  vertical-align: top;
+  color: #c9d1d9;
+}
+
+td:first-child { font-weight: 500; color: #e6edf3; }
+
+/* ============================================================
+   BLOCKQUOTE
+   ============================================================ */
+blockquote {
+  border-left: 3px solid #3b82f6;
+  background: #161b22;
+  margin: 16px 0;
+  padding: 12px 18px;
+  border-radius: 0 6px 6px 0;
+  color: #8b949e;
+}
+
+blockquote p { margin: 4px 0; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  #sidebar { display: none; }
+  #main { margin-left: 0; width: 100%; }
+  #article { padding: 28px 24px 60px; }
+}
+
+@media print {
+  #sidebar { display: none; }
+  body { display: block; background: white; color: #111; }
+  #main { margin-left: 0; width: 100%; }
+  a { color: #2563eb; }
+  pre, div.sourceCode { border: 1px solid #ccc; background: #f8f8f8; }
+  code { color: #333; background: #f0f0f0; }
+}
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="sidebar-brand">
+    <span class="logo-text">OSEye</span>
+    <span class="logo-badge">v0.1.0-α1</span>
+  </div>
+  <nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#guide-de-contribution-oseye"
+id="toc-guide-de-contribution-oseye">Guide de contribution — OSEye</a>
+<ul>
+<li><a href="#bienvenue" id="toc-bienvenue">Bienvenue</a></li>
+<li><a href="#avant-de-commencer" id="toc-avant-de-commencer">1. Avant
+de commencer</a>
+<ul>
+<li><a href="#prérequis-techniques" id="toc-prérequis-techniques">1.1
+Prérequis techniques</a></li>
+<li><a href="#lire-la-documentation" id="toc-lire-la-documentation">1.2
+Lire la documentation</a></li>
+<li><a href="#setup-environnement-local"
+id="toc-setup-environnement-local">1.3 Setup environnement
+local</a></li>
+</ul></li>
+<li><a href="#choisir-une-tâche" id="toc-choisir-une-tâche">2. Choisir
+une tâche</a>
+<ul>
+<li><a href="#parcourir-le-plan-daction"
+id="toc-parcourir-le-plan-daction">2.1 Parcourir le plan
+d’action</a></li>
+<li><a href="#sassigner" id="toc-sassigner">2.2 S’assigner</a></li>
+<li><a href="#créer-une-branche" id="toc-créer-une-branche">2.3 Créer
+une branche</a></li>
+</ul></li>
+<li><a href="#implémenter-la-tâche" id="toc-implémenter-la-tâche">3.
+Implémenter la tâche</a>
+<ul>
+<li><a href="#référence-architecture"
+id="toc-référence-architecture">3.1 Référence architecture</a></li>
+<li><a href="#conventions-de-code" id="toc-conventions-de-code">3.2
+Conventions de code</a></li>
+<li><a href="#logs-structurés-json" id="toc-logs-structurés-json">3.3
+Logs structurés JSON</a></li>
+<li><a href="#pas-de-secrets-en-dur" id="toc-pas-de-secrets-en-dur">3.4
+Pas de secrets en dur</a></li>
+</ul></li>
+<li><a href="#tests" id="toc-tests">4. Tests</a>
+<ul>
+<li><a href="#couverture-obligatoire"
+id="toc-couverture-obligatoire">4.1 Couverture obligatoire</a></li>
+<li><a href="#types-de-tests" id="toc-types-de-tests">4.2 Types de
+tests</a></li>
+<li><a href="#nommage-des-tests" id="toc-nommage-des-tests">4.3 Nommage
+des tests</a></li>
+<li><a href="#pas-de-mocks-pour-la-db"
+id="toc-pas-de-mocks-pour-la-db">4.4 Pas de mocks pour la DB</a></li>
+</ul></li>
+<li><a href="#pull-request" id="toc-pull-request">5. Pull Request</a>
+<ul>
+<li><a href="#avant-douvrir-la-pr" id="toc-avant-douvrir-la-pr">5.1
+Avant d’ouvrir la PR</a></li>
+<li><a href="#format-du-commit-message"
+id="toc-format-du-commit-message">5.2 Format du commit message</a></li>
+<li><a href="#ouvrir-la-pr" id="toc-ouvrir-la-pr">5.3 Ouvrir la
+PR</a></li>
+<li><a href="#titre-de-la-pr" id="toc-titre-de-la-pr">5.4 Titre de la
+PR</a></li>
+<li><a href="#description-de-la-pr" id="toc-description-de-la-pr">5.5
+Description de la PR</a></li>
+</ul></li>
+<li><a href="#code-review" id="toc-code-review">6. Code Review</a>
+<ul>
+<li><a href="#qui-review" id="toc-qui-review">6.1 Qui review ?</a></li>
+<li><a href="#critères-de-revue" id="toc-critères-de-revue">6.2 Critères
+de revue</a></li>
+<li><a href="#répondre-aux-commentaires"
+id="toc-répondre-aux-commentaires">6.3 Répondre aux
+commentaires</a></li>
+<li><a href="#ci-doit-passer" id="toc-ci-doit-passer">6.4 CI doit
+passer</a></li>
+</ul></li>
+<li><a href="#merge-et-post-merge" id="toc-merge-et-post-merge">7. Merge
+et post-merge</a>
+<ul>
+<li><a href="#stratégie-de-merge" id="toc-stratégie-de-merge">7.1
+Stratégie de merge</a></li>
+<li><a href="#marquer-la-tâche-terminée"
+id="toc-marquer-la-tâche-terminée">7.2 Marquer la tâche
+terminée</a></li>
+<li><a href="#déploiement" id="toc-déploiement">7.3 Déploiement</a></li>
+</ul></li>
+<li><a href="#communication" id="toc-communication">8. Communication</a>
+<ul>
+<li><a href="#channels" id="toc-channels">8.1 Channels</a></li>
+<li><a href="#daily-sync-async" id="toc-daily-sync-async">8.2 Daily sync
+(async)</a></li>
+<li><a href="#demander-de-laide" id="toc-demander-de-laide">8.3 Demander
+de l’aide</a></li>
+</ul></li>
+<li><a href="#code-de-conduite" id="toc-code-de-conduite">9. Code de
+conduite</a>
+<ul>
+<li><a href="#principes" id="toc-principes">9.1 Principes</a></li>
+<li><a href="#résolution-de-conflit" id="toc-résolution-de-conflit">9.2
+Résolution de conflit</a></li>
+</ul></li>
+<li><a href="#ressources" id="toc-ressources">10. Ressources</a>
+<ul>
+<li><a href="#utiliser-les-skills-claude-code"
+id="toc-utiliser-les-skills-claude-code">Utiliser les skills Claude
+Code</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+</div>
+
+<div id="main">
+  <article id="article">
+<h1 id="guide-de-contribution-oseye">Guide de contribution — OSEye</h1>
+<p><strong>Version :</strong> 1.0<br />
+<strong>Date :</strong> 2026-07-28</p>
+<hr />
+<h2 id="bienvenue">Bienvenue</h2>
+<p>OSEye est un projet EDR/SIEM open-core pour Linux/Windows/macOS. Ce
+guide explique comment contribuer du code, tester, et faire reviewer son
+travail.</p>
+<hr />
+<h2 id="avant-de-commencer">1. Avant de commencer</h2>
+<h3 id="prérequis-techniques">1.1 Prérequis techniques</h3>
+<table>
+<thead>
+<tr class="header">
+<th>Composant</th>
+<th>Version minimum</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Go</td>
+<td>1.23+</td>
+</tr>
+<tr class="even">
+<td>Python</td>
+<td>3.12+</td>
+</tr>
+<tr class="odd">
+<td>Node.js</td>
+<td>20+</td>
+</tr>
+<tr class="even">
+<td>Docker</td>
+<td>24+</td>
+</tr>
+<tr class="odd">
+<td>Git</td>
+<td>2.40+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="lire-la-documentation">1.2 Lire la documentation</h3>
+<p>Avant de coder : 1.
+<strong><code>docs/ARCHITECTURE.md</code></strong> — architecture
+complète, interfaces contrats, patterns 2.
+<strong><code>docs/PLAN_ACTION.md</code></strong> — 188 tâches, statuts,
+dépendances 3.
+<strong><code>.github/PULL_REQUEST_TEMPLATE.md</code></strong> —
+checklist de vérification avant PR</p>
+<h3 id="setup-environnement-local">1.3 Setup environnement local</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Cloner le repo</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/your-org/oseye.git</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> oseye</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Générer les certificats dev</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/generate_certs.sh</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Générer le code Protobuf</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/generate_proto.sh</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Lancer l&#39;environnement de dev complet</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="ex">docker-compose</span> <span class="at">-f</span> infra/docker/docker-compose.dev.yml up <span class="at">-d</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Tests</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> agent <span class="kw">&amp;&amp;</span> <span class="ex">go</span> test ./...</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> ../server <span class="kw">&amp;&amp;</span> <span class="ex">pytest</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> ../ui <span class="kw">&amp;&amp;</span> <span class="ex">npm</span> test</span></code></pre></div>
+<hr />
+<h2 id="choisir-une-tâche">2. Choisir une tâche</h2>
+<h3 id="parcourir-le-plan-daction">2.1 Parcourir le plan d’action</h3>
+<p>Ouvrir <code>docs/PLAN_ACTION.md</code> et chercher : - Tâches
+<code>[ ]</code> (disponibles) - Dont toutes les dépendances sont
+<code>[x]</code> - Préférer les tâches de votre zone d’expertise : -
+<strong>Go / eBPF</strong> → Phase 1–2 (collectors agent) -
+<strong>Python / FastAPI</strong> → Phase 3–5 (rule engine, API,
+workers) - <strong>ML / data science</strong> → Phase 6 (ML engine) -
+<strong>React / TypeScript</strong> → Phase 9 (dashboard UI) -
+<strong>DevOps / K8s</strong> → Phase 10 (hardening, packaging)</p>
+<h3 id="sassigner">2.2 S’assigner</h3>
+<p><strong>Option 1 — Direct (contributeurs réguliers) :</strong>
+Modifier <code>PLAN_ACTION.md</code>, changer <code>[ ]</code> en
+<code>[~] [@votre_nom]</code>, commit sur <code>main</code> :</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout main</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Éditer PLAN_ACTION.md</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-am</span> <span class="st">&quot;Assign P2.03 to @alice&quot;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push</span></code></pre></div>
+<p><strong>Option 2 — Via Issue GitHub (nouveaux contributeurs)
+:</strong> Commenter sur l’issue de la Phase : “Je prends P2.03 —
+collecteur netlink”.</p>
+<h3 id="créer-une-branche">2.3 Créer une branche</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> P2.03-netlink-collector</span></code></pre></div>
+<p>Format :
+<code>P&lt;n&gt;.&lt;m&gt;-&lt;description-kebab-case&gt;</code></p>
+<hr />
+<h2 id="implémenter-la-tâche">3. Implémenter la tâche</h2>
+<h3 id="référence-architecture">3.1 Référence architecture</h3>
+<p>Chaque tâche référence une section de <code>ARCHITECTURE.md</code>.
+Lire <strong>avant</strong> d’écrire du code : - Section du composant
+(§3.X) - Interface(s) concernée(s) (Annexe — fichiers contrats) -
+Modèles de données (§4)</p>
+<h3 id="conventions-de-code">3.2 Conventions de code</h3>
+<h4 id="go-agent">Go (agent)</h4>
+<div class="sourceCode" id="cb4"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Toujours un build tag en première ligne si OS-spécifique</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co">//go:build linux</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">package</span> netlink</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="op">(</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;context&quot;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;log/slog&quot;</span>  <span class="co">// logger structuré</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co">// Interface satisfaite implicitement — vérifier à la compilation</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="kw">var</span> _ collector<span class="op">.</span>Collector <span class="op">=</span> <span class="op">(*</span>NetlinkCollector<span class="op">)(</span><span class="ot">nil</span><span class="op">)</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co">// Toute goroutine démarre avec un context ou stopCh</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="kw">func</span> <span class="op">(</span>c <span class="op">*</span>NetlinkCollector<span class="op">)</span> Start<span class="op">(</span>ctx context<span class="op">.</span>Context<span class="op">,</span> out <span class="kw">chan</span><span class="op">&lt;-</span> collector<span class="op">.</span>RawEvent<span class="op">)</span> <span class="dt">error</span> <span class="op">{</span></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">go</span> c<span class="op">.</span>worker<span class="op">(</span>ctx<span class="op">,</span> out<span class="op">)</span>  <span class="co">// ctx propagé</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">&lt;-</span>ctx<span class="op">.</span>Done<span class="op">()</span></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="ot">nil</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>Lint obligatoire :</strong>
+<code>golangci-lint run ./...</code> (config :
+<code>.golangci.yml</code>)</p>
+<h4 id="python-server">Python (server)</h4>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">&quot;&quot;&quot;Docstring : une ligne décrivant le module.&quot;&quot;&quot;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> AsyncIterator</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> logging</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> oseye.core.schema <span class="im">import</span> UniversalEvent  <span class="co"># imports depuis oseye.*</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> oseye.core.observability <span class="im">import</span> get_logger</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>logger <span class="op">=</span> get_logger(<span class="va">__name__</span>)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> process_events(bus: EventBus) <span class="op">-&gt;</span> AsyncIterator[UniversalEvent]:</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;Type hints stricts sur toutes les fonctions publiques.&quot;&quot;&quot;</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">async</span> <span class="cf">for</span> topic, raw <span class="kw">in</span> bus.subscribe_pattern(<span class="st">&quot;events:*&quot;</span>):</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>        event <span class="op">=</span> UniversalEvent.model_validate_json(raw)  <span class="co"># Pydantic v2</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>        logger.info(<span class="st">&quot;event_received&quot;</span>, event_id<span class="op">=</span><span class="bu">str</span>(event.event_id))  <span class="co"># logs structurés</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">yield</span> event</span></code></pre></div>
+<p><strong>Lint obligatoire :</strong> <code>ruff check .</code> +
+<code>mypy server/</code> (config : <code>pyproject.toml</code>)</p>
+<h4 id="typescript-ui">TypeScript (UI)</h4>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Hooks React customs préfixés `use`</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> { useState<span class="op">,</span> useEffect } <span class="im">from</span> <span class="st">&#39;react&#39;</span><span class="op">;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> { UniversalEvent } <span class="im">from</span> <span class="st">&#39;@/api/types&#39;</span><span class="op">;</span>  <span class="co">// types générés depuis OpenAPI</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">useWebSocket</span>(channel<span class="op">:</span> <span class="dt">string</span>) {</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="kw">const</span> [events<span class="op">,</span> setEvents] <span class="op">=</span> <span class="fu">useState</span><span class="op">&lt;</span>UniversalEvent[]<span class="op">&gt;</span>([])<span class="op">;</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="co">// ... implémentation</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> events<span class="op">;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="co">// Composants préfixés majuscule</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">EventTimeline</span>({ events }<span class="op">:</span> { events<span class="op">:</span> UniversalEvent[] }) {</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="op">&lt;</span>div<span class="op">&gt;</span>{<span class="co">/* ... */</span>}<span class="op">&lt;/</span>div<span class="op">&gt;;</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p><strong>Lint obligatoire :</strong> <code>npm run lint</code> (ESLint
++ Prettier, config : <code>.eslintrc.json</code>)</p>
+<h3 id="logs-structurés-json">3.3 Logs structurés JSON</h3>
+<p><strong>Go :</strong></p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode go"><code class="sourceCode go"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>slog<span class="op">.</span>Info<span class="op">(</span><span class="st">&quot;collector_started&quot;</span><span class="op">,</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    slog<span class="op">.</span>String<span class="op">(</span><span class="st">&quot;collector&quot;</span><span class="op">,</span> c<span class="op">.</span>Name<span class="op">()),</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    slog<span class="op">.</span>Int<span class="op">(</span><span class="st">&quot;throttle_pct&quot;</span><span class="op">,</span> <span class="dt">int</span><span class="op">(</span>factor<span class="op">*</span><span class="dv">100</span><span class="op">)),</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span></code></pre></div>
+<p><strong>Python :</strong></p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>logger.info(<span class="st">&quot;rule_matched&quot;</span>,</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    rule_id<span class="op">=</span>rule.<span class="bu">id</span>,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    event_id<span class="op">=</span><span class="bu">str</span>(event.event_id),</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    severity<span class="op">=</span>rule.severity,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<p>Format final :
+<code>{"timestamp": "...", "level": "INFO", "service": "...", "rule_id": "...", ...}</code></p>
+<h3 id="pas-de-secrets-en-dur">3.4 Pas de secrets en dur</h3>
+<p>Jamais de : - Clés API dans le code
+(<code>VIRUSTOTAL_KEY = "abc123"</code>) - Mots de passe dans les tests
+(<code>password="admin"</code>) - URLs de prod hardcodées
+(<code>https://oseye.prod.internal</code>)</p>
+<p>Utiliser : - Variables d’environnement via <code>Settings</code>
+pydantic-settings (Python) ou <code>config.Config</code> (Go) - Secrets
+Vault en prod (HashiCorp Vault)</p>
+<hr />
+<h2 id="tests">4. Tests</h2>
+<h3 id="couverture-obligatoire">4.1 Couverture obligatoire</h3>
+<p><strong>Minimum : 80%</strong>. Vérifier avant de pousser :</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Go</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test <span class="at">-cover</span> ./...</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Python</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="ex">pytest</span> <span class="at">--cov</span><span class="op">=</span>oseye <span class="at">--cov-report</span><span class="op">=</span>term-missing</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># TypeScript</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run test:coverage</span></code></pre></div>
+<h3 id="types-de-tests">4.2 Types de tests</h3>
+<table>
+<colgroup>
+<col style="width: 27%" />
+<col style="width: 31%" />
+<col style="width: 40%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Type</th>
+<th>Quand</th>
+<th>Exemple</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Unitaire</strong></td>
+<td>Fonction pure, parser, validator</td>
+<td><code>test_parse_ebpf_event</code></td>
+</tr>
+<tr class="even">
+<td><strong>Intégration</strong></td>
+<td>Interaction entre 2+ composants</td>
+<td><code>test_agent_to_server_grpc</code></td>
+</tr>
+<tr class="odd">
+<td><strong>E2E</strong></td>
+<td>Scénario utilisateur complet</td>
+<td><code>test_attack_scenario_ssh_bruteforce</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="nommage-des-tests">4.3 Nommage des tests</h3>
+<pre><code>test_&lt;ce_qui_est_testé&gt;_&lt;condition&gt;_&lt;résultat_attendu&gt;</code></pre>
+<p>Exemples : -
+<code>test_rule_engine_evaluate_shadow_read_returns_alert</code> -
+<code>test_grpc_client_reconnect_after_network_loss_replays_buffer</code>
+- <code>test_decision_journal_verify_detects_tampered_hash</code></p>
+<h3 id="pas-de-mocks-pour-la-db">4.4 Pas de mocks pour la DB</h3>
+<p>Utiliser SQLite in-memory en test :</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="at">@pytest.fixture</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="cf">async</span> <span class="kw">def</span> db():</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    engine <span class="op">=</span> create_async_engine(<span class="st">&quot;sqlite+aiosqlite:///:memory:&quot;</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">async</span> <span class="cf">with</span> engine.begin() <span class="im">as</span> conn:</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">await</span> conn.run_sync(Base.metadata.create_all)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">yield</span> engine</span></code></pre></div>
+<p>Mocks autorisés uniquement pour : - Services externes (AbuseIPDB,
+VirusTotal, MISP) - gRPC server (agent ↔︎ server)</p>
+<hr />
+<h2 id="pull-request">5. Pull Request</h2>
+<h3 id="avant-douvrir-la-pr">5.1 Avant d’ouvrir la PR</h3>
+<p>Checklist locale :</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Lint passe</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">golangci-lint</span> run ./...         <span class="co"># Go</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ex">ruff</span> check . <span class="kw">&amp;&amp;</span> <span class="ex">mypy</span> server/    <span class="co"># Python</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run lint                    <span class="co"># TypeScript</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Tests passent</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./...</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="ex">pytest</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> test</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Build passe</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> build ./agent/cmd/oseye-agent</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> build <span class="at">-t</span> oseye-server:test ./server</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. Commit signé (GPG)</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-S</span> <span class="at">-m</span> <span class="st">&quot;P2.03: Add netlink collector&quot;</span></span></code></pre></div>
+<h3 id="format-du-commit-message">5.2 Format du commit message</h3>
+<pre><code>P&lt;n&gt;.&lt;m&gt;: &lt;Description impérative courte&gt; (&lt;50 chars)
+
+&lt;Corps optionnel détaillant le WHY, pas le WHAT.
+Le code montre le WHAT.&gt;
+
+Refs: #&lt;issue_number&gt;</code></pre>
+<p>Exemples :</p>
+<pre><code>P1.18: Implement eBPF loader for execve/openat/connect
+
+Loads compiled .o programs from embedded FS, attaches to tracepoints,
+reads events from perf buffer. Handles verifier errors gracefully.
+
+Refs: #42</code></pre>
+<h3 id="ouvrir-la-pr">5.3 Ouvrir la PR</h3>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> push origin P2.03-netlink-collector</span></code></pre></div>
+<p>Aller sur GitHub, cliquer “Compare &amp; pull request”.</p>
+<p><strong>Template auto-rempli</strong> :
+<code>.github/PULL_REQUEST_TEMPLATE.md</code> — remplir tous les
+<code>[ ]</code>.</p>
+<h3 id="titre-de-la-pr">5.4 Titre de la PR</h3>
+<pre><code>[P&lt;n&gt;.&lt;m&gt;] &lt;Description courte&gt;</code></pre>
+<p>Exemples : -
+<code>[P2.03] Add netlink collector for Linux network events</code> -
+<code>[P3.07] Add 30 builtin detection rules (credential access, privesc, persistence)</code></p>
+<h3 id="description-de-la-pr">5.5 Description de la PR</h3>
+<p>La template contient : - [ ] Lien vers la tâche du plan
+(<code>docs/PLAN_ACTION.md</code> ligne XX) - [ ] Changements principaux
+(bullet points) - [ ] Tests ajoutés (unitaires / intégration / E2E) - [
+] Références architecture (ex: §3.1, §4.7) - [ ] Breaking changes ?
+(Oui/Non) - [ ] Screenshots (si UI) - [ ] Plan de test manuel (si
+applicable)</p>
+<hr />
+<h2 id="code-review">6. Code Review</h2>
+<h3 id="qui-review">6.1 Qui review ?</h3>
+<p><strong>1 approbation obligatoire</strong> d’un senior reviewer : -
+<strong><span class="citation"
+data-cites="virus-one">@virus-one</span></strong> (lead, architecture) -
+<strong><span class="citation"
+data-cites="senior-dev-1">@senior-dev-1</span></strong> (Go/eBPF) -
+<strong><span class="citation"
+data-cites="senior-dev-2">@senior-dev-2</span></strong> (Python/ML)</p>
+<h3 id="critères-de-revue">6.2 Critères de revue</h3>
+<p>Le reviewer vérifie (checklist automatique via GitHub Actions) :</p>
+<h4 id="blocker-bloque-le-merge">BLOCKER (bloque le merge)</h4>
+<ul class="task-list">
+<li><label><input type="checkbox" />Faille de sécurité (injection SQL,
+XSS, commande OS non escapée)</label></li>
+<li><label><input type="checkbox" />Fuite mémoire / goroutine
+leak</label></li>
+<li><label><input type="checkbox" />Perte de données (événements droppés
+sans log)</label></li>
+<li><label><input type="checkbox" />Violation d’une interface contrat
+(Annexe ARCHITECTURE.md)</label></li>
+<li><label><input type="checkbox" />Tests &lt; 80% de
+couverture</label></li>
+</ul>
+<h4 id="critical-bloque-le-merge">CRITICAL (bloque le merge)</h4>
+<ul class="task-list">
+<li><label><input type="checkbox" />Bug fonctionnel majeur</label></li>
+<li><label><input type="checkbox" />Performance inacceptable (agent &gt;
+4% CPU sur workload standard)</label></li>
+<li><label><input type="checkbox" />Logs critiques absents (erreurs
+silencieuses)</label></li>
+<li><label><input type="checkbox" />Documentation manquante pour API
+publique</label></li>
+</ul>
+<h4 id="major-à-fixer-post-merge-acceptable">MAJOR (à fixer post-merge
+acceptable)</h4>
+<ul class="task-list">
+<li><label><input type="checkbox" />Code smell (duplication, complexité
+cyclomatique &gt; 15)</label></li>
+<li><label><input type="checkbox" />Manque de logs
+non-critiques</label></li>
+<li><label><input type="checkbox" />Docstring/comments
+absents</label></li>
+<li><label><input type="checkbox" />Imports non triés</label></li>
+</ul>
+<h4 id="minor-suggestions-non-bloquant">MINOR (suggestions,
+non-bloquant)</h4>
+<ul class="task-list">
+<li><label><input type="checkbox" />Typo dans les
+commentaires</label></li>
+<li><label><input type="checkbox" />Style (préférer
+<code>if err != nil</code> plutôt que
+<code>if nil != err</code>)</label></li>
+<li><label><input type="checkbox" />Suggestion
+d’amélioration</label></li>
+</ul>
+<h3 id="répondre-aux-commentaires">6.3 Répondre aux commentaires</h3>
+<ul>
+<li><strong>BLOCKER/CRITICAL</strong> → <strong>obligatoire</strong> de
+fixer avant merge</li>
+<li><strong>MAJOR</strong> → fixer ou justifier pourquoi reporter</li>
+<li><strong>MINOR</strong> → optionnel, fixer si rapide</li>
+</ul>
+<p>Marquer les conversations résolues après avoir poussé le fix.</p>
+<h3 id="ci-doit-passer">6.4 CI doit passer</h3>
+<p>GitHub Actions exécute :</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">lint</span><span class="kw">:</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> golangci-lint (Go)</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> ruff + mypy (Python)</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> eslint (TypeScript)</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">test</span><span class="kw">:</span></span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">strategy</span><span class="kw">:</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="fu">matrix</span><span class="kw">:</span></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">os</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">ubuntu-latest</span><span class="kw">,</span><span class="at"> windows-latest</span><span class="kw">,</span><span class="at"> macos-latest</span><span class="kw">]</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">go</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="fl">1.23</span><span class="kw">]</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">python</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="fl">3.12</span><span class="kw">]</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> go test -race -cover ./...</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> pytest --cov=oseye</span></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> npm test</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">build</span><span class="kw">:</span></span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ubuntu-latest</span></span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> docker build agent</span></span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> docker build server</span></span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> docker build ui</span></span></code></pre></div>
+<p>Si CI échoue → fixer avant demander une review.</p>
+<hr />
+<h2 id="merge-et-post-merge">7. Merge et post-merge</h2>
+<h3 id="stratégie-de-merge">7.1 Stratégie de merge</h3>
+<p><strong>Squash and merge</strong> (par défaut) : - Tous les commits
+de la branche sont squashés en 1 - Message de commit final = titre de la
+PR - Branche automatiquement supprimée après merge</p>
+<h3 id="marquer-la-tâche-terminée">7.2 Marquer la tâche terminée</h3>
+<p>Après merge, éditer <code>docs/PLAN_ACTION.md</code> :</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode diff"><code class="sourceCode diff"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="st">- [~] [@alice] **P2.03** — `platform/linux/netlink/` : collecteur netlink</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="va">+ [x] **P2.03** — `platform/linux/netlink/` : collecteur netlink</span></span></code></pre></div>
+<p>Commit direct sur <code>main</code> autorisé pour ce fichier
+uniquement.</p>
+<h3 id="déploiement">7.3 Déploiement</h3>
+<p><strong>Dev :</strong> merge sur <code>main</code> → CI push
+automatiquement l’image Docker
+<code>ghcr.io/oseye/&lt;composant&gt;:latest</code><br />
+<strong>Staging :</strong> tag <code>vX.Y.Z-rc.N</code> → CI push
+<code>ghcr.io/oseye/&lt;composant&gt;:X.Y.Z-rc.N</code><br />
+<strong>Prod :</strong> tag <code>vX.Y.Z</code> → release GitHub +
+packages
+<code>.deb</code>/<code>.rpm</code>/<code>.msi</code>/<code>.pkg</code></p>
+<hr />
+<h2 id="communication">8. Communication</h2>
+<h3 id="channels">8.1 Channels</h3>
+<ul>
+<li><strong>GitHub Issues</strong> — bugs, feature requests, discussions
+techniques</li>
+<li><strong>GitHub Discussions</strong> — questions générales,
+annonces</li>
+<li><strong>Slack #oseye-dev</strong> (si configuré) — sync quotidien,
+questions rapides</li>
+</ul>
+<h3 id="daily-sync-async">8.2 Daily sync (async)</h3>
+<p>Chaque contributeur actif poste dans #oseye-dev ou commente sur son
+issue : - Ce que j’ai fait hier - Ce que je fais aujourd’hui - Blocages
+éventuels</p>
+<h3 id="demander-de-laide">8.3 Demander de l’aide</h3>
+<p>Si bloqué &gt; 2h, ouvrir une discussion GitHub : - Titre :
+<code>[HELP] P2.03 — Netlink collector : verifier rejette le programme eBPF</code>
+- Tag : <code>help wanted</code> - Mentionner un senior reviewer</p>
+<hr />
+<h2 id="code-de-conduite">9. Code de conduite</h2>
+<h3 id="principes">9.1 Principes</h3>
+<ul>
+<li><strong>Respect</strong> — zéro tolérance pour harcèlement,
+discrimination, comportement toxique</li>
+<li><strong>Constructif</strong> — reviews basées sur des faits
+techniques, pas des opinions personnelles</li>
+<li><strong>Inclusif</strong> — accueil des nouveaux contributeurs, pas
+de gatekeeping</li>
+<li><strong>Transparent</strong> — toute décision technique majeure
+documentée publiquement (GitHub Discussions)</li>
+</ul>
+<h3 id="résolution-de-conflit">9.2 Résolution de conflit</h3>
+<p>En cas de désaccord technique : 1. Discussion dans la PR
+(commentaires) 2. Si pas de consensus → escalade vers le lead (<span
+class="citation" data-cites="virus-one">@virus-one</span>) 3. Décision
+finale documentée dans <code>docs/DECISIONS.md</code> (ADR —
+Architecture Decision Record)</p>
+<hr />
+<h2 id="ressources">10. Ressources</h2>
+<table>
+<thead>
+<tr class="header">
+<th>Document</th>
+<th>URL</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Architecture complète</td>
+<td><code>docs/ARCHITECTURE.md</code></td>
+</tr>
+<tr class="even">
+<td>Plan d’action</td>
+<td><code>docs/PLAN_ACTION.md</code></td>
+</tr>
+<tr class="odd">
+<td><strong>Skills Claude Code</strong></td>
+<td><strong><code>.claude/skills/README.md</code></strong></td>
+</tr>
+<tr class="even">
+<td>Template PR</td>
+<td><code>.github/PULL_REQUEST_TEMPLATE.md</code></td>
+</tr>
+<tr class="odd">
+<td>Template issue</td>
+<td><code>.github/ISSUE_TEMPLATE/</code></td>
+</tr>
+<tr class="even">
+<td>CI workflows</td>
+<td><code>.github/workflows/ci.yml</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="utiliser-les-skills-claude-code">Utiliser les skills Claude
+Code</h3>
+<p>OSEye fournit des skills Claude Code pour accélérer les tâches
+répétitives. Si vous utilisez <a href="https://claude.ai/code">Claude
+Code</a>, ils sont disponibles automatiquement depuis la racine du
+projet :</p>
+<table>
+<thead>
+<tr class="header">
+<th>Commande</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>/oseye-task</code></td>
+<td>Prochaine tâche du plan d’action</td>
+</tr>
+<tr class="even">
+<td><code>/oseye-collector</code></td>
+<td>Nouveau collecteur Go</td>
+</tr>
+<tr class="odd">
+<td><code>/oseye-worker</code></td>
+<td>Nouveau worker Python</td>
+</tr>
+<tr class="even">
+<td><code>/oseye-api-endpoint</code></td>
+<td>Nouvel endpoint FastAPI</td>
+</tr>
+<tr class="odd">
+<td><code>/oseye-rule</code></td>
+<td>Nouvelle règle de détection YAML</td>
+</tr>
+<tr class="even">
+<td><code>/oseye-debug</code></td>
+<td>Diagnostiquer un problème</td>
+</tr>
+<tr class="odd">
+<td><code>/oseye-security</code></td>
+<td>Review de sécurité avant merge</td>
+</tr>
+</tbody>
+</table>
+<p>Voir le guide complet : <code>.claude/skills/README.md</code></p>
+<hr />
+<p><strong>Merci de contribuer à OSEye !</strong></p>
+  </article>
+</div>
+
+</body>
+</html>
