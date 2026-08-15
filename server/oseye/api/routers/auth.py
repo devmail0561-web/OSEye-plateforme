@@ -60,7 +60,10 @@ def _check_rate_limit(ip: str, max_calls: int = 10, window_seconds: float = 60.0
 
 
 def _hash(pw: str) -> str:
-    return str(_pwd_ctx.hash(pw))
+    # bcrypt silently truncates at 72 bytes; enforce explicitly to avoid
+    # silent auth failures when passwords differ only after byte 72.
+    encoded = pw.encode("utf-8")[:72]
+    return str(_pwd_ctx.hash(encoded))
 
 
 # ---------------------------------------------------------------------------

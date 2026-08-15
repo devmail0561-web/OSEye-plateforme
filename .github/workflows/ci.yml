@@ -77,6 +77,9 @@ jobs:
           # No postgres/redis — tests use SQLite + MemoryBus by default
           OSEYE_CHECKPOINT_HMAC_KEY: ci-test-key
           OSEYE_INSECURE: "true"
+          # Override any long shell password to stay within bcrypt 72-byte limit
+          OSEYE_ADMIN_PASSWORD: admin-ci-test
+          OSEYE_ANALYST_PASSWORD: analyst-ci-test
         run: pytest tests/unit/ tests/scenarios/ -q
 
   test-typescript:
