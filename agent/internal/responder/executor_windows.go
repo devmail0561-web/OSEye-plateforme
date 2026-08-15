@@ -12,6 +12,7 @@ package responder
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,18 +28,23 @@ const ruleNamePrefix = "OSEye-block-"
 
 func nowNs() int64 { return time.Now().UnixNano() }
 
-// isAllowedPath returns true for absolute paths that do not escape to system roots.
+// isAllowedPath returns true for absolute paths outside Windows system roots.
+// Blocks quarantining of system directories to prevent bricking the host.
 func isAllowedPath(p string) bool {
 	if !filepath.IsAbs(p) {
 		return false
 	}
-	// Reject attempts to quarantine Windows core system files.
+	// Block entire Windows system directory trees.
 	forbidden := []string{
-		`C:\Windows\System32\ntdll.dll`,
-		`C:\Windows\System32\kernel32.dll`,
+		`C:\Windows\System32`,
+		`C:\Windows\SysWOW64`,
+		`C:\Windows\WinSxS`,
+		`C:\Windows\Boot`,
+		`C:\Program Files\Windows Defender`,
 	}
+	pLower := strings.ToLower(filepath.ToSlash(p))
 	for _, f := range forbidden {
-		if strings.EqualFold(p, f) {
+		if strings.HasPrefix(pLower, strings.ToLower(filepath.ToSlash(f))) {
 			return false
 		}
 	}
@@ -155,10 +161,7 @@ func RestoreFile(quarantinePath, originalPath string) error {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-var (
-	modkernel32       = windows.NewLazySystemDLL("kernel32.dll")
-	procOpenProcess   = modkernel32.NewProc("OpenProcess")
-)
+var modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
 // processEntry32W mirrors PROCESSENTRY32W.
 type processEntry32W struct {
@@ -203,39 +206,16 @@ func processImageName(pid int) (string, error) {
 	return "", fmt.Errorf("pid %d not found in snapshot", pid)
 }
 
-// validateIP parses and canonicalises an IP address string.
+// validateIP parses and canonicalises an IP address string using net.ParseIP,
+// matching the Linux implementation and rejecting out-of-range octets.
 func validateIP(ip string) (string, error) {
 	ip = strings.TrimSpace(ip)
-	if net := resolveIP(ip); net != "" {
-		return net, nil
+	if strings.Contains(ip, "/") {
+		return "", fmt.Errorf("block_ip: CIDR ranges not accepted: %s", ip)
 	}
-	return "", fmt.Errorf("block_ip: invalid IP: %s", ip)
-}
-
-func resolveIP(ip string) string {
-	// Simple validate: try parsing via nslookup-free method
-	parts := strings.Split(ip, ".")
-	if len(parts) == 4 {
-		valid := true
-		for _, p := range parts {
-			if len(p) == 0 || len(p) > 3 {
-				valid = false
-				break
-			}
-			for _, c := range p {
-				if c < '0' || c > '9' {
-					valid = false
-					break
-				}
-			}
-		}
-		if valid {
-			return ip
-		}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return "", fmt.Errorf("block_ip: invalid IP: %s", ip)
 	}
-	// IPv6 basic check
-	if strings.Contains(ip, ":") && !strings.Contains(ip, "/") {
-		return ip
-	}
-	return ""
+	return parsed.String(), nil
 }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	gen "github.com/oseye/agent/gen"
@@ -45,6 +46,11 @@ type CommandClient struct {
 	mgr           *collector.CollectorManager
 	quarantineDir string
 	cfg           *config.Config
+
+	// snapshotSem caps concurrent snapshot goroutines at 1 to prevent flooding.
+	snapshotSem chan struct{}
+	// blockedIPs deduplicates BLOCK_IP commands for the same IP.
+	blockedIPs sync.Map
 }
 
 // NewClient returns a CommandClient.
@@ -63,6 +69,7 @@ func NewClient(
 		agentID:       agentID,
 		mgr:           mgr,
 		quarantineDir: quarantineDir,
+		snapshotSem:   make(chan struct{}, 1), // max 1 concurrent snapshot
 	}
 }
 
@@ -119,7 +126,16 @@ func (c *CommandClient) dispatch(cmd *gen.AgentCommand) {
 		}
 
 	case cmdTakeSnapshot:
-		go c.handleSnapshot(cmd)
+		// Non-blocking: skip if a snapshot is already in progress.
+		select {
+		case c.snapshotSem <- struct{}{}:
+			go func() {
+				defer func() { <-c.snapshotSem }()
+				c.handleSnapshot(cmd)
+			}()
+		default:
+			slog.Warn("snapshot already in progress, skipping")
+		}
 
 	case cmdBlockIP:
 		go c.handleBlockIP(cmd)
@@ -177,9 +193,18 @@ func (c *CommandClient) handleBlockIP(cmd *gen.AgentCommand) {
 		slog.Warn("block_ip: invalid payload")
 		return
 	}
-	if _, err := responder.BlockIP(p.IP); err != nil {
-		slog.Error("block_ip failed", "ip", p.IP, "err", err)
+	// Dedup: skip if this IP is already blocked to prevent rule accumulation.
+	if _, loaded := c.blockedIPs.LoadOrStore(p.IP, struct{}{}); loaded {
+		slog.Debug("block_ip: already blocked, skipping", "ip", p.IP)
+		return
 	}
+	handle, err := responder.BlockIP(p.IP)
+	if err != nil {
+		c.blockedIPs.Delete(p.IP) // remove so a retry is possible
+		slog.Error("block_ip failed", "ip", p.IP, "err", err)
+		return
+	}
+	_ = handle
 }
 
 func (c *CommandClient) handleUnblockIP(cmd *gen.AgentCommand) {
@@ -193,7 +218,9 @@ func (c *CommandClient) handleUnblockIP(cmd *gen.AgentCommand) {
 	}
 	if err := responder.UnblockIP(p.IP, p.Handle); err != nil {
 		slog.Error("unblock_ip failed", "ip", p.IP, "err", err)
+		return
 	}
+	c.blockedIPs.Delete(p.IP)
 }
 
 func (c *CommandClient) handleQuarantineFile(cmd *gen.AgentCommand) {

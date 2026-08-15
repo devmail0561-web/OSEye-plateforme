@@ -12,6 +12,7 @@ package responder
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,11 +24,20 @@ import (
 func nowNs() int64 { return time.Now().UnixNano() }
 
 // isAllowedPath returns true for absolute paths outside macOS system roots.
+// Blocks system directories to prevent bricking the host.
 func isAllowedPath(p string) bool {
 	if !filepath.IsAbs(p) {
 		return false
 	}
-	forbidden := []string{"/sbin/launchd", "/usr/libexec/", "/System/Library/"}
+	forbidden := []string{
+		"/sbin/",
+		"/usr/sbin/",
+		"/usr/bin/",
+		"/usr/libexec/",
+		"/System/",
+		"/Library/Apple/",
+		"/private/var/db/",
+	}
 	for _, f := range forbidden {
 		if strings.HasPrefix(p, f) {
 			return false
@@ -158,24 +168,11 @@ func processName(pid int) (string, error) {
 	return name, nil
 }
 
-// isValidIP returns true for a bare IPv4 or IPv6 address (no CIDR).
+// isValidIP uses net.ParseIP for correct octet-range validation (0-255).
+// Rejects CIDR notation.
 func isValidIP(ip string) bool {
 	if strings.Contains(ip, "/") {
 		return false
 	}
-	parts := strings.Split(ip, ".")
-	if len(parts) == 4 {
-		for _, p := range parts {
-			if len(p) == 0 || len(p) > 3 {
-				return false
-			}
-			for _, c := range p {
-				if c < '0' || c > '9' {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	return strings.Contains(ip, ":") // IPv6
+	return net.ParseIP(ip) != nil
 }
