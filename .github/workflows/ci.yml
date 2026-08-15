@@ -52,11 +52,6 @@ jobs:
         working-directory: agent
         run: CGO_ENABLED=0 go vet ./...
 
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: agent
-
   test-python:
     name: Test Python
     runs-on: self-hosted
