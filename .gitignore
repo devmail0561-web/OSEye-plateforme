@@ -7,7 +7,7 @@ agent/coverage.out
 agent/internal/platform/linux/ebpf/*_bpfel.go
 agent/internal/platform/linux/ebpf/*_bpfeb.go
 agent/internal/platform/linux/ebpf/*.o
-agent/gen/
+# agent/gen/ — committed so CI doesn't need protoc
 
 # Python
 __pycache__/
@@ -24,7 +24,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
-server/gen/
+# server/gen/ — committed so CI doesn't need protoc
 
 # Proto generated files
 *_pb2.py
