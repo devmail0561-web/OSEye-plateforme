@@ -61,6 +61,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         "version":        row.version,
         "active_profile": row.active_profile,
         "ip_address":     row.ip_address,
+        "platform":       getattr(row, "platform", "linux"),
     }
 
 

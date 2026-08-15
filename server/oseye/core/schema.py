@@ -301,6 +301,7 @@ class AgentInfo(BaseModel):
     active_profile: str = "workstation"
     revoked: bool = False
     online: bool = False
+    platform: str = "linux"  # "linux" | "windows" | "darwin"
 
 
 # ---------------------------------------------------------------------------

@@ -475,6 +475,31 @@ export interface AgentInfo {
   version:        string | null
   active_profile: string
   ip_address:     string | null
+  platform:       string    // "linux" | "windows" | "darwin"
+}
+
+export interface EntityProfile {
+  entity_id:    string
+  entity_type:  string
+  hostname:     string
+  risk_score:   number
+  alert_count:  number
+  last_seen:    string | null
+}
+
+export const entitiesApi = {
+  list(hostname?: string): Promise<EntityProfile[]> {
+    return api.get<EntityProfile[]>('/api/v1/entities', { params: hostname ? { hostname } : {} }).then((r) => r.data)
+  },
+  get(entityId: string): Promise<EntityProfile> {
+    return api.get<EntityProfile>(`/api/v1/entities/${encodeURIComponent(entityId)}`).then((r) => r.data)
+  },
+}
+
+export const chainApi = {
+  get(eventId: string): Promise<UniversalEvent[]> {
+    return api.get<UniversalEvent[]>(`/api/v1/events/${eventId}/chain`).then((r) => r.data)
+  },
 }
 
 export const agentsApi = {

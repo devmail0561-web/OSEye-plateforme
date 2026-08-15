@@ -22,6 +22,7 @@ class SQLAgentRepository:
         ip_address: str | None = None,
         version: str | None = None,
         active_profile: str = "workstation",
+        platform: str = "linux",
     ) -> None:
         """Insert or update an agent record atomically via INSERT OR REPLACE.
 
@@ -38,6 +39,8 @@ class SQLAgentRepository:
             update_values["version"] = version
         if active_profile:
             update_values["active_profile"] = active_profile
+        if platform:
+            update_values["platform"] = platform
 
         stmt = (
             sqlite_insert(AgentRow)
@@ -49,6 +52,7 @@ class SQLAgentRepository:
                 active_profile=active_profile,
                 ip_address=ip_address,
                 online=online,
+                platform=platform,
             )
             .on_conflict_do_update(
                 index_elements=["cn"],

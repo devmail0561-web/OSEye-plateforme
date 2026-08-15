@@ -127,6 +127,15 @@ export default function Events() {
                 {expanded === ev.event_id && (
                   <tr>
                     <td colSpan={7} className="px-3 py-3 bg-gray-50 dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800">
+                      <div className="flex items-center gap-3 mb-2">
+                        <a
+                          href={`/events/${ev.event_id}/chain`}
+                          className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                        >
+                          <span>Voir la chaîne d'incident</span>
+                          <span>→</span>
+                        </a>
+                      </div>
                       <pre className="text-xs text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
                         {JSON.stringify(ev, null, 2)}
                       </pre>

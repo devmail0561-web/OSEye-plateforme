@@ -31,6 +31,7 @@ const SURVEILLANCE: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard',  icon: LayoutDashboard },
   { to: '/events',    label: 'Événements', icon: List },
   { to: '/agents',    label: 'Agents',     icon: Monitor },
+  { to: '/entities',  label: 'Entités',    icon: ShieldAlert },
   { to: '/network',   label: 'Graphe',     icon: Network },
 ]
 

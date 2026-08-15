@@ -379,3 +379,4 @@ class AgentRow(Base):
     active_profile: Mapped[str]            = mapped_column(String(64),  nullable=False, default="workstation")  # noqa: E501
     ip_address:     Mapped[str | None]     = mapped_column(String(45),  nullable=True)
     online:         Mapped[bool]           = mapped_column(Boolean,     nullable=False, default=False)  # noqa: E501
+    platform:       Mapped[str]            = mapped_column(String(16),  nullable=False, default="linux", server_default="linux")  # noqa: E501

@@ -4,6 +4,22 @@ import { agentsApi, type AgentInfo } from '@/api/client'
 import { Badge, EmptyState, Spinner } from '@/components/ui'
 import RelativeTime from '@/components/RelativeTime'
 
+const PLATFORM_ICONS: Record<string, string> = {
+  linux:   '🐧',
+  windows: '🪟',
+  darwin:  '🍎',
+}
+
+function PlatformBadge({ platform }: { platform: string }) {
+  const icon = PLATFORM_ICONS[platform] ?? '💻'
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title={platform}>
+      <span className="text-sm">{icon}</span>
+      <span className="capitalize">{platform}</span>
+    </span>
+  )
+}
+
 export default function Agents() {
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [loading, setLoading] = useState(false)
@@ -36,6 +52,7 @@ export default function Agents() {
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 dark:text-gray-500 text-xs uppercase">
               <th className="text-left px-3 py-2.5">Statut</th>
+              <th className="text-left px-3 py-2.5">Plateforme</th>
               <th className="text-left px-3 py-2.5">Hostname (CN)</th>
               <th className="text-left px-3 py-2.5">IP</th>
               <th className="text-left px-3 py-2.5">Profil actif</th>
@@ -45,10 +62,10 @@ export default function Agents() {
             </tr>
           </thead>
           <tbody>
-            {loading && <Spinner colSpan={7} />}
+            {loading && <Spinner colSpan={8} />}
             {!loading && agents.length === 0 && (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <EmptyState
                     icon={Monitor}
                     title="Aucun agent"
@@ -66,6 +83,9 @@ export default function Agents() {
                       {a.online ? 'En ligne' : 'Hors ligne'}
                     </span>
                   </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <PlatformBadge platform={a.platform} />
                 </td>
                 <td className="px-3 py-2.5 font-mono text-xs font-medium text-gray-800 dark:text-gray-200">{a.cn}</td>
                 <td className="px-3 py-2.5 text-gray-500 dark:text-gray-400 font-mono text-xs">{a.ip_address ?? '—'}</td>
