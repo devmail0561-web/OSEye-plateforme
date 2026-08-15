@@ -1,6 +1,7 @@
 package localrules
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -466,6 +467,54 @@ func TestEngineMaxRulesRespected(t *testing.T) {
 		if engine.compiled[i].Severity != SeverityCritical {
 			t.Errorf("rule %d: expected critical, got %s", i, engine.compiled[i].Severity)
 		}
+	}
+}
+
+func TestNumericOperators(t *testing.T) {
+	tests := []struct {
+		name      string
+		op        string
+		fieldVal  string
+		condVal   interface{}
+		wantMatch bool
+	}{
+		{"gt match", "gt", "85", 80.0, true},
+		{"gt no-match equal", "gt", "80", 80.0, false},
+		{"gt no-match below", "gt", "70", 80.0, false},
+		{"lt match", "lt", "75", 80.0, true},
+		{"lt no-match equal", "lt", "80", 80.0, false},
+		{"lt no-match above", "lt", "90", 80.0, false},
+		{"gte equal", "gte", "80", 80.0, true},
+		{"gte above", "gte", "81", 80.0, true},
+		{"gte below", "gte", "79", 80.0, false},
+		{"lte equal", "lte", "80", 80.0, true},
+		{"lte below", "lte", "79", 80.0, true},
+		{"lte above", "lte", "81", 80.0, false},
+		{"gt string condval", "gt", "85", "80", true},
+		{"gt json.Number condval", "gt", "85", json.Number("80"), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rules := []Rule{{
+				ID:       "NUM-001",
+				Name:     "numeric_test",
+				Severity: SeverityHigh,
+				Conditions: []Condition{
+					{Field: "value", Op: tt.op, Value: tt.condVal, Weight: 1.0},
+				},
+				Threshold: 1.0,
+				Response:  ResponseLog,
+			}}
+			store := tempStore(t, rules)
+			engine := NewEngine(store, DefaultEngineConfig())
+			event := map[string]interface{}{"value": tt.fieldVal}
+			detections := engine.Evaluate(event)
+			got := len(detections) > 0
+			if got != tt.wantMatch {
+				t.Errorf("op=%q field=%q cond=%v: match=%v, want %v", tt.op, tt.fieldVal, tt.condVal, got, tt.wantMatch)
+			}
+		})
 	}
 }
 

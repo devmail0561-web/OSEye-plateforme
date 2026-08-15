@@ -26,6 +26,10 @@ class EventBus(Protocol):
         """Publish a message to a topic."""
         ...
 
+    async def publish_batch(self, topic: str, messages: list[bytes]) -> None:
+        """Publish multiple messages to a topic in a single operation."""
+        ...
+
     async def subscribe(self, topic: str) -> AsyncGenerator[bytes, None]:
         """Yield messages from a topic, blocking until each arrives."""
         ...

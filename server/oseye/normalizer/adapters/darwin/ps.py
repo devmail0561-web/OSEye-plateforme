@@ -9,6 +9,7 @@ from typing import Any
 from oseye.core.schema import UniversalEvent
 from oseye.normalizer.adapters.linux._utils import agent_ts, safe_int
 
+
 class PsAdapter:
     """Convertit un payload JSON ps → UniversalEvent (process/snapshot)."""
 

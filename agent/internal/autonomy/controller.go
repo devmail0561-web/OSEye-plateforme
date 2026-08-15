@@ -110,8 +110,7 @@ func (c *Controller) ProcessEvent(event map[string]interface{}) {
 		return
 	}
 
-	profile := c.profileStore.Current()
-	autonomyPolicy := profile.Autonomy
+	autonomyPolicy := c.profileStore.Current().Autonomy
 
 	for _, det := range detections {
 		decision := Decision{

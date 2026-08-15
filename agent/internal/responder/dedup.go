@@ -3,7 +3,6 @@
 package responder
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -33,7 +32,7 @@ func (d *Deduplicator) Allow(commandType, target string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	key := fmt.Sprintf("%s|%s", commandType, target)
+	key := commandType + "|" + target
 	now := time.Now()
 
 	if exp, ok := d.seen[key]; ok && now.Before(exp) {

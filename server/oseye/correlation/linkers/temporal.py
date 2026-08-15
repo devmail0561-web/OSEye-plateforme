@@ -45,7 +45,7 @@ class TemporalLinker:
     def __init__(self, timeframe_seconds: int = 60) -> None:
         self._timeframe = timeframe_seconds
 
-    async def score(self, alert: "Alert", incident: "Incident") -> float:
+    async def score(self, alert: Alert, incident: Incident) -> float:
         if _SEVERITY_ORDER.get(alert.severity, -1) < _SEVERITY_ORDER["medium"]:
             return 0.0
 

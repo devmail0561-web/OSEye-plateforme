@@ -86,6 +86,8 @@ class CorrelationEngine:
         self._repo = incident_repo
         self._min_severity = min_severity
         self._auto_close_after = auto_close_after_seconds
+        self._min_severity_ord: int = _SEVERITY_ORDER.get(min_severity, 0)
+        self._max_timeframe: int = max(getattr(lnk, "_timeframe", 300) for lnk in linkers)
 
     async def get_incident(self, incident_id: UUID) -> Incident | None:
         """Return the Incident for *incident_id*, or None if not found."""
@@ -97,7 +99,7 @@ class CorrelationEngine:
         Returns the Incident (created or updated), or None if the alert is
         below *min_severity*.
         """
-        if _SEVERITY_ORDER.get(alert.severity, -1) < _SEVERITY_ORDER.get(self._min_severity, 0):
+        if _SEVERITY_ORDER.get(alert.severity, -1) < self._min_severity_ord:
             return None
 
         event = IncidentEvent(
@@ -112,8 +114,7 @@ class CorrelationEngine:
         # Correction 2: load all open incidents for this host, not just one
         # F-04: use the maximum timeframe across all linkers so incidents older
         # than linkers[0]._timeframe are not invisible when multiple linkers exist.
-        max_tf = max(getattr(lnk, "_timeframe", 300) for lnk in self._linkers)
-        since = datetime.now(UTC) - timedelta(seconds=max_tf)
+        since = datetime.now(UTC) - timedelta(seconds=self._max_timeframe)
         candidates = await self._repo.find_open_incidents_for_host(alert.hostname, since)
 
         # Correction 1: score every (linker, incident) pair, pick best match
@@ -159,7 +160,7 @@ class CorrelationEngine:
             alert_count=1,
             mitre_tactics=list(alert.mitre_techniques or []),
             # F-04: store the max timeframe so the incident window covers all linkers.
-            timeframe_seconds=max(getattr(lnk, "_timeframe", 300) for lnk in self._linkers),
+            timeframe_seconds=self._max_timeframe,
         )
         incident.timeline = [event]
         await self._repo.create(incident)

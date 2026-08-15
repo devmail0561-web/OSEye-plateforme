@@ -25,38 +25,21 @@ func NewManager(collectors []Collector, bufSize int) *CollectorManager {
 
 // Start launches every collector in its own goroutine and returns immediately.
 // Events from all collectors are multiplexed onto Events().
+// Each collector writes directly to m.out — no fan-in goroutine needed since
+// all collector implementations already handle ctx.Done() on channel send.
 func (m *CollectorManager) Start(ctx context.Context) error {
 	ctx, m.cancel = context.WithCancel(ctx)
 
 	for _, c := range m.collectors {
 		c := c
-		inner := make(chan RawEvent, 64)
-
-		// Fan-in goroutine: forwards inner → m.out until inner is closed.
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
-			for ev := range inner {
-				select {
-				case m.out <- ev:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		// Collector goroutine.
-		m.wg.Add(1)
-		go func() {
-			defer func() {
-				close(inner)
-				m.wg.Done()
-			}()
-			_ = c.Start(ctx, inner)
+			_ = c.Start(ctx, m.out)
 		}()
 	}
 
-	// Close m.out once all goroutines finish.
+	// Close m.out once all collector goroutines have exited.
 	go func() {
 		m.wg.Wait()
 		close(m.out)

@@ -47,6 +47,25 @@ if TYPE_CHECKING:
 
 _log = get_logger(__name__)
 
+# Sentinel empty list reused on index cache misses to avoid allocating []
+_EMPTY: list[RuleDefinition] = []
+
+
+def _compile_rules(rules: list[RuleDefinition]) -> None:
+    """Pre-compile each rule's condition bytecode in-place.
+
+    Called once at load/reload time so ast.parse + _check_ast + compile
+    never run on the hot evaluation path.
+    """
+    for rule in rules:
+        if rule.compiled_code is not None:
+            continue
+        try:
+            rule.compiled_code = _eval.compile_rule_condition(rule.condition)
+        except ValueError as exc:
+            _log.warning("rule_compile_failed", rule_id=rule.id, error=str(exc))
+            # compiled_code stays None → slow-path fallback at evaluation time
+
 
 class RuleEngine:
     """Thread-safe rule evaluator with optional filesystem hot-reload.
@@ -88,27 +107,32 @@ class RuleEngine:
 
         Returns a list of :class:`RuleMatch` (empty if no rule fires).
         """
-        with self._lock:
-            # Rules with no category filter + rules scoped to this event's category
-            candidates = list(self._index.get("", []))
-            category_rules = self._index.get(event.category, [])
-            if category_rules:
-                candidates = candidates + category_rules
+        # Capture index reference atomically (GIL makes attribute read atomic).
+        # The index dict is immutable after construction — only replaced at reload.
+        # Reading a slightly stale index for one evaluation after a reload is
+        # acceptable and avoids a lock acquisition on every event.
+        index = self._index
+        candidates = index.get("", _EMPTY) + index.get(event.category, _EMPTY)
 
-        # Correction 4 — stable entity_key with PID reuse guard
+        if not candidates:
+            return []
+
+        # Correction 4 — stable entity_key computed only when there are candidates.
         default_entity_key = _stable_entity_key(event)
+        # model_dump once for all rules (avoids N Pydantic serialisations).
+        event_dict = event.model_dump()
 
         matches: list[RuleMatch] = []
         for rule in candidates:
-            if not rule.enabled:
-                continue
+            # Disabled rules are excluded at index build time (see _load/reload).
             try:
                 entity_key = (
                     _build_entity_key(rule.entity_key, event)
                     if rule.entity_key
                     else default_entity_key
                 )
-                if _eval.evaluate(rule, event, entity_key=entity_key):
+                if _eval.evaluate(rule, event=event, entity_key=entity_key,
+                                   event_dict=event_dict):
                     matches.append(
                         RuleMatch(
                             rule_id=rule.id,
@@ -144,8 +168,11 @@ class RuleEngine:
     def reload(self) -> int:
         """Reload rules from disk. Returns number of loaded rules."""
         rules = load_all_rules(self._rules_root)
+        _compile_rules(rules)
         index: dict[str, list[RuleDefinition]] = defaultdict(list)
         for rule in rules:
+            if not rule.enabled:
+                continue  # disabled rules excluded at index build time
             if rule.categories:
                 for cat in rule.categories:
                     index[cat].append(rule)
@@ -372,8 +399,11 @@ class RuleEngine:
 
     def _load(self) -> None:
         rules = load_all_rules(self._rules_root)
+        _compile_rules(rules)
         index: dict[str, list[RuleDefinition]] = defaultdict(list)
         for rule in rules:
+            if not rule.enabled:
+                continue  # disabled rules excluded at index build time
             if rule.categories:
                 for cat in rule.categories:
                     index[cat].append(rule)

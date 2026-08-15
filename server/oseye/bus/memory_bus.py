@@ -31,6 +31,10 @@ class InMemoryEventBus:
             if fnmatch.fnmatch(topic, pat):
                 await pqueue.put((topic, message))
 
+    async def publish_batch(self, topic: str, messages: list[bytes]) -> None:
+        for msg in messages:
+            await self.publish(topic, msg)
+
     async def subscribe(self, topic: str) -> AsyncGenerator[bytes, None]:
         """Return an async generator that yields messages on topic.
 

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os/exec"
 	"strconv"
@@ -25,7 +26,7 @@ const scanInterval = 10 * time.Second
 type Collector struct {
 	logger   *slog.Logger
 	stopCh   chan struct{}
-	running  bool
+	running  atomic.Bool
 	throttle atomic.Value
 }
 
@@ -43,15 +44,15 @@ func New(logger *slog.Logger) (*Collector, error) {
 func (c *Collector) Name() string { return "winnetstat" }
 
 func (c *Collector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
-	c.running = true
+	c.running.Store(true)
 	go c.run(ctx, out)
 	return nil
 }
 
 func (c *Collector) Stop() error {
-	if c.running {
+	if c.running.Load() {
 		close(c.stopCh)
-		c.running = false
+		c.running.Store(false)
 	}
 	return nil
 }
@@ -59,10 +60,11 @@ func (c *Collector) Stop() error {
 func (c *Collector) SetThrottle(f float64) { c.throttle.Store(f) }
 
 func (c *Collector) Health() collector.CollectorHealth {
-	return collector.CollectorHealth{Running: c.running}
+	return collector.CollectorHealth{Running: c.running.Load()}
 }
 
 type netConn struct {
+	EventType  string `json:"event_type"`
 	Proto      string `json:"proto"`
 	LocalAddr  string `json:"local_addr"`
 	LocalPort  int    `json:"local_port"`
@@ -72,9 +74,17 @@ type netConn struct {
 	PID        int    `json:"pid"`
 }
 
+func connKey(conn netConn) string {
+	return fmt.Sprintf("%s:%d->%s:%d@%d", conn.LocalAddr, conn.LocalPort, conn.RemoteAddr, conn.RemotePort, conn.PID)
+}
+
 func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
 	ticker := time.NewTicker(scanInterval)
 	defer ticker.Stop()
+
+	prevConns := make(map[string]netConn)
+	initialized := false
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,18 +100,50 @@ func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
 				c.logger.Debug("winnetstat scan error", "err", err)
 				continue
 			}
+
+			currentConns := make(map[string]netConn, len(conns))
 			for _, conn := range conns {
-				b, _ := json.Marshal(conn)
-				select {
-				case out <- collector.RawEvent{
-					Source:    "winnetstat",
-					OS:        "windows",
-					Timestamp: time.Now().UnixNano(),
-					Raw:       b,
-				}:
-				default:
+				currentConns[connKey(conn)] = conn
+			}
+
+			// Emit new connections.
+			for key, conn := range currentConns {
+				if _, seen := prevConns[key]; !seen {
+					conn.EventType = "connection_open"
+					b, _ := json.Marshal(conn)
+					select {
+					case out <- collector.RawEvent{
+						Source:    "winnetstat",
+						OS:        "windows",
+						Timestamp: time.Now().UnixNano(),
+						Raw:       b,
+					}:
+					default:
+					}
 				}
 			}
+
+			// Emit closed connections (only after initial snapshot).
+			if initialized {
+				for key, conn := range prevConns {
+					if _, exists := currentConns[key]; !exists {
+						conn.EventType = "connection_close"
+						b, _ := json.Marshal(conn)
+						select {
+						case out <- collector.RawEvent{
+							Source:    "winnetstat",
+							OS:        "windows",
+							Timestamp: time.Now().UnixNano(),
+							Raw:       b,
+						}:
+						default:
+						}
+					}
+				}
+			}
+
+			prevConns = currentConns
+			initialized = true
 		}
 	}
 }

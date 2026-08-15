@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -159,38 +160,63 @@ func (e *Engine) evaluateRule(cr *CompiledRule, event map[string]interface{}, re
 func (e *Engine) evaluateSimple(cr *CompiledRule, event map[string]interface{}, refs map[string][]string) *Detection {
 	var totalScore float64
 
-	for i, cond := range cr.Conditions {
-		fieldVal := getField(event, cond.Field)
+	for i, cc := range cr.compiledConditions {
+		fieldVal := getField(event, cc.Field)
 		if fieldVal == "" {
 			continue
 		}
 
 		matched := false
-		switch cond.Op {
+		switch cc.Op {
 		case "eq":
-			if valStr, ok := cond.Value.(string); ok {
-				matched = fieldVal == valStr
+			if cc.hasStr {
+				matched = fieldVal == cc.strVal
 			}
 		case "neq":
-			if valStr, ok := cond.Value.(string); ok {
-				matched = fieldVal != valStr
+			if cc.hasStr {
+				matched = fieldVal != cc.strVal
 			}
 		case "contains":
-			if valStr, ok := cond.Value.(string); ok {
-				matched = strings.Contains(fieldVal, valStr)
+			if cc.hasStr {
+				matched = strings.Contains(fieldVal, cc.strVal)
 			}
 		case "regex":
 			if re, ok := cr.compiledPatterns[i]; ok {
 				matched = re.MatchString(fieldVal)
 			}
 		case "in":
-			matched = matchIn(fieldVal, cond.Value, refs)
+			if cc.inSet != nil {
+				_, matched = cc.inSet[fieldVal]
+			} else {
+				matched = matchIn(fieldVal, cc.Value, refs)
+			}
 		case "not_in":
-			matched = !matchIn(fieldVal, cond.Value, refs)
+			if cc.inSet != nil {
+				_, found := cc.inSet[fieldVal]
+				matched = !found
+			} else {
+				matched = !matchIn(fieldVal, cc.Value, refs)
+			}
+		case "gt":
+			if fv, tv, ok := parseNumericPair(fieldVal, cc.Value); ok {
+				matched = fv > tv
+			}
+		case "lt":
+			if fv, tv, ok := parseNumericPair(fieldVal, cc.Value); ok {
+				matched = fv < tv
+			}
+		case "gte":
+			if fv, tv, ok := parseNumericPair(fieldVal, cc.Value); ok {
+				matched = fv >= tv
+			}
+		case "lte":
+			if fv, tv, ok := parseNumericPair(fieldVal, cc.Value); ok {
+				matched = fv <= tv
+			}
 		}
 
 		if matched {
-			totalScore += cond.Weight
+			totalScore += cc.Weight
 		}
 	}
 
@@ -292,6 +318,34 @@ func (e *Engine) evaluateSequence(cr *CompiledRule, event map[string]interface{}
 	return nil
 }
 
+func parseNumericPair(fieldVal string, condValue interface{}) (float64, float64, bool) {
+	fv, err := strconv.ParseFloat(fieldVal, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	switch v := condValue.(type) {
+	case float64:
+		return fv, v, true
+	case json.Number:
+		tv, err := v.Float64()
+		if err != nil {
+			return 0, 0, false
+		}
+		return fv, tv, true
+	case string:
+		tv, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0, 0, false
+		}
+		return fv, tv, true
+	case int:
+		return fv, float64(v), true
+	case int64:
+		return fv, float64(v), true
+	}
+	return 0, 0, false
+}
+
 func matchIn(val string, condValue interface{}, refs map[string][]string) bool {
 	// Check if it's a profile reference.
 	if m, ok := condValue.(map[string]interface{}); ok {
@@ -380,43 +434,48 @@ func (e *Engine) recompile() {
 }
 
 // getField extracts a string value from a nested event map using dot notation.
+// Fast path for simple (non-nested) fields avoids strings.Split allocation.
 func getField(event map[string]interface{}, field string) string {
+	if !strings.ContainsRune(field, '.') {
+		return fieldToString(event[field])
+	}
 	parts := strings.Split(field, ".")
 	var current interface{} = event
-
 	for _, part := range parts {
-		switch m := current.(type) {
-		case map[string]interface{}:
-			current = m[part]
-		default:
+		m, ok := current.(map[string]interface{})
+		if !ok {
 			return ""
 		}
+		current = m[part]
 	}
+	return fieldToString(current)
+}
 
-	switch v := current.(type) {
+func fieldToString(v interface{}) string {
+	switch v := v.(type) {
 	case string:
 		return v
 	case json.Number:
 		return v.String()
 	case float64:
 		if v == float64(int64(v)) {
-			return fmt.Sprintf("%d", int64(v))
+			return strconv.FormatInt(int64(v), 10)
 		}
-		return fmt.Sprintf("%g", v)
+		return strconv.FormatFloat(v, 'g', -1, 64)
 	case int:
-		return fmt.Sprintf("%d", v)
+		return strconv.Itoa(v)
 	case int64:
-		return fmt.Sprintf("%d", v)
+		return strconv.FormatInt(v, 10)
 	case bool:
 		if v {
 			return "true"
 		}
 		return "false"
 	default:
-		if current == nil {
+		if v == nil {
 			return ""
 		}
-		return fmt.Sprintf("%v", current)
+		return fmt.Sprintf("%v", v)
 	}
 }
 

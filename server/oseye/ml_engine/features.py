@@ -18,6 +18,7 @@ All values are in [0, 1] so HST and LR converge without scaling.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 from oseye.core.observability import get_logger
 from oseye.core.schema import UniversalEvent
@@ -40,7 +41,7 @@ _LOG_CAP = 40.0  # log1p(2^40) ≈ 27.7 — sufficient for multi-GB transfers
 
 def extract(event: UniversalEvent) -> dict[str, float]:
     """Return a feature dict compatible with River estimators."""
-    hour = (event.timestamp_ns // 1_000_000_000 // 3600) % 24
+    hour = (event.timestamp_ns // 3_600_000_000_000) % 24
 
     proc_hash = _stable_hash_norm(event.process_name)
 
@@ -65,6 +66,7 @@ def extract(event: UniversalEvent) -> dict[str, float]:
     }
 
 
+@lru_cache(maxsize=512)
 def _stable_hash_norm(s: str) -> float:
     """Deterministic [0,1] float from a string (FNV-1a 32-bit)."""
     h = 2166136261

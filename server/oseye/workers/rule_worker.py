@@ -114,9 +114,11 @@ class RuleWorker:
         event: UniversalEvent,
         matches: list[RuleMatch],
     ) -> None:
+        event_id_str = str(event.event_id)
+        hostname = event.hostname
+        topic = f"{PUBLISH_TOPIC_PREFIX}:{hostname}"
         for match in matches:
             # Publish match to bus for downstream consumers (correlation etc.)
-            topic = f"{PUBLISH_TOPIC_PREFIX}:{event.hostname}"
             payload = {
                 "rule_id": match.rule_id,
                 "rule_name": match.rule_name,
@@ -125,8 +127,8 @@ class RuleWorker:
                 "tags": match.tags,
                 "mitre": match.mitre,
                 "explanation": match.explanation,
-                "event_id": str(event.event_id),
-                "hostname": event.hostname,
+                "event_id": event_id_str,
+                "hostname": hostname,
                 "matched_fields": match.matched_fields,
             }
             # F-04: a single publish failure must not abort the remaining matches

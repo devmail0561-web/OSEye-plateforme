@@ -4,6 +4,27 @@ All notable changes to OSEye are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 2026-08-15
+
+### Changed
+
+**Collecteurs — modèle delta (tous les agents)**
+- `procfs` (Linux), `toolhelp32` (Windows), `ps` (macOS) : n'émettent plus un snapshot complet à chaque cycle. Premier scan = snapshot initial (tous les process comme `process_create`), scans suivants = uniquement les nouveaux PIDs (`process_create`) et les PIDs disparus (`process_exit`). Réduit de ~95% le bruit en régime stable.
+- `winnetstat` (Windows) : même modèle delta pour les connexions TCP (`connection_open` / `connection_close`). Fingerprint = `local:port->remote:port@pid`.
+- `etw` (Windows) : remplacement de `Get-WinEvent -MaxEvents 20` par `Get-WinEvent -FilterHashtable @{StartTime=...}`. Plus de doublons entre cycles, plus de cap d'events.
+
+**Moteur de règles — opérateurs numériques**
+- `engine.go` : ajout des opérateurs `gt`, `lt`, `gte`, `lte` pour les conditions numériques (ex. `cpu_pct > 80`, `port < 1024`). Support de `float64`, `json.Number`, `string`, `int`, `int64` comme valeur de condition.
+
+### Fixed
+
+- `procfs` : bug TOCTOU — un PID n'est ajouté à `currentPIDs` qu'après `readProcess` réussi ; un processus éphémère entre `ReadDir` et `readProcess` ne génère plus de `process_exit` orphelin.
+- `procfs` : `errStopped` retourné par `scan` n'incrémentait plus `errCount` et ne polluait plus `lastErr`.
+- `toolhelp32`, `ps`, `etw`, `winnetstat` : champ `running bool` remplacé par `atomic.Bool` — data race éliminée sur `Start`/`Stop`/`Health`.
+- `etw` : `lastPoll` déplacé en variable locale dans `run()` (était un champ struct accessible depuis `Health()` sans synchronisation). Fenêtre temporelle revertée sur échec PowerShell.
+- `etw` : erreur PowerShell loggée en `Warn` au lieu de `Debug`.
+- `ps` : `listProcesses` retourne un type interne `psProcess` au lieu du type JSON `processInfo`.
+
 ## [0.2.0-alpha.1] — 2026-08-14
 
 ### Added

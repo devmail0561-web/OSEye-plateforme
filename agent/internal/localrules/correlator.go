@@ -7,10 +7,13 @@ import (
 
 // Correlator tracks event counts and sequences within time windows for
 // correlation and sequence rules. Memory is bounded by maxGroups and maxEvents.
+//
+// Two-level maps (ruleID → groupValue → state) eliminate per-event string
+// concatenation compared to a flat "ruleID:groupValue" key scheme.
 type Correlator struct {
 	mu        sync.Mutex
-	counters  map[string]*counterGroup // ruleID:groupValue → counter
-	sequences map[string]*sequenceTracker // ruleID:groupValue → sequence state
+	counters  map[string]map[string]*counterGroup
+	sequences map[string]map[string]*sequenceTracker
 	maxGroups int
 	maxEvents int
 }
@@ -32,8 +35,8 @@ type sequenceTracker struct {
 // NewCorrelator creates a correlator with bounded memory.
 func NewCorrelator(maxGroups, maxEvents int) *Correlator {
 	return &Correlator{
-		counters:  make(map[string]*counterGroup, maxGroups),
-		sequences: make(map[string]*sequenceTracker, maxGroups),
+		counters:  make(map[string]map[string]*counterGroup, 64),
+		sequences: make(map[string]map[string]*sequenceTracker, 64),
 		maxGroups: maxGroups,
 		maxEvents: maxEvents,
 	}
@@ -45,12 +48,17 @@ func (c *Correlator) IncrementCounter(ruleID, groupValue string, threshold int, 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := ruleID + ":" + groupValue
 	now := time.Now()
 	window := time.Duration(windowSec) * time.Second
 
-	cg, exists := c.counters[key]
-	if !exists {
+	inner, ok := c.counters[ruleID]
+	if !ok {
+		inner = make(map[string]*counterGroup)
+		c.counters[ruleID] = inner
+	}
+
+	cg, ok := inner[groupValue]
+	if !ok {
 		c.evictCountersIfNeeded()
 		cg = &counterGroup{
 			count:     0,
@@ -58,7 +66,7 @@ func (c *Correlator) IncrementCounter(ruleID, groupValue string, threshold int, 
 			lastSeen:  now,
 			window:    window,
 		}
-		c.counters[key] = cg
+		inner[groupValue] = cg
 	}
 
 	// Reset if outside window.
@@ -79,12 +87,20 @@ func (c *Correlator) AdvanceSequence(ruleID, groupValue string, stepIndex int, t
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := ruleID + ":" + groupValue
 	now := time.Now()
 	window := time.Duration(windowSec) * time.Second
 
-	st, exists := c.sequences[key]
-	if !exists {
+	inner, ok := c.sequences[ruleID]
+	if !ok {
+		if stepIndex != 0 {
+			return false
+		}
+		inner = make(map[string]*sequenceTracker)
+		c.sequences[ruleID] = inner
+	}
+
+	st, ok := inner[groupValue]
+	if !ok {
 		if stepIndex != 0 {
 			return false
 		}
@@ -94,7 +110,7 @@ func (c *Correlator) AdvanceSequence(ruleID, groupValue string, stepIndex int, t
 			timestamps:   make([]time.Time, 0, totalSteps),
 			window:       window,
 		}
-		c.sequences[key] = st
+		inner[groupValue] = st
 	}
 
 	// Reset if window expired from first step.
@@ -128,7 +144,9 @@ func (c *Correlator) AdvanceSequence(ruleID, groupValue string, stepIndex int, t
 func (c *Correlator) ResetCounter(ruleID, groupValue string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.counters, ruleID+":"+groupValue)
+	if inner, ok := c.counters[ruleID]; ok {
+		delete(inner, groupValue)
+	}
 }
 
 // Cleanup removes expired entries. Should be called periodically.
@@ -138,50 +156,83 @@ func (c *Correlator) Cleanup() {
 
 	now := time.Now()
 
-	for key, cg := range c.counters {
-		if now.Sub(cg.lastSeen) > cg.window*2 {
-			delete(c.counters, key)
+	for ruleID, inner := range c.counters {
+		for groupValue, cg := range inner {
+			if now.Sub(cg.lastSeen) > cg.window*2 {
+				delete(inner, groupValue)
+			}
+		}
+		if len(inner) == 0 {
+			delete(c.counters, ruleID)
 		}
 	}
 
-	for key, st := range c.sequences {
-		if now.Sub(st.lastSeen) > st.window*2 {
-			delete(c.sequences, key)
+	for ruleID, inner := range c.sequences {
+		for groupValue, st := range inner {
+			if now.Sub(st.lastSeen) > st.window*2 {
+				delete(inner, groupValue)
+			}
+		}
+		if len(inner) == 0 {
+			delete(c.sequences, ruleID)
 		}
 	}
+}
+
+// totalCounterEntries returns the total number of group entries across all rules.
+func (c *Correlator) totalCounterEntries() int {
+	n := 0
+	for _, inner := range c.counters {
+		n += len(inner)
+	}
+	return n
 }
 
 func (c *Correlator) evictCountersIfNeeded() {
-	if len(c.counters) < c.maxGroups {
+	if c.totalCounterEntries() < c.maxGroups {
 		return
 	}
-	// Evict oldest entry.
-	var oldestKey string
+	var oldestRuleID, oldestGroupValue string
 	var oldestTime time.Time
-	for k, v := range c.counters {
-		if oldestKey == "" || v.lastSeen.Before(oldestTime) {
-			oldestKey = k
-			oldestTime = v.lastSeen
+	for ruleID, inner := range c.counters {
+		for gv, cg := range inner {
+			if oldestRuleID == "" || cg.lastSeen.Before(oldestTime) {
+				oldestRuleID = ruleID
+				oldestGroupValue = gv
+				oldestTime = cg.lastSeen
+			}
 		}
 	}
-	if oldestKey != "" {
-		delete(c.counters, oldestKey)
+	if oldestRuleID != "" {
+		delete(c.counters[oldestRuleID], oldestGroupValue)
 	}
 }
 
+// totalSequenceEntries returns the total number of sequence tracker entries.
+func (c *Correlator) totalSequenceEntries() int {
+	n := 0
+	for _, inner := range c.sequences {
+		n += len(inner)
+	}
+	return n
+}
+
 func (c *Correlator) evictSequencesIfNeeded() {
-	if len(c.sequences) < c.maxGroups {
+	if c.totalSequenceEntries() < c.maxGroups {
 		return
 	}
-	var oldestKey string
+	var oldestRuleID, oldestGroupValue string
 	var oldestTime time.Time
-	for k, v := range c.sequences {
-		if oldestKey == "" || v.lastSeen.Before(oldestTime) {
-			oldestKey = k
-			oldestTime = v.lastSeen
+	for ruleID, inner := range c.sequences {
+		for gv, st := range inner {
+			if oldestRuleID == "" || st.lastSeen.Before(oldestTime) {
+				oldestRuleID = ruleID
+				oldestGroupValue = gv
+				oldestTime = st.lastSeen
+			}
 		}
 	}
-	if oldestKey != "" {
-		delete(c.sequences, oldestKey)
+	if oldestRuleID != "" {
+		delete(c.sequences[oldestRuleID], oldestGroupValue)
 	}
 }

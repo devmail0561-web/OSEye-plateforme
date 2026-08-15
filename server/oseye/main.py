@@ -35,6 +35,7 @@ from oseye.decision.engine import DecisionEngine, PolicyOverrides
 from oseye.decision.human_queue import HumanApprovalQueue
 from oseye.decision.journal import DecisionJournal
 from oseye.forensic.case_manager import CaseManager
+from oseye.ingest.backpressure import BackpressureController
 from oseye.ingest.server import create_grpc_server
 from oseye.ml_engine.engine import MLEngine
 from oseye.normalizer.engine import NormalizerEngine
@@ -59,7 +60,6 @@ from oseye.threat_intel.client import ThreatIntelClient
 from oseye.threat_intel.providers.abuseipdb import AbuseIPDBProvider
 from oseye.threat_intel.providers.misp import MISPProvider
 from oseye.threat_intel.providers.virustotal import VirusTotalProvider
-from oseye.ingest.backpressure import BackpressureController
 from oseye.workers.correlation_worker import CorrelationWorker
 from oseye.workers.decision_worker import DecisionWorker
 from oseye.workers.ml_worker import MLWorker

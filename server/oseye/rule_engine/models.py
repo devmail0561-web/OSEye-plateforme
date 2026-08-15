@@ -25,6 +25,9 @@ class RuleDefinition:
     explanation: str
     source: str  # builtin | custom
     entity_key: str | None = None  # e.g. "hostname:src_ip" for temporal rules
+    # Pre-compiled bytecode for the condition — set at load time, None means
+    # compile-on-first-eval (fallback for dynamically created rules).
+    compiled_code: Any = field(default=None)
 
 
 @dataclass(slots=True)

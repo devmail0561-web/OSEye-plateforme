@@ -123,26 +123,27 @@ class SQLAlertRepository:
                 row = await session.get(AlertRow, str(alert.alert_id))
                 if row is None:
                     raise ValueError(f"Alert {alert.alert_id} not found")
-                updated = _alert_to_row(alert)
-                row.updated_at = updated.updated_at
-                row.severity = updated.severity
-                row.status = updated.status
-                row.rule_id = updated.rule_id
-                row.ml_triggered = updated.ml_triggered
-                row.ti_triggered = updated.ti_triggered
-                row.entity_id = updated.entity_id
-                row.hostname = updated.hostname
-                row.trigger_event_id = updated.trigger_event_id
-                row.related_event_ids = updated.related_event_ids
-                row.incident_chain_id = updated.incident_chain_id
-                row.title = updated.title
-                row.description = updated.description
-                row.mitre_techniques = updated.mitre_techniques
-                row.assigned_to = updated.assigned_to
-                row.false_positive_count = updated.false_positive_count
-                row.dst_ip = updated.dst_ip
-                row.pid = updated.pid
-                row.process_name = updated.process_name
+                row.updated_at = alert.updated_at.isoformat()
+                row.severity = alert.severity
+                row.status = alert.status
+                row.rule_id = alert.rule_id
+                row.ml_triggered = alert.ml_triggered
+                row.ti_triggered = alert.ti_triggered
+                row.entity_id = alert.entity_id
+                row.hostname = alert.hostname
+                row.trigger_event_id = str(alert.trigger_event_id)
+                row.related_event_ids = json.dumps([str(x) for x in alert.related_event_ids])
+                row.incident_chain_id = (
+                    str(alert.incident_chain_id) if alert.incident_chain_id else None
+                )
+                row.title = alert.title
+                row.description = alert.description
+                row.mitre_techniques = json.dumps(alert.mitre_techniques)
+                row.assigned_to = alert.assigned_to
+                row.false_positive_count = alert.false_positive_count
+                row.dst_ip = alert.dst_ip
+                row.pid = alert.pid
+                row.process_name = alert.process_name
         return alert
 
     async def list(self, filters: dict[str, object], pagination: Pagination) -> PageResult[Alert]:

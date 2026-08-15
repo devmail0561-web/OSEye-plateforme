@@ -43,10 +43,14 @@ func TestProcfsCollector_EmitsEvents(t *testing.T) {
 	if err := json.Unmarshal(ev.Raw, &payload); err != nil {
 		t.Fatalf("invalid JSON payload: %v — raw: %s", err, ev.Raw)
 	}
-	for _, field := range []string{"pid", "name"} {
+	for _, field := range []string{"event_type", "pid", "name"} {
 		if _, ok := payload[field]; !ok {
 			t.Errorf("payload missing field %q", field)
 		}
+	}
+
+	if et, _ := payload["event_type"].(string); et != "process_create" {
+		t.Errorf("event_type = %q, want process_create", et)
 	}
 
 	cancel()

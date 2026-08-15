@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 )
 
@@ -26,6 +27,10 @@ type Profile struct {
 
 	// Resource budgets calculated by server from host specs.
 	Budget ResourceBudget `json:"budget"`
+
+	// portsStr is BaselinePorts pre-converted to strings, cached at parse time.
+	// Not serialized — recomputed in setDerivedFields after every unmarshal.
+	portsStr []string
 }
 
 // ResourceBudget defines the resource limits for the local rule engine.
@@ -59,6 +64,8 @@ func DefaultProfile() *Profile {
 }
 
 // BaselineRefs returns all baselines as a map for the rule engine's ref resolution.
+// BaselinePorts are pre-converted to strings in setDerivedFields to avoid
+// repeated fmt.Sprintf calls on the hot path.
 func (p *Profile) BaselineRefs() map[string][]string {
 	refs := make(map[string][]string, 5)
 	if len(p.BaselineApps) > 0 {
@@ -73,14 +80,28 @@ func (p *Profile) BaselineRefs() map[string][]string {
 	if len(p.SetuidBinaries) > 0 {
 		refs["setuid_binaries"] = p.SetuidBinaries
 	}
-	if len(p.BaselinePorts) > 0 {
+	if len(p.portsStr) > 0 {
+		refs["baseline_ports"] = p.portsStr
+	} else if len(p.BaselinePorts) > 0 {
 		ports := make([]string, len(p.BaselinePorts))
 		for i, port := range p.BaselinePorts {
-			ports[i] = fmt.Sprintf("%d", port)
+			ports[i] = strconv.Itoa(port)
 		}
 		refs["baseline_ports"] = ports
 	}
 	return refs
+}
+
+// setDerivedFields precomputes fields that are expensive to recompute on every call.
+// Must be called after any json.Unmarshal into a Profile.
+func setDerivedFields(p *Profile) {
+	if len(p.BaselinePorts) > 0 {
+		ports := make([]string, len(p.BaselinePorts))
+		for i, port := range p.BaselinePorts {
+			ports[i] = strconv.Itoa(port)
+		}
+		p.portsStr = ports
+	}
 }
 
 // ProfileStore persists the host profile locally so it survives restarts.
@@ -105,6 +126,7 @@ func NewProfileStore(dir string) (*ProfileStore, error) {
 	if data, err := os.ReadFile(path); err == nil {
 		var p Profile
 		if err := json.Unmarshal(data, &p); err == nil {
+			setDerivedFields(&p)
 			ps.current = &p
 			slog.Info("hostprofile: loaded from disk", "name", p.Name, "version", p.Version)
 		}
@@ -123,6 +145,8 @@ func (ps *ProfileStore) Update(data []byte) error {
 	if err := json.Unmarshal(data, &p); err != nil {
 		return fmt.Errorf("hostprofile: parse profile: %w", err)
 	}
+
+	setDerivedFields(&p)
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()

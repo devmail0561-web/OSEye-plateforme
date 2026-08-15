@@ -38,7 +38,7 @@ class UserActivityLinker:
     def __init__(self, timeframe_seconds: int = 600) -> None:
         self._timeframe = timeframe_seconds
 
-    async def score(self, alert: "Alert", incident: "Incident") -> float:
+    async def score(self, alert: Alert, incident: Incident) -> float:
         if alert.hostname != incident.hostname:
             return 0.0
 

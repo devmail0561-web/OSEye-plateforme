@@ -18,24 +18,26 @@ import (
 	"github.com/oseye/agent/internal/collector"
 )
 
+var errStopped = fmt.Errorf("stopped")
+
 type procEvent struct {
-	PID     int    `json:"pid"`
-	PPID    int    `json:"ppid"`
-	Name    string `json:"name"`
-	Exe     string `json:"exe"`
-	Cmdline string `json:"cmdline"`
-	UID     int    `json:"uid"`
-	GID     int    `json:"gid"`
-	State   string `json:"state"`
+	EventType string `json:"event_type"`
+	PID       int    `json:"pid"`
+	PPID      int    `json:"ppid,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Exe       string `json:"exe,omitempty"`
+	Cmdline   string `json:"cmdline,omitempty"`
+	UID       int    `json:"uid,omitempty"`
+	GID       int    `json:"gid,omitempty"`
+	State     string `json:"state,omitempty"`
 }
 
-// ProcfsCollector scans /proc for active processes and emits one RawEvent per process.
 type ProcfsCollector struct {
 	stopCh      chan struct{}
 	mu          sync.Mutex
 	running     bool
 	lastErr     string
-	throttle    atomic.Value // float64 — replaces mutex-protected float (GO-009)
+	throttle    atomic.Value // float64
 	errCount    atomic.Int64
 	eventsTotal atomic.Int64
 }
@@ -64,55 +66,83 @@ func (c *ProcfsCollector) Start(ctx context.Context, out chan<- collector.RawEve
 		c.mu.Unlock()
 	}()
 
+	var prevPIDs map[int]struct{}
+	initialized := false
+
+	// Reuse timers across iterations to avoid allocating a new timer per cycle.
+	pauseTimer := time.NewTimer(200 * time.Millisecond)
+	pauseTimer.Stop()
+	scanTimer := time.NewTimer(5 * time.Second)
+	scanTimer.Stop()
+	defer pauseTimer.Stop()
+	defer scanTimer.Stop()
+
 	for {
 		throttle, _ := c.throttle.Load().(float64)
 
 		if throttle <= 0.0 {
+			pauseTimer.Reset(200 * time.Millisecond)
 			select {
 			case <-ctx.Done():
 				return nil
 			case <-c.stopCh:
 				return nil
-			case <-time.After(200 * time.Millisecond):
-				continue
+			case <-pauseTimer.C:
 			}
+			continue
 		}
 
 		interval := time.Duration(float64(5*time.Second) / throttle)
 
-		if err := c.scan(ctx, out); err != nil {
+		current, err := c.scan(ctx, out, prevPIDs, initialized)
+		switch {
+		case err == errStopped:
+			return nil
+		case err != nil:
 			c.errCount.Add(1)
 			c.mu.Lock()
 			c.lastErr = err.Error()
 			c.mu.Unlock()
+		default:
+			prevPIDs = current
+			initialized = true
 		}
 
+		scanTimer.Reset(interval)
 		select {
 		case <-ctx.Done():
+			if !scanTimer.Stop() {
+				<-scanTimer.C
+			}
 			return nil
 		case <-c.stopCh:
+			if !scanTimer.Stop() {
+				<-scanTimer.C
+			}
 			return nil
-		case <-time.After(interval):
+		case <-scanTimer.C:
 		}
 	}
 }
 
-func (c *ProcfsCollector) scan(ctx context.Context, out chan<- collector.RawEvent) error {
+func (c *ProcfsCollector) scan(ctx context.Context, out chan<- collector.RawEvent, prevPIDs map[int]struct{}, initialized bool) (map[int]struct{}, error) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
-		return fmt.Errorf("readdir /proc: %w", err)
+		return nil, fmt.Errorf("readdir /proc: %w", err)
 	}
 
 	c.mu.Lock()
 	stopCh := c.stopCh
 	c.mu.Unlock()
 
+	currentPIDs := make(map[int]struct{}, len(entries))
+
 	for _, entry := range entries {
 		select {
 		case <-ctx.Done():
-			return nil
+			return nil, errStopped
 		case <-stopCh:
-			return nil
+			return nil, errStopped
 		default:
 		}
 
@@ -121,29 +151,57 @@ func (c *ProcfsCollector) scan(ctx context.Context, out chan<- collector.RawEven
 			continue
 		}
 
-		ev, err := readProcess(pid)
-		if err != nil {
-			continue
-		}
-
-		raw, err := json.Marshal(ev)
-		if err != nil {
-			continue
-		}
-
-		c.eventsTotal.Add(1)
-		select {
-		case out <- collector.RawEvent{
-			Source:    "procfs",
-			OS:        "linux",
-			Timestamp: time.Now().UnixNano(),
-			Raw:       raw,
-		}:
-		case <-ctx.Done():
-			return nil
+		if !initialized {
+			ev, err := readProcess(pid)
+			if err != nil {
+				continue
+			}
+			currentPIDs[pid] = struct{}{}
+			ev.EventType = "process_create"
+			c.emit(ctx, out, stopCh, ev)
+		} else if _, seen := prevPIDs[pid]; seen {
+			currentPIDs[pid] = struct{}{}
+		} else {
+			ev, err := readProcess(pid)
+			if err != nil {
+				// Process exited between ReadDir and readProcess — skip to
+				// avoid an orphan process_exit on the next scan.
+				continue
+			}
+			currentPIDs[pid] = struct{}{}
+			ev.EventType = "process_create"
+			c.emit(ctx, out, stopCh, ev)
 		}
 	}
-	return nil
+
+	if initialized {
+		for pid := range prevPIDs {
+			if _, stillAlive := currentPIDs[pid]; !stillAlive {
+				ev := &procEvent{EventType: "process_exit", PID: pid}
+				c.emit(ctx, out, stopCh, ev)
+			}
+		}
+	}
+
+	return currentPIDs, nil
+}
+
+func (c *ProcfsCollector) emit(ctx context.Context, out chan<- collector.RawEvent, stopCh chan struct{}, ev *procEvent) {
+	raw, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	c.eventsTotal.Add(1)
+	select {
+	case out <- collector.RawEvent{
+		Source:    "procfs",
+		OS:        "linux",
+		Timestamp: time.Now().UnixNano(),
+		Raw:       raw,
+	}:
+	case <-ctx.Done():
+	case <-stopCh:
+	}
 }
 
 func readProcess(pid int) (*procEvent, error) {

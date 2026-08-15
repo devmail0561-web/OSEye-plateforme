@@ -37,37 +37,37 @@ func NewBatcher(maxSize int, timeout time.Duration) *Batcher {
 // The pending batch is flushed on ctx.Done() if non-empty.
 func (b *Batcher) Run(ctx context.Context, in <-chan collector.RawEvent, sendFn func([]collector.RawEvent) error) error {
 	batch := make([]collector.RawEvent, 0, b.maxSize)
-	var timer *time.Timer
+
+	// Timer is created once and reused via Reset to avoid per-batch allocations.
+	timer := time.NewTimer(b.timeout)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	var timerC <-chan time.Time // nil when timer is not active
 
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
-		toSend := make([]collector.RawEvent, len(batch))
-		copy(toSend, batch)
-		batch = batch[:0]
+		// Handoff: pass ownership of the slice to sendFn, allocate a fresh one.
+		toSend := batch
+		batch = make([]collector.RawEvent, 0, b.maxSize)
 		_ = sendFn(toSend)
 	}
 
 	stopTimer := func() {
-		if timer != nil {
-			timer.Stop()
-			// drain the channel so a stale tick can't trigger a double-flush
-			select {
-			case <-timer.C:
-			default:
+		if timerC != nil {
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
-			timer = nil
+			timerC = nil
 		}
 	}
 
 	for {
-		// Determine whether we have a running timer channel to select on.
-		var timerC <-chan time.Time
-		if timer != nil {
-			timerC = timer.C
-		}
-
 		select {
 		case <-ctx.Done():
 			stopTimer()
@@ -76,7 +76,6 @@ func (b *Batcher) Run(ctx context.Context, in <-chan collector.RawEvent, sendFn 
 
 		case ev, ok := <-in:
 			if !ok {
-				// Input channel closed; flush what we have and return.
 				stopTimer()
 				flush()
 				return nil
@@ -84,7 +83,8 @@ func (b *Batcher) Run(ctx context.Context, in <-chan collector.RawEvent, sendFn 
 
 			// Start the deadline timer on the first event of a new batch.
 			if len(batch) == 0 {
-				timer = time.NewTimer(b.timeout)
+				timer.Reset(b.timeout)
+				timerC = timer.C
 			}
 			batch = append(batch, ev)
 
@@ -94,7 +94,7 @@ func (b *Batcher) Run(ctx context.Context, in <-chan collector.RawEvent, sendFn 
 			}
 
 		case <-timerC:
-			timer = nil
+			timerC = nil
 			flush()
 		}
 	}

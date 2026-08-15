@@ -15,7 +15,7 @@ Score formula:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from oseye.core.schema import Alert, Incident
@@ -33,7 +33,7 @@ class PidLineageLinker:
     def __init__(self, timeframe_seconds: int = 300) -> None:
         self._timeframe = timeframe_seconds
 
-    async def score(self, alert: "Alert", incident: "Incident") -> float:
+    async def score(self, alert: Alert, incident: Incident) -> float:
         if alert.hostname != incident.hostname:
             return 0.0
 

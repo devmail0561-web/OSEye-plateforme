@@ -22,8 +22,8 @@ class WinnetstatAdapter:
         state = str(data.get("state", ""))
         proto = str(data.get("proto", "tcp"))
 
-        # Outbound connections to non-local IPs are more interesting
-        is_external = remote_addr and not remote_addr.startswith(("127.", "0.0.0.0", "::", "10.", "192.168.", "172."))
+        _local = ("127.", "0.0.0.0", "::", "10.", "192.168.", "172.")
+        is_external = remote_addr and not remote_addr.startswith(_local)
         severity = "low" if is_external else "info"
 
         return UniversalEvent(

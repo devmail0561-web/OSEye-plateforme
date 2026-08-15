@@ -26,12 +26,18 @@ Corrections vs initial version
 from __future__ import annotations
 
 import logging
+import sys
 import uuid
 from collections.abc import Callable
 from typing import Any
 
 from oseye.bus.interface import EventBus
 from oseye.core.schema import UniversalEvent
+from oseye.normalizer.adapters.darwin.darwinnet import DarwinnetAdapter
+from oseye.normalizer.adapters.darwin.es import EsAdapter
+from oseye.normalizer.adapters.darwin.kqueue import KqueueAdapter
+from oseye.normalizer.adapters.darwin.ps import PsAdapter
+from oseye.normalizer.adapters.darwin.unifiedlog import UnifiedlogAdapter
 from oseye.normalizer.adapters.linux.auditd import AuditdAdapter
 from oseye.normalizer.adapters.linux.ebpf import EBPFAdapter
 from oseye.normalizer.adapters.linux.fanotify import FanotifyAdapter
@@ -47,11 +53,6 @@ from oseye.normalizer.adapters.windows.fswatch import FswatchAdapter
 from oseye.normalizer.adapters.windows.registry import RegistryAdapter
 from oseye.normalizer.adapters.windows.toolhelp32 import Toolhelp32Adapter
 from oseye.normalizer.adapters.windows.winnetstat import WinnetstatAdapter
-from oseye.normalizer.adapters.darwin.darwinnet import DarwinnetAdapter
-from oseye.normalizer.adapters.darwin.es import EsAdapter
-from oseye.normalizer.adapters.darwin.kqueue import KqueueAdapter
-from oseye.normalizer.adapters.darwin.ps import PsAdapter
-from oseye.normalizer.adapters.darwin.unifiedlog import UnifiedlogAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class NormalizerEngine:
         adapter is registered, or when normalisation / validation fails.
         Failed events are forwarded to ``events:dead_letter``.
         """
-        key = (os_name.lower(), source.lower())
+        key = (sys.intern(os_name.lower()), sys.intern(source.lower()))
         adapter = self._adapters.get(key)
 
         if adapter is None:

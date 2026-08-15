@@ -105,8 +105,8 @@ func (b *Buffer) Pop(n int) ([][]byte, error) {
 		return nil, fmt.Errorf("buffer: select events: %w", err)
 	}
 
-	var ids []int64
-	var payloads [][]byte
+	ids := make([]int64, 0, n)
+	payloads := make([][]byte, 0, n)
 	for rows.Next() {
 		var id int64
 		var payload []byte
@@ -123,18 +123,9 @@ func (b *Buffer) Pop(n int) ([][]byte, error) {
 	}
 
 	if len(ids) > 0 {
-		// Build a parameterised DELETE for the fetched IDs.
-		// We avoid a sub-query to keep the plan simple and fast.
-		del, err := tx.Prepare(`DELETE FROM buffer WHERE id = ?`)
-		if err != nil {
-			return nil, fmt.Errorf("buffer: prepare delete: %w", err)
-		}
-		defer del.Close()
-
-		for _, id := range ids {
-			if _, err := del.Exec(id); err != nil {
-				return nil, fmt.Errorf("buffer: delete event %d: %w", id, err)
-			}
+		// IDs are AUTOINCREMENT FIFO — a single range DELETE replaces N individual deletes.
+		if _, err := tx.Exec(`DELETE FROM buffer WHERE id <= ?`, ids[len(ids)-1]); err != nil {
+			return nil, fmt.Errorf("buffer: delete events: %w", err)
 		}
 	}
 

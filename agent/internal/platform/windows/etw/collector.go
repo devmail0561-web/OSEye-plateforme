@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os/exec"
 	"sync/atomic"
@@ -30,7 +31,7 @@ const pollInterval = 5 * time.Second
 type Collector struct {
 	logger   *slog.Logger
 	stopCh   chan struct{}
-	running  bool
+	running  atomic.Bool
 	throttle atomic.Value
 }
 
@@ -48,15 +49,15 @@ func New() *Collector {
 func (c *Collector) Name() string { return "etw" }
 
 func (c *Collector) Start(ctx context.Context, out chan<- collector.RawEvent) error {
-	c.running = true
+	c.running.Store(true)
 	go c.run(ctx, out)
 	return nil
 }
 
 func (c *Collector) Stop() error {
-	if c.running {
+	if c.running.Load() {
 		close(c.stopCh)
-		c.running = false
+		c.running.Store(false)
 	}
 	return nil
 }
@@ -64,15 +65,15 @@ func (c *Collector) Stop() error {
 func (c *Collector) SetThrottle(f float64) { c.throttle.Store(f) }
 
 func (c *Collector) Health() collector.CollectorHealth {
-	return collector.CollectorHealth{Running: c.running}
+	return collector.CollectorHealth{Running: c.running.Load()}
 }
 
 type etwEvent struct {
-	Provider  string `json:"provider"`
-	EventID   int    `json:"event_id"`
-	EventType string `json:"event_type"`
-	PID       int    `json:"pid,omitempty"`
-	Message   string `json:"message,omitempty"`
+	Provider    string `json:"provider"`
+	EventID     int    `json:"event_id"`
+	EventType   string `json:"event_type"`
+	PID         int    `json:"pid,omitempty"`
+	Message     string `json:"message,omitempty"`
 	TimeCreated string `json:"time_created,omitempty"`
 }
 
@@ -92,25 +93,8 @@ func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	// PowerShell script: read last N events from Security + System logs.
-	// Outputs NDJSON via ConvertTo-Json -Compress.
-	psScript := `
-$logs = @('Security', 'System')
-foreach ($log in $logs) {
-    try {
-        Get-WinEvent -LogName $log -MaxEvents 20 -ErrorAction SilentlyContinue |
-            ForEach-Object {
-                [PSCustomObject]@{
-                    Provider    = $_.ProviderName
-                    EventID     = $_.Id
-                    PID         = $_.ProcessId
-                    Message     = $_.Message -replace '\s+', ' '
-                    TimeCreated = $_.TimeCreated.ToString('o')
-                } | ConvertTo-Json -Compress
-            }
-    } catch {}
-}
-`
+	// Local — avoids struct field access from multiple goroutines.
+	lastPoll := time.Now().Add(-pollInterval)
 
 	for {
 		select {
@@ -125,10 +109,34 @@ foreach ($log in $logs) {
 			continue
 		}
 
+		startStr := lastPoll.UTC().Format("2006-01-02T15:04:05Z")
+		psScript := fmt.Sprintf(`
+$start = [datetime]'%s'
+$logs = @('Security','System')
+foreach ($log in $logs) {
+    try {
+        Get-WinEvent -FilterHashtable @{LogName=$log; StartTime=$start} -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                [PSCustomObject]@{
+                    Provider    = $_.ProviderName
+                    EventID     = $_.Id
+                    PID         = $_.ProcessId
+                    Message     = $_.Message -replace '\s+', ' '
+                    TimeCreated = $_.TimeCreated.ToString('o')
+                } | ConvertTo-Json -Compress
+            }
+    } catch {}
+}
+`, startStr)
+
+		windowStart := lastPoll
+		lastPoll = time.Now()
+
 		cmd := exec.CommandContext(ctx, "powershell.exe", "-NonInteractive", "-NoProfile", "-Command", psScript)
 		out2, err := cmd.Output()
 		if err != nil {
-			c.logger.Debug("etw: powershell error", "err", err)
+			c.logger.Warn("etw: powershell error", "err", err)
+			lastPoll = windowStart
 			continue
 		}
 

@@ -3,7 +3,7 @@
 package watchdog
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
@@ -115,22 +115,22 @@ func (w *Watchdog) readCPUPercent() (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	raw := string(data)
 
 	// The comm field (index 1) is wrapped in parentheses and may contain
 	// spaces. Skip past the last ')' before indexing into the remaining fields.
-	idx := strings.LastIndex(raw, ")")
+	// Use bytes.LastIndexByte to avoid converting the whole slice to string.
+	idx := bytes.LastIndexByte(data, ')')
 	if idx < 0 {
 		return 0, nil
 	}
 	// Fields after comm start at idx+2 (skip ') ').
-	rest := strings.Fields(raw[idx+2:])
+	rest := bytes.Fields(data[idx+2:])
 	// rest[0]=state, rest[11]=utime, rest[12]=stime (0-based after comm+state).
 	if len(rest) < 13 {
 		return 0, nil
 	}
-	utime, err1 := strconv.ParseUint(rest[11], 10, 64)
-	stime, err2 := strconv.ParseUint(rest[12], 10, 64)
+	utime, err1 := strconv.ParseUint(string(rest[11]), 10, 64)
+	stime, err2 := strconv.ParseUint(string(rest[12]), 10, 64)
 	if err1 != nil || err2 != nil {
 		return 0, nil
 	}
@@ -169,6 +169,7 @@ func (w *Watchdog) readCPUPercent() (float64, error) {
 }
 
 // readMemMB reads /proc/self/status VmRSS (kB) and returns it in MB.
+// Uses a stack-allocated buffer to avoid the heap alloc of bufio.NewScanner.
 func (w *Watchdog) readMemMB() (float64, error) {
 	f, err := os.Open("/proc/self/status")
 	if err != nil {
@@ -176,21 +177,31 @@ func (w *Watchdog) readMemMB() (float64, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "VmRSS:") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				kb, err := strconv.ParseFloat(parts[1], 64)
-				if err != nil {
-					return 0, err
-				}
-				return kb / 1024.0, nil
-			}
-		}
+	var buf [4096]byte
+	n, _ := f.Read(buf[:])
+	data := buf[:n]
+
+	const prefix = "VmRSS:"
+	idx := bytes.Index(data, []byte(prefix))
+	if idx < 0 {
+		return 0, nil
 	}
-	return 0, scanner.Err()
+	// Advance past "VmRSS:" and parse the first numeric field.
+	fields := bytes.Fields(data[idx+len(prefix):])
+	if len(fields) == 0 {
+		return 0, nil
+	}
+	// fields[0] ends at the newline or next field; extract just the number.
+	numEnd := bytes.IndexByte(fields[0], '\n')
+	numBytes := fields[0]
+	if numEnd >= 0 {
+		numBytes = fields[0][:numEnd]
+	}
+	kb, err := strconv.ParseFloat(strings.TrimSpace(string(numBytes)), 64)
+	if err != nil {
+		return 0, err
+	}
+	return kb / 1024.0, nil
 }
 
 // readClkTck returns the kernel timer frequency (HZ) from /proc/timer_list or

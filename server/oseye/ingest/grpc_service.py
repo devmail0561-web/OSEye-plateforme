@@ -211,16 +211,45 @@ class AgentServiceServicer:
             total_rejected = 0
             all_errors: list[str] = []
 
+            # Resolve once per connection — cn is fixed for the stream lifetime.
+            agent_public_key = self._get_agent_key(cn)
+            if agent_public_key is None:
+                _logger.warning("agent_key_not_registered", cn=cn)
+
+            # Determine dispatch mode once — the calling context (sync gRPC
+            # thread vs async event loop) does not change per request or event.
+            try:
+                _running_loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+                _use_task = True
+            except RuntimeError:
+                _running_loop = None
+                _use_task = False
+
+            normalized_topic = "events:normalized"
+
+            def _on_task_error(t: asyncio.Task) -> None:  # noqa: ANN001
+                if not t.cancelled() and t.exception() is not None:
+                    _logger.error(
+                        "bus_publish_failed",
+                        topic=normalized_topic,
+                        error=str(t.exception()),
+                    )
+
+            def _on_future_error(f: Any) -> None:
+                if f.exception() is not None:
+                    _logger.error(
+                        "bus_publish_failed",
+                        topic=normalized_topic,
+                        error=str(f.exception()),
+                    )
+
             for request in request_iterator:
-                agent_public_key = self._get_agent_key(cn)
-                if agent_public_key is None:
-                    _logger.warning("agent_key_not_registered", cn=cn)
-                    if self._require_agent_keys:
-                        context.abort(
-                            grpc.StatusCode.UNAUTHENTICATED,
-                            f"No Ed25519 public key registered for agent {cn!r}",
-                        )
-                        return
+                if agent_public_key is None and self._require_agent_keys:
+                    context.abort(
+                        grpc.StatusCode.UNAUTHENTICATED,
+                        f"No Ed25519 public key registered for agent {cn!r}",
+                    )
+                    return
                 result = self._validator.validate(request, agent_public_key=agent_public_key)
                 total_accepted += result.accepted
                 total_rejected += result.rejected
@@ -241,51 +270,23 @@ class AgentServiceServicer:
                     except ValueError:
                         pass
 
-                normalized_topic = "events:normalized"
+                # Collect valid payloads for this batch, then publish in one shot.
+                batch_payloads: list[bytes] = []
                 for event_index, pb_event in enumerate(request.events):
-                    is_rejected = event_index in rejected_indices
-                    if is_rejected:
+                    if event_index in rejected_indices:
                         continue
-
                     event = pb_to_event(pb_event, agent_id_override=cn)
-                    payload = event.model_dump_json().encode("utf-8")
-                    # pb_to_event already normalises the event — publish directly
-                    # to events:normalized so the storage writer can persist it
-                    # without a second normalisation pass.
-                    # [HIGH-2] publish safely regardless of calling context:
-                    # - from a running event loop (tests/async): use ensure_future
-                    # - from a sync gRPC thread with a known loop: run_coroutine_threadsafe
-                    # - fallback: asyncio.run (creates a temporary loop)
-                    coro = self._bus.publish(normalized_topic, payload)
-                    try:
-                        running_loop = asyncio.get_running_loop()
-                        # BUG-009: attach a done callback to log publish errors
-                        # instead of silently discarding them.
-                        # PC-11: ensure_future(loop=) is deprecated in Python 3.12+;
-                        # use running_loop.create_task() which is the correct API.
-                        task = running_loop.create_task(coro)
-                        task.add_done_callback(
-                            lambda t: _logger.error(
-                                "bus_publish_failed",
-                                topic=normalized_topic,
-                                error=str(t.exception()),
-                            )
-                            if not t.cancelled() and t.exception() is not None
-                            else None
-                        )
-                    except RuntimeError:
-                        # No running loop — we are in a sync thread
+                    batch_payloads.append(event.model_dump_json().encode("utf-8"))
+
+                if batch_payloads:
+                    coro = self._bus.publish_batch(normalized_topic, batch_payloads)
+                    if _use_task and _running_loop is not None:
+                        _running_loop.create_task(coro).add_done_callback(_on_task_error)
+                    else:
                         loop = self._loop
                         if loop is not None and loop.is_running():
-                            future = asyncio.run_coroutine_threadsafe(coro, loop)
-                            future.add_done_callback(
-                                lambda f: _logger.error(
-                                    "bus_publish_failed",
-                                    topic=normalized_topic,
-                                    error=str(f.exception()),
-                                )
-                                if f.exception() is not None
-                                else None
+                            asyncio.run_coroutine_threadsafe(coro, loop).add_done_callback(
+                                _on_future_error
                             )
                         else:
                             try:

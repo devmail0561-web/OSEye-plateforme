@@ -12,6 +12,7 @@ import (
 // Signer holds an Ed25519 private key and exposes Sign/PublicKey operations.
 type Signer struct {
 	priv ed25519.PrivateKey
+	pub  ed25519.PublicKey // cached at construction — read-only after init, no mutex needed
 }
 
 // New loads an Ed25519 private key from a PEM-encoded PKCS8 file.
@@ -30,7 +31,7 @@ func NewEphemeral() (*Signer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("signer: generate key: %w", err)
 	}
-	return &Signer{priv: priv}, nil
+	return &Signer{priv: priv, pub: priv.Public().(ed25519.PublicKey)}, nil
 }
 
 // Sign signs data using the Ed25519 private key and returns the 64-byte signature.
@@ -41,9 +42,8 @@ func (s *Signer) Sign(data []byte) ([]byte, error) {
 
 // PublicKey returns the 32-byte Ed25519 public key.
 func (s *Signer) PublicKey() []byte {
-	pub := s.priv.Public().(ed25519.PublicKey)
 	out := make([]byte, ed25519.PublicKeySize)
-	copy(out, pub)
+	copy(out, s.pub)
 	return out
 }
 
@@ -64,5 +64,5 @@ func parsePEM(data []byte) (*Signer, error) {
 		return nil, fmt.Errorf("signer: key is not Ed25519 (got %T)", key)
 	}
 
-	return &Signer{priv: priv}, nil
+	return &Signer{priv: priv, pub: priv.Public().(ed25519.PublicKey)}, nil
 }

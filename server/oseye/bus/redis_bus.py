@@ -22,9 +22,15 @@ class RedisEventBus:
     group so messages survive brief disconnects.
     """
 
-    def __init__(self, redis_url: str, consumer_group: str = "oseye") -> None:
+    def __init__(
+        self,
+        redis_url: str,
+        consumer_group: str = "oseye",
+        read_batch_size: int = 100,
+    ) -> None:
         self._redis_url = redis_url
         self._group = consumer_group
+        self._read_batch_size = read_batch_size
         self._client: Any = None
         self._consumer_id = f"consumer-{id(self)}"
         self._closed = False
@@ -52,6 +58,15 @@ class RedisEventBus:
         client = await self._get_client()
         await client.xadd(topic, {"data": message})
 
+    async def publish_batch(self, topic: str, messages: list[bytes]) -> None:
+        if not messages:
+            return
+        client = await self._get_client()
+        async with client.pipeline(transaction=False) as pipe:
+            for msg in messages:
+                pipe.xadd(topic, {"data": msg})
+            await pipe.execute()
+
     async def subscribe(self, topic: str) -> AsyncGenerator[bytes, None]:
         client = await self._get_client()
         await self._ensure_group(client, topic)
@@ -69,7 +84,7 @@ class RedisEventBus:
                     self._group,
                     self._consumer_id,
                     {topic: ">"},
-                    count=10,
+                    count=self._read_batch_size,
                     block=100,
                 )
                 _backoff = 0.1  # reset on success
@@ -99,13 +114,19 @@ class RedisEventBus:
         seen_topics: set[str] = set()
         streams: dict[str, str] = {}
         matching: list[str] = []
+        _scan_interval = 5.0
+        _last_scan = 0.0
         while not self._closed:
             try:
-                # [HIGH-1] pass pattern natively to Redis SCAN
-                matching.clear()
-                async for raw_key in client.scan_iter(match=pattern, count=100):
-                    key_str = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
-                    matching.append(key_str)
+                # Throttle SCAN to once every 5s — new topics arrive rarely
+                # (agent enrollment), not on every message.
+                _now = asyncio.get_event_loop().time()
+                if _now - _last_scan >= _scan_interval:
+                    _last_scan = _now
+                    matching.clear()
+                    async for raw_key in client.scan_iter(match=pattern, count=100):
+                        key_str = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+                        matching.append(key_str)
                 # [MEDIUM-2] only rebuild streams dict when seen_topics changes
                 new_topics = False
                 for topic in matching:
@@ -121,7 +142,7 @@ class RedisEventBus:
                             self._group,
                             self._consumer_id,
                             streams,
-                            count=10,
+                            count=self._read_batch_size,
                             block=100,
                         )
                     except aioredis.ResponseError as e:

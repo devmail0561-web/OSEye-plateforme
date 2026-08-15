@@ -46,6 +46,18 @@ func (c *Chain) Current() []byte {
 	return out
 }
 
+// AppendTo is like Append but writes into a caller-provided buffer, avoiding
+// a heap allocation. The caller can declare `var out [32]byte` on the stack.
+func (c *Chain) AppendTo(payload []byte, out *[32]byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	h := blake3.New()
+	_, _ = h.Write(c.current[:])
+	_, _ = h.Write(payload)
+	h.Sum(c.current[:0])
+	*out = c.current
+}
+
 // Reset sets the chain state back to all zeros.
 func (c *Chain) Reset() {
 	c.mu.Lock()

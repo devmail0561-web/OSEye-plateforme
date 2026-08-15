@@ -37,8 +37,12 @@ DEV_PLUGINS_DIR := $(DEV_DATA_DIR)/plugins
 DEV_ML_DIR      := $(DEV_DATA_DIR)
 
 # Variables d'environnement communes pour run-server et run-server-mtls
+OSEYE_CHECKPOINT_HMAC_KEY ?= $(shell openssl rand -hex 32 2>/dev/null || echo dev-hmac-key-replace-in-prod)
+
 define DEV_ENV
 	OSEYE_SECRET_KEY=$(OSEYE_SECRET_KEY) \
+	OSEYE_INSECURE=true \
+	OSEYE_CHECKPOINT_HMAC_KEY=$(OSEYE_CHECKPOINT_HMAC_KEY) \
 	OSEYE_ENROLLMENT_TOKEN_DIR=$(DEV_DATA_DIR)/enrollment_tokens \
 	OSEYE_JWT_PRIVATE_KEY_PATH=$(DEV_CERTS_DIR)/jwt_private.pem \
 	OSEYE_JWT_PUBLIC_KEY_PATH=$(DEV_CERTS_DIR)/jwt_public.pem \
@@ -257,19 +261,22 @@ version:
 build-agent: $(DIST_DIR)/oseye-agent-$(PLATFORM)
 build-config: $(DIST_DIR)/oseye-config-$(PLATFORM)
 build-windows: ## Cross-compile Windows agent (amd64)
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+	mkdir -p $(DIST_DIR)
+	cd agent && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 	  $(GOBIN)/go build -trimpath -ldflags "$(LDFLAGS)" \
-	  -o $(DIST_DIR)/oseye-agent-windows-amd64.exe ./agent/cmd/oseye-agent && \
-	  ln -sf oseye-agent-windows-amd64.exe $(DIST_DIR)/oseye-agent.exe
+	  -o $(DIST_DIR)/oseye-agent-windows-amd64.exe ./cmd/oseye-agent
+	ln -sf oseye-agent-windows-amd64.exe $(DIST_DIR)/oseye-agent.exe
 build-darwin-amd64: ## Cross-compile macOS agent (Intel)
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 \
+	mkdir -p $(DIST_DIR)
+	cd agent && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 \
 	  $(GOBIN)/go build -trimpath -ldflags "$(LDFLAGS)" \
-	  -o $(DIST_DIR)/oseye-agent-darwin-amd64 ./agent/cmd/oseye-agent && \
-	  ln -sf oseye-agent-darwin-amd64 $(DIST_DIR)/oseye-agent-darwin
+	  -o $(DIST_DIR)/oseye-agent-darwin-amd64 ./cmd/oseye-agent
+	ln -sf oseye-agent-darwin-amd64 $(DIST_DIR)/oseye-agent-darwin
 build-darwin-arm64: ## Cross-compile macOS agent (Apple Silicon)
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 \
+	mkdir -p $(DIST_DIR)
+	cd agent && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 \
 	  $(GOBIN)/go build -trimpath -ldflags "$(LDFLAGS)" \
-	  -o $(DIST_DIR)/oseye-agent-darwin-arm64 ./agent/cmd/oseye-agent
+	  -o $(DIST_DIR)/oseye-agent-darwin-arm64 ./cmd/oseye-agent
 build-all-agents: build-agent build-windows build-darwin-amd64 build-darwin-arm64
 
 # Build the static agent binary

@@ -135,10 +135,21 @@ func ParseRuleSet(data []byte) (*RuleSet, error) {
 	return &rs, nil
 }
 
-// CompiledRule is a Rule with pre-compiled regex patterns for fast evaluation.
+// CompiledCondition is a Condition with values pre-extracted at compile time
+// to avoid repeated type assertions and map allocations on the hot path.
+type CompiledCondition struct {
+	Condition
+	strVal string            // pre-extracted for op ∈ {eq, neq, contains}
+	hasStr bool              // true if strVal is valid
+	inSet  map[string]struct{} // pre-built O(1) set for op ∈ {in, not_in} on static lists
+}
+
+// CompiledRule is a Rule with pre-compiled regex patterns and pre-extracted
+// condition values for fast evaluation.
 type CompiledRule struct {
 	Rule
-	compiledPatterns map[int]*regexp.Regexp // condition index → compiled regex
+	compiledPatterns   map[int]*regexp.Regexp
+	compiledConditions []CompiledCondition
 }
 
 // regexCache is a bounded LRU cache for compiled regex patterns.
@@ -179,24 +190,68 @@ func (c *regexCache) get(pattern string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-// CompileRules pre-compiles all regex patterns in the rule set.
+// CompileRules pre-compiles regex patterns and pre-extracts condition values.
 func CompileRules(rules []Rule, cache *regexCache) []CompiledRule {
 	compiled := make([]CompiledRule, 0, len(rules))
 	for _, r := range rules {
 		cr := CompiledRule{
-			Rule:             r,
-			compiledPatterns: make(map[int]*regexp.Regexp),
+			Rule:               r,
+			compiledPatterns:   make(map[int]*regexp.Regexp),
+			compiledConditions: make([]CompiledCondition, len(r.Conditions)),
 		}
 		for i, cond := range r.Conditions {
-			if cond.Op == "regex" {
+			cc := CompiledCondition{Condition: cond}
+			switch cond.Op {
+			case "eq", "neq", "contains":
+				if s, ok := cond.Value.(string); ok {
+					cc.strVal = s
+					cc.hasStr = true
+				}
+			case "regex":
 				if pattern, ok := cond.Value.(string); ok {
 					if re, err := cache.get(pattern); err == nil {
 						cr.compiledPatterns[i] = re
 					}
 				}
+			case "in", "not_in":
+				cc.inSet = buildInSet(cond.Value)
 			}
+			cr.compiledConditions[i] = cc
 		}
 		compiled = append(compiled, cr)
 	}
 	return compiled
+}
+
+// buildInSet converts a static list value into an O(1) lookup set.
+// Returns nil for profile references ({"ref": ...}) — those stay dynamic.
+func buildInSet(value interface{}) map[string]struct{} {
+	switch v := value.(type) {
+	case []interface{}:
+		// Skip if it's a profile reference.
+		if len(v) == 1 {
+			if m, ok := v[0].(map[string]interface{}); ok {
+				if _, isRef := m["ref"]; isRef {
+					return nil
+				}
+			}
+		}
+		set := make(map[string]struct{}, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				set[s] = struct{}{}
+			}
+		}
+		return set
+	case []string:
+		set := make(map[string]struct{}, len(v))
+		for _, s := range v {
+			set[s] = struct{}{}
+		}
+		return set
+	case map[string]interface{}:
+		// Profile reference — keep dynamic.
+		return nil
+	}
+	return nil
 }
