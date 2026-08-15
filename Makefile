@@ -243,7 +243,9 @@ run-agent-mtls:
 # ── Packaging ─────────────────────────────────────────────────────────────────
 
 VERSION  ?= $(shell cat VERSION 2>/dev/null || echo "0.0.0-dev")
+OS       ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH     ?= $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+PLATFORM := $(OS)-$(ARCH)
 DIST_DIR := $(CURDIR)/dist
 NFPM     := nfpm
 LDFLAGS  := -s -w -X main.version=$(VERSION)
@@ -251,37 +253,43 @@ LDFLAGS  := -s -w -X main.version=$(VERSION)
 version:
 	@echo $(VERSION)
 
-# Convenience aliases for relative paths
-build-agent: $(DIST_DIR)/oseye-agent
-build-config: $(DIST_DIR)/oseye-config
+# Convenience aliases
+build-agent: $(DIST_DIR)/oseye-agent-$(PLATFORM)
+build-config: $(DIST_DIR)/oseye-config-$(PLATFORM)
 
 # Build the static agent binary
-$(DIST_DIR)/oseye-agent:
-	@echo "==> Build oseye-agent $(VERSION) (CGO_ENABLED=0, -trimpath)"
+$(DIST_DIR)/oseye-agent-$(PLATFORM):
+	@echo "==> Build oseye-agent-$(PLATFORM) $(VERSION) (CGO_ENABLED=0, -trimpath)"
 	mkdir -p $(DIST_DIR)
 	cd agent && CGO_ENABLED=0 GOOS=linux \
 	  $(GOBIN)/go build -trimpath \
 	  -ldflags "$(LDFLAGS)" \
-	  -o $(DIST_DIR)/oseye-agent \
+	  -o $(DIST_DIR)/oseye-agent-$(PLATFORM) \
 	  ./cmd/oseye-agent
+	ln -sf oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-agent
 
 # Build the config CLI binary
-$(DIST_DIR)/oseye-config:
-	@echo "==> Build oseye-config $(VERSION) (CGO_ENABLED=0, -trimpath)"
+$(DIST_DIR)/oseye-config-$(PLATFORM):
+	@echo "==> Build oseye-config-$(PLATFORM) $(VERSION) (CGO_ENABLED=0, -trimpath)"
 	mkdir -p $(DIST_DIR)
 	cd agent && CGO_ENABLED=0 GOOS=linux \
 	  $(GOBIN)/go build -trimpath \
 	  -ldflags "$(LDFLAGS)" \
-	  -o $(DIST_DIR)/oseye-config \
+	  -o $(DIST_DIR)/oseye-config-$(PLATFORM) \
 	  ./cmd/oseye-config
+	ln -sf oseye-config-$(PLATFORM) $(DIST_DIR)/oseye-config
 
 # Build .deb + .rpm packages for the agent
-package-agent: $(DIST_DIR)/oseye-agent $(DIST_DIR)/oseye-config
-	@echo "==> Packaging oseye-agent $(VERSION) (.deb + .rpm)"
+package-agent: $(DIST_DIR)/oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-config-$(PLATFORM)
+	@echo "==> Packaging oseye-agent $(VERSION) (.deb + .rpm) [$(PLATFORM)]"
 	mkdir -p $(DIST_DIR)
+	# nfpm needs unversioned names — symlink then package
+	ln -sf oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-agent
+	ln -sf oseye-config-$(PLATFORM) $(DIST_DIR)/oseye-config
 	VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
 	  --config packaging/nfpm-agent.yaml \
 	  --target $(DIST_DIR)
+	rm -f $(DIST_DIR)/oseye-agent $(DIST_DIR)/oseye-config
 	@echo "==> Packages:"
 	@ls -lh $(DIST_DIR)/oseye-agent_* 2>/dev/null || true
 
