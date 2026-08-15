@@ -19,9 +19,12 @@ class RegistryAdapter:
         key_path = str(data.get("key_path", ""))
         event_type = str(data.get("event_type", "key_changed"))
 
-        # Persistence-related keys are higher severity
+        # Persistence-related keys are higher severity.
+        # Use path-component matching (split on \) to avoid substring false
+        # positives: e.g. "Runner" or "UnRunnable" must not match "Run".
         persistence_keys = {"Run", "RunOnce", "Winlogon", "Services"}
-        severity = "high" if any(k in key_path for k in persistence_keys) else "medium"
+        path_parts = set(key_path.replace("\\", "/").split("/"))
+        severity = "high" if path_parts & persistence_keys else "medium"
 
         return UniversalEvent(
             event_id=uuid.uuid4(),

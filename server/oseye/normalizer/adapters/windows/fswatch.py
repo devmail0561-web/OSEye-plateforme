@@ -26,7 +26,9 @@ class FswatchAdapter:
         path = str(data.get("path", ""))
         name = str(data.get("name", ""))
         event_type = str(data.get("event_type", "unknown"))
-        full_path = f"{path}\\{name}".strip("\\") if name else path
+        # rstrip path separator before joining to avoid double backslash
+        # when the collector includes a trailing separator in "path".
+        full_path = f"{path.rstrip(chr(92))}\\{name}" if name else path
 
         severity = _SEVERITY_MAP.get(event_type, "info")
         # Elevated severity for sensitive system paths

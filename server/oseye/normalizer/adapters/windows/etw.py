@@ -39,7 +39,9 @@ class EtwAdapter:
     def normalize(self, raw_json: bytes, hostname: str, agent_id: str) -> UniversalEvent:
         data: dict[str, Any] = json.loads(raw_json)
         event_type = str(data.get("event_type") or data.get("EventType") or "event")
-        category = _CATEGORY_MAP.get(event_type, "process")
+        # Default category is "audit" (not "process") for unknown event types —
+        # unknown events are more likely to be administrative/status than process.
+        category = _CATEGORY_MAP.get(event_type, "audit")
         severity = _SEVERITY_MAP.get(event_type, "info")
 
         return UniversalEvent(

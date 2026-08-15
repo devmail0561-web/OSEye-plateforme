@@ -21,8 +21,7 @@ class EsAdapter:
     def normalize(self, raw_json: bytes, hostname: str, agent_id: str) -> UniversalEvent:
         data: dict[str, Any] = json.loads(raw_json)
         event_type = str(data.get("event_type", "es_event"))
-        available = bool(data.get("available", True))
-        severity = "info" if available else "info"
+        severity = "info"
 
         return UniversalEvent(
             event_id=uuid.uuid4(),
