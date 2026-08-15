@@ -60,6 +60,8 @@ jobs:
       - name: Install
         working-directory: server
         run: |
+          # passlib is incompatible with bcrypt>=4.0 (detect_wrap_bug raises ValueError)
+          pip install "bcrypt<4.0"
           pip install -e "../sdk"
           pip install -e ".[dev]"
 
