@@ -67,6 +67,9 @@ logs/
 *.db-wal
 *.db-shm
 
+# Internal dev docs — stay local, not on GitHub
+docs/internal/
+
 # Secrets (ne jamais committer)
 *.pem
 *.key
