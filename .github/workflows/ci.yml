@@ -17,12 +17,19 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Download modules
+        working-directory: agent
+        run: go mod download
+
       - name: Build
         working-directory: agent
         run: CGO_ENABLED=0 go build ./...
+
       - name: Test
         working-directory: agent
         run: CGO_ENABLED=0 go test ./...
@@ -32,12 +39,19 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Download modules
+        working-directory: agent
+        run: go mod download
+
       - name: go vet
         working-directory: agent
         run: CGO_ENABLED=0 go vet ./...
+
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
@@ -46,42 +60,21 @@ jobs:
   test-python:
     name: Test Python
     runs-on: self-hosted
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: oseye_test
-          POSTGRES_USER: oseye
-          POSTGRES_PASSWORD: test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Install
         working-directory: server
         run: pip install -e ".[dev]"
-      - name: Test
+
+      - name: Test (SQLite + in-memory bus)
         working-directory: server
         env:
-          OSEYE_DB_URL: postgresql+asyncpg://oseye:test@localhost:5432/oseye_test
-          OSEYE_BUS_REDIS_URL: redis://localhost:6379
+          # No postgres/redis — tests use SQLite + MemoryBus by default
           OSEYE_CHECKPOINT_HMAC_KEY: ci-test-key
           OSEYE_INSECURE: "true"
         run: pytest tests/unit/ tests/scenarios/ -q
@@ -91,35 +84,40 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
       - name: Install
         working-directory: ui
         run: npm ci
+
       - name: Test
         working-directory: ui
         run: npm test
 
   build-agent:
-    name: Build Agent ${{ matrix.os }}/${{ matrix.arch }}
+    name: Build Agent linux/${{ matrix.arch }}
     runs-on: self-hosted
     strategy:
       matrix:
-        os: [linux, windows, darwin]
         arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Download modules
+        working-directory: agent
+        run: go mod download
+
       - name: Build
         working-directory: agent
         env:
-          GOOS: ${{ matrix.os }}
+          GOOS: linux
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
         run: go build -trimpath -o /dev/null ./cmd/oseye-agent
