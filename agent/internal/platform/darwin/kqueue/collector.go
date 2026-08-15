@@ -17,7 +17,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// NOTE_* constants for kqueue vnode events
 const (
 	noteDelete = unix.NOTE_DELETE
 	noteWrite  = unix.NOTE_WRITE
@@ -26,6 +25,10 @@ const (
 	noteRename = unix.NOTE_RENAME
 	noteRevoke = unix.NOTE_REVOKE
 	noteAll    = noteDelete | noteWrite | noteExtend | noteAttrib | noteRename | noteRevoke
+
+	// maxWatchedFDs caps the number of kqueue watches to avoid exhausting
+	// the process file-descriptor limit on directories with many files.
+	maxWatchedFDs = 512
 )
 
 var defaultPaths = []string{
@@ -80,13 +83,16 @@ func (c *Collector) Start(ctx context.Context, out chan<- collector.RawEvent) er
 }
 
 func (c *Collector) Stop() error {
-	if c.running {
-		close(c.stopCh)
-		c.running = false
-		for fd := range c.watches {
-			unix.Close(fd)
-		}
-		unix.Close(c.kq)
+	if !c.running {
+		return nil
+	}
+	// Signal the goroutine to stop FIRST; it must exit before we close fds.
+	c.running = false
+	close(c.stopCh)
+	// Closing kq will unblock the Kevent call in run().
+	unix.Close(c.kq)
+	for fd := range c.watches {
+		unix.Close(fd)
 	}
 	return nil
 }
@@ -120,10 +126,13 @@ func flagsToType(flags uint32) string {
 
 func (c *Collector) registerPaths() error {
 	for _, p := range c.paths {
-		// Walk directory to register files and subdirs
 		filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
+			}
+			// Cap total watches to avoid exhausting the fd limit.
+			if len(c.watches) >= maxWatchedFDs {
+				return filepath.SkipAll
 			}
 			fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NONBLOCK, 0)
 			if err != nil {
@@ -132,8 +141,7 @@ func (c *Collector) registerPaths() error {
 			kev := unix.Kevent_t{}
 			unix.SetKevent(&kev, fd, unix.EVFILT_VNODE, unix.EV_ADD|unix.EV_CLEAR)
 			kev.Fflags = noteAll
-			_, err = unix.Kevent(c.kq, []unix.Kevent_t{kev}, nil, nil)
-			if err != nil {
+			if _, err = unix.Kevent(c.kq, []unix.Kevent_t{kev}, nil, nil); err != nil {
 				unix.Close(fd)
 				return nil
 			}
@@ -164,6 +172,7 @@ func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
 
 		n, err := unix.Kevent(c.kq, nil, events, timeout)
 		if err != nil {
+			// EBADF is returned when kq is closed by Stop() — exit cleanly.
 			if err == unix.EINTR {
 				continue
 			}

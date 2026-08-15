@@ -186,9 +186,14 @@ func strVal(m map[string]interface{}, key string) string {
 	return ""
 }
 
+// truncate shortens s to at most n bytes without splitting a UTF-8 sequence.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
+	}
+	// Walk back from byte n to find a valid UTF-8 boundary.
+	for n > 0 && (s[n]&0xC0) == 0x80 {
+		n--
 	}
 	return s[:n] + "…"
 }

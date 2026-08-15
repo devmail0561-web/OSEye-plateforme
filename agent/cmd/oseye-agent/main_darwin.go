@@ -195,7 +195,7 @@ func main() {
 	if client != nil {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), shutdownDrain)
 		defer drainCancel()
-		drainBufferOther(drainCtx, log, client, buf, ch, mp)
+		drainBufferOther(drainCtx, log, client, buf, ch)
 	}
 
 	log.Info("agent stopped")
@@ -240,7 +240,7 @@ func sendBatchOther(
 	return nil
 }
 
-func drainBufferOther(ctx context.Context, log *slog.Logger, client *transport.GRPCClient, buf *buffer.Buffer, ch *chain.Chain, mp *mapper.EventMapper) {
+func drainBufferOther(ctx context.Context, log *slog.Logger, client *transport.GRPCClient, buf *buffer.Buffer, ch *chain.Chain) {
 	var lastAckID int64
 	for {
 		select {

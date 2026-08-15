@@ -1,8 +1,8 @@
 //go:build windows
 
-// Package registry monitors Windows Registry keys for changes using
-// RegNotifyChangeKeyValue. Watches HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
-// and other persistence-relevant keys by default.
+// Package registry monitors Windows Registry keys for changes.
+// Uses RegNotifyChangeKeyValue in async mode (with a Windows Event object)
+// so the goroutine remains responsive to context cancellation and Stop().
 package registry
 
 import (
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/oseye/agent/internal/collector"
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -94,50 +95,51 @@ func hiveName(k registry.Key) string {
 	}
 }
 
-// notifyFilter: notify on value changes and sub-key changes
-const regNotifyChangeLastSet = 0x00000004
-const regNotifyChangeName = 0x00000001
+const (
+	regNotifyChangeLastSet = 0x00000004
+	regNotifyChangeName    = 0x00000001
+)
 
-func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
+// watchKeyAsync watches a single registry key using an async Event object so
+// the goroutine does not block and can respond to context cancellation.
+func (c *Collector) watchKeyAsync(ctx context.Context, wk watchKey, out chan<- collector.RawEvent) {
+	k, err := registry.OpenKey(wk.hive, wk.path, registry.NOTIFY|registry.QUERY_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+
+	// Create a manual-reset event to receive the registry notification.
+	ev, err := windows.CreateEvent(nil, 1, 0, nil)
+	if err != nil {
+		return
+	}
+	defer windows.CloseHandle(ev)
+
+	if err := registryNotifyAsync(k, true, regNotifyChangeLastSet|regNotifyChangeName, ev); err != nil {
+		return
+	}
+
+	// Wait for registry change, context cancellation, or Stop().
+	handles := []windows.Handle{ev}
+	const waitMs = 2000 // 2-second timeout so we re-arm periodically
 	for {
-		if f, _ := c.throttle.Load().(float64); f <= 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-c.stopCh:
-				return
-			case <-time.After(500 * time.Millisecond):
-				continue
-			}
+		code, err := windows.WaitForMultipleObjects(handles, false, waitMs)
+		if err != nil {
+			return
 		}
+		switch code {
+		case windows.WAIT_OBJECT_0: // registry change fired
+			// Re-arm before emitting to avoid missing rapid changes.
+			_ = windows.ResetEvent(ev)
+			_ = registryNotifyAsync(k, true, regNotifyChangeLastSet|regNotifyChangeName, ev)
 
-		for _, wk := range c.keys {
-			select {
-			case <-ctx.Done():
-				return
-			case <-c.stopCh:
-				return
-			default:
-			}
-
-			k, err := registry.OpenKey(wk.hive, wk.path, registry.NOTIFY|registry.QUERY_VALUE)
-			if err != nil {
-				continue
-			}
-
-			// RegNotifyChangeKeyValue with bWatchSubtree=true
-			err = registryNotify(k, true, regNotifyChangeLastSet|regNotifyChangeName, false)
-			k.Close()
-			if err != nil {
-				continue
-			}
-
-			ev := registryEvent{
+			rev := registryEvent{
 				Hive:      hiveName(wk.hive),
 				KeyPath:   wk.path,
 				EventType: "key_changed",
 			}
-			b, _ := json.Marshal(ev)
+			b, _ := json.Marshal(rev)
 			select {
 			case out <- collector.RawEvent{
 				Source:    "registry",
@@ -147,15 +149,33 @@ func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
 			}:
 			default:
 			}
+		case uint32(windows.WAIT_TIMEOUT):
+			// Timeout — check for shutdown, then re-arm and continue.
+		default:
+			return
 		}
 
-		// Brief pause between scans to avoid CPU spin
 		select {
 		case <-ctx.Done():
 			return
 		case <-c.stopCh:
 			return
-		case <-time.After(2 * time.Second):
+		default:
 		}
+
+		if f, _ := c.throttle.Load().(float64); f <= 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+}
+
+func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
+	for _, wk := range c.keys {
+		go c.watchKeyAsync(ctx, wk, out)
+	}
+	// Block until shutdown so the goroutine (and its sub-goroutines) stay alive.
+	select {
+	case <-ctx.Done():
+	case <-c.stopCh:
 	}
 }

@@ -1,7 +1,7 @@
 //go:build windows
 
-// Package eventlog tails the Windows Security, System, and Application
-// event logs via ReadEventLog, emitting each record as a JSON RawEvent.
+// Package eventlog tails the Windows Security and System event logs via
+// ReadEventLog, emitting each record as a JSON RawEvent.
 package eventlog
 
 import (
@@ -17,15 +17,14 @@ import (
 )
 
 const (
-	eventLogSourceSecurity    = "Security"
-	eventLogSourceSystem      = "System"
-	eventLogSourceApplication = "Application"
+	eventLogSourceSecurity = "Security"
+	eventLogSourceSystem   = "System"
 
-	eventTypeError       = 1
-	eventTypeWarning     = 2
-	eventTypeInformation = 4
-	eventTypeAuditSuccess = 8
-	eventTypeAuditFailure = 16
+	eventTypeError        uint16 = 1
+	eventTypeWarning      uint16 = 2
+	eventTypeInformation  uint16 = 4
+	eventTypeAuditSuccess uint16 = 8
+	eventTypeAuditFailure uint16 = 16
 
 	readSeek    = 0x0002
 	readForward = 0x0004
@@ -36,10 +35,10 @@ const (
 )
 
 var (
-	modadvapi32el       = windows.NewLazySystemDLL("advapi32.dll")
-	procOpenEventLogW   = modadvapi32el.NewProc("OpenEventLogW")
-	procReadEventLogW   = modadvapi32el.NewProc("ReadEventLogW")
-	procCloseEventLog   = modadvapi32el.NewProc("CloseEventLog")
+	modadvapi32el                  = windows.NewLazySystemDLL("advapi32.dll")
+	procOpenEventLogW              = modadvapi32el.NewProc("OpenEventLogW")
+	procReadEventLogW              = modadvapi32el.NewProc("ReadEventLogW")
+	procCloseEventLog              = modadvapi32el.NewProc("CloseEventLog")
 	procGetNumberOfEventLogRecords = modadvapi32el.NewProc("GetNumberOfEventLogRecords")
 )
 
@@ -133,7 +132,8 @@ func eventTypeName(t uint16) string {
 }
 
 func (c *Collector) run(ctx context.Context, out chan<- collector.RawEvent) {
-	// Track last read record per source
+	// lastRecord tracks the last successfully read record number per source,
+	// so subsequent reads start from there (not from record 0).
 	lastRecord := make(map[string]uint32)
 
 	ticker := time.NewTicker(pollInterval)
@@ -170,10 +170,18 @@ func (c *Collector) readSource(ctx context.Context, source string, lastRecord ma
 
 	buf := make([]byte, readBufSize)
 	var read, needed uint32
-	flags := uint32(readForward | readNewest)
+
+	// First read: start from newest if we have no prior position,
+	// otherwise seek to the record after the last one we processed.
+	var flags uint32
+	var recordOffset uint32
 	if last, ok := lastRecord[source]; ok {
+		// Seek to record immediately after the last processed one.
 		flags = readForward | readSeek
-		_ = last
+		recordOffset = last + 1
+	} else {
+		flags = readForward | readNewest
+		recordOffset = 0
 	}
 
 	for {
@@ -188,7 +196,7 @@ func (c *Collector) readSource(ctx context.Context, source string, lastRecord ma
 		r, _, _ := procReadEventLogW.Call(
 			handle,
 			uintptr(flags),
-			0,
+			uintptr(recordOffset),
 			uintptr(unsafe.Pointer(&buf[0])),
 			uintptr(len(buf)),
 			uintptr(unsafe.Pointer(&read)),
@@ -198,10 +206,10 @@ func (c *Collector) readSource(ctx context.Context, source string, lastRecord ma
 			break
 		}
 
-		// Parse records from buffer
 		offset := uint32(0)
 		for offset < read {
-			if offset+uint32(unsafe.Sizeof(eventLogRecord{})) > read {
+			recSize := uint32(unsafe.Sizeof(eventLogRecord{}))
+			if offset+recSize > read {
 				break
 			}
 			rec := (*eventLogRecord)(unsafe.Pointer(&buf[offset]))
@@ -231,6 +239,8 @@ func (c *Collector) readSource(ctx context.Context, source string, lastRecord ma
 			}
 			offset += rec.Length
 		}
-		flags = readForward // subsequent reads are sequential
+		// After the first read, always advance sequentially.
+		flags = readForward
+		recordOffset = 0
 	}
 }

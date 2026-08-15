@@ -1,7 +1,7 @@
 //go:build windows
 
 // Package fswatch monitors file system directories for changes using
-// ReadDirectoryChangesW, the Windows equivalent of inotify/fanotify.
+// ReadDirectoryChangesW (synchronous mode), the Windows equivalent of inotify/fanotify.
 package fswatch
 
 import (
@@ -34,12 +34,10 @@ type fileNotifyInformation struct {
 }
 
 const (
-	fileNotifyChangeFileName   = 0x00000001
-	fileNotifyChangeDirName    = 0x00000002
-	fileNotifyChangeAttributes = 0x00000004
-	fileNotifyChangeSize       = 0x00000008
-	fileNotifyChangeLastWrite  = 0x00000010
-	fileNotifyChangeSecurity   = 0x00000100
+	fileNotifyChangeFileName  = 0x00000001
+	fileNotifyChangeDirName   = 0x00000002
+	fileNotifyChangeLastWrite = 0x00000010
+	fileNotifyChangeSecurity  = 0x00000100
 
 	fileActionAdded          = 1
 	fileActionRemoved        = 2
@@ -51,6 +49,9 @@ const (
 		fileNotifyChangeLastWrite | fileNotifyChangeSecurity
 
 	watchBufSize = 65536
+	// maxFileNameU16 caps the UTF-16 slice to MAX_PATH units to prevent
+	// an oversized FileNameLength from causing a slice-out-of-bounds panic.
+	maxFileNameU16 = windows.MAX_PATH
 )
 
 // Collector watches directories for file system changes.
@@ -130,13 +131,17 @@ func (c *Collector) watchPath(ctx context.Context, path string, out chan<- colle
 		return
 	}
 
+	// Use synchronous I/O (no FILE_FLAG_OVERLAPPED).
+	// ReadDirectoryChanges with OVERLAPPED requires GetOverlappedResult /
+	// completion ports; without that bytesReturned is always 0 and no events
+	// are delivered. Synchronous mode blocks until at least one change occurs.
 	handle, err := windows.CreateFile(
 		pathPtr,
 		windows.FILE_LIST_DIRECTORY,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
 		nil,
 		windows.OPEN_EXISTING,
-		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OVERLAPPED,
+		windows.FILE_FLAG_BACKUP_SEMANTICS, // synchronous
 		0,
 	)
 	if err != nil {
@@ -147,7 +152,6 @@ func (c *Collector) watchPath(ctx context.Context, path string, out chan<- colle
 
 	buf := make([]byte, watchBufSize)
 	var bytesReturned uint32
-	overlapped := new(windows.Overlapped)
 
 	for {
 		select {
@@ -163,6 +167,7 @@ func (c *Collector) watchPath(ctx context.Context, path string, out chan<- colle
 			continue
 		}
 
+		// Synchronous call — blocks until a change is detected or an error occurs.
 		err := windows.ReadDirectoryChanges(
 			handle,
 			&buf[0],
@@ -170,10 +175,11 @@ func (c *Collector) watchPath(ctx context.Context, path string, out chan<- colle
 			true, // watchSubtree
 			notifyFilter,
 			&bytesReturned,
-			overlapped,
+			nil, // no overlapped
 			0,
 		)
 		if err != nil {
+			c.logger.Debug("fswatch: ReadDirectoryChanges error", "path", path, "err", err)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -182,12 +188,35 @@ func (c *Collector) watchPath(ctx context.Context, path string, out chan<- colle
 			continue
 		}
 
-		// Parse FILE_NOTIFY_INFORMATION records
 		offset := 0
 		for offset < int(bytesReturned) {
+			if offset+int(unsafe.Sizeof(fileNotifyInformation{})) > int(bytesReturned) {
+				break
+			}
 			info := (*fileNotifyInformation)(unsafe.Pointer(&buf[offset]))
+
+			// Cap nameLen to maxFileNameU16 to prevent oversized slice.
 			nameLen := int(info.FileNameLength / 2)
-			nameSlice := (*[1 << 20]uint16)(unsafe.Pointer(&info.FileName[0]))[:nameLen:nameLen]
+			if nameLen <= 0 {
+				if info.NextEntryOffset == 0 {
+					break
+				}
+				offset += int(info.NextEntryOffset)
+				continue
+			}
+			if nameLen > maxFileNameU16 {
+				nameLen = maxFileNameU16
+			}
+
+			// Safely read the UTF-16 filename from the buffer.
+			filenameOffset := offset + int(unsafe.Offsetof(info.FileName))
+			if filenameOffset+nameLen*2 > int(bytesReturned) {
+				break
+			}
+			nameSlice := make([]uint16, nameLen)
+			for i := 0; i < nameLen; i++ {
+				nameSlice[i] = *(*uint16)(unsafe.Pointer(&buf[filenameOffset+i*2]))
+			}
 			name := windows.UTF16ToString(nameSlice)
 			name = filepath.FromSlash(name)
 

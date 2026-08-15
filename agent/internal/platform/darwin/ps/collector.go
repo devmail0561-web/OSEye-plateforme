@@ -113,12 +113,8 @@ func listProcesses(ctx context.Context) ([]processInfo, error) {
 		if line == "" {
 			continue
 		}
-		// Split into at most 4 fields (comm may contain spaces)
-		parts := strings.SplitN(line, " ", 4)
-		if len(parts) < 3 {
-			continue
-		}
-		// ps -o pid= etc. pads numbers with spaces; Fields() strips them
+		// ps -o pid= pads numbers with spaces; Fields() strips them.
+		// comm may contain spaces — join fields[3:] to preserve full name.
 		fields := strings.Fields(line)
 		if len(fields) < 4 {
 			continue
