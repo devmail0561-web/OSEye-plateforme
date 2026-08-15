@@ -79,3 +79,7 @@ docs/internal/
 !.env.example
 tools/audit_state.json
 tools/audit_reports/
+
+# Site Astro + docs — local seulement
+site/
+docs/
