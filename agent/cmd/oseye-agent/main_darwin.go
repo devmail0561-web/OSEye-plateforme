@@ -27,6 +27,7 @@ import (
 	"github.com/oseye/agent/internal/platform"
 	"github.com/oseye/agent/internal/signer"
 	"github.com/oseye/agent/internal/transport"
+	"github.com/oseye/agent/internal/watchdog"
 )
 
 var version = "dev"
@@ -126,16 +127,19 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	fanIn := make(chan collector.RawEvent, fanInBufSize)
+	// CollectorManager — fan-in + throttle propagation
+	mgr := collector.NewManager(colls, fanInBufSize)
 
-	// Start all collectors
-	for _, c := range colls {
-		if err := c.Start(ctx, fanIn); err != nil {
-			log.Warn("collector start failed", "name", c.Name(), "err", err)
-		} else {
-			log.Info("collector started", "name", c.Name())
-		}
+	// Watchdog — monitors CPU/RAM, calls mgr.SetThrottle when over budget
+	wd := watchdog.New(cfg.MaxCPUPct, float64(cfg.MaxMemMB), mgr)
+	go wd.Run(ctx)
+
+	// Start all collectors via manager
+	if err := mgr.Start(ctx); err != nil {
+		log.Error("collector manager start failed", "err", err)
+		os.Exit(1)
 	}
+	log.Info("collectors started", "count", len(colls))
 
 	// Event processing goroutine
 	batchTimeout := cfg.BatchTimeout
@@ -163,7 +167,7 @@ func main() {
 			case <-ctx.Done():
 				flush()
 				return
-			case raw, ok := <-fanIn:
+			case raw, ok := <-mgr.Events():
 				if !ok {
 					flush()
 					return
@@ -187,10 +191,7 @@ func main() {
 	<-sigCh
 	log.Info("shutdown signal received — stopping collectors")
 	cancel()
-
-	for _, c := range colls {
-		c.Stop() //nolint:errcheck
-	}
+	mgr.Stop()
 
 	if client != nil {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), shutdownDrain)
