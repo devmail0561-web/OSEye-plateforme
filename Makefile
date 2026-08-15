@@ -256,6 +256,21 @@ version:
 # Convenience aliases
 build-agent: $(DIST_DIR)/oseye-agent-$(PLATFORM)
 build-config: $(DIST_DIR)/oseye-config-$(PLATFORM)
+build-windows: ## Cross-compile Windows agent (amd64)
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+	  $(GOBIN)/go build -trimpath -ldflags "$(LDFLAGS)" \
+	  -o $(DIST_DIR)/oseye-agent-windows-amd64.exe ./agent/cmd/oseye-agent && \
+	  ln -sf oseye-agent-windows-amd64.exe $(DIST_DIR)/oseye-agent.exe
+build-darwin-amd64: ## Cross-compile macOS agent (Intel)
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 \
+	  $(GOBIN)/go build -trimpath -ldflags "$(LDFLAGS)" \
+	  -o $(DIST_DIR)/oseye-agent-darwin-amd64 ./agent/cmd/oseye-agent && \
+	  ln -sf oseye-agent-darwin-amd64 $(DIST_DIR)/oseye-agent-darwin
+build-darwin-arm64: ## Cross-compile macOS agent (Apple Silicon)
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 \
+	  $(GOBIN)/go build -trimpath -ldflags "$(LDFLAGS)" \
+	  -o $(DIST_DIR)/oseye-agent-darwin-arm64 ./agent/cmd/oseye-agent
+build-all-agents: build-agent build-windows build-darwin-amd64 build-darwin-arm64
 
 # Build the static agent binary
 $(DIST_DIR)/oseye-agent-$(PLATFORM):

@@ -1,5 +1,3 @@
-//go:build linux
-
 package mapper
 
 import (
@@ -67,8 +65,10 @@ func (m *EventMapper) Map(raw collector.RawEvent, hashChain []byte) (*gen.Univer
 }
 
 // mapCategory maps a collector source name to a UniversalEvent category.
+// Covers Linux, Windows, and macOS source names.
 func (m *EventMapper) mapCategory(source string) string {
 	switch source {
+	// Linux
 	case "procfs", "ebpf":
 		return "process"
 	case "fanotify", "inotify":
@@ -80,6 +80,30 @@ func (m *EventMapper) mapCategory(source string) string {
 	case "udev":
 		return "device"
 	case "auditd":
+		return "audit"
+	// Windows
+	case "wmi", "toolhelp32":
+		return "process"
+	case "etw":
+		return "process"
+	case "fswatch":
+		return "file"
+	case "registry":
+		return "audit"
+	case "eventlog":
+		return "log"
+	case "winnetstat":
+		return "network"
+	// macOS
+	case "ps":
+		return "process"
+	case "kqueue":
+		return "file"
+	case "unifiedlog":
+		return "log"
+	case "darwinnet":
+		return "network"
+	case "es":
 		return "audit"
 	default:
 		return "unknown"
@@ -145,6 +169,105 @@ func (m *EventMapper) mapFields(payload map[string]interface{}, source string, e
 		ev.Ppid = intField(payload, "ppid")
 		ev.Uid = intField(payload, "uid")
 		ev.Gid = intField(payload, "gid")
+
+	// ── Windows ───────────────────────────────────────────────────────────────
+
+	case "toolhelp32":
+		ev.Pid = intField(payload, "pid")
+		ev.Ppid = intField(payload, "ppid")
+		ev.ProcessName = strField(payload, "name")
+		ev.Type = "snapshot"
+
+	case "etw":
+		ev.Pid = intField(payload, "pid")
+		ev.Type = firstField(payload, "event_type", "EventType")
+		ev.ProcessName = strField(payload, "provider")
+		ev.Severity = mapLogSeverityETW(intField(payload, "event_id"))
+
+	case "registry":
+		ev.Resource = strField(payload, "key_path")
+		ev.Type = strField(payload, "event_type")
+
+	case "eventlog":
+		ev.Type = strField(payload, "event_type")
+		ev.Severity = mapLogSeverityWin(strField(payload, "event_type"))
+
+	case "fswatch":
+		ev.Resource = strField(payload, "path") + `\` + strField(payload, "name")
+		ev.Type = strField(payload, "event_type")
+
+	case "winnetstat":
+		srcIP, srcPort := splitAddr(strField(payload, "local_addr"))
+		dstIP, dstPort := splitAddr(strField(payload, "remote_addr"))
+		ev.SrcIp = srcIP
+		ev.SrcPort = srcPort
+		ev.DstIp = dstIP
+		ev.DstPort = dstPort
+		ev.Protocol = strField(payload, "proto")
+		ev.Type = strField(payload, "state")
+		ev.Pid = intField(payload, "pid")
+
+	// ── macOS ─────────────────────────────────────────────────────────────────
+
+	case "ps":
+		ev.Pid = intField(payload, "pid")
+		ev.Ppid = intField(payload, "ppid")
+		ev.Uid = intField(payload, "uid")
+		ev.ProcessName = strField(payload, "name")
+		ev.Type = "snapshot"
+
+	case "kqueue":
+		ev.Resource = strField(payload, "path")
+		ev.Type = strField(payload, "event_type")
+
+	case "unifiedlog":
+		ev.ProcessName = strField(payload, "process")
+		ev.Pid = intField(payload, "pid")
+		ev.Severity = mapLogSeverity(strField(payload, "level"))
+		ev.Type = "log"
+
+	case "darwinnet":
+		srcIP, srcPort := splitAddr(strField(payload, "local_addr"))
+		dstIP, dstPort := splitAddr(strField(payload, "remote_addr"))
+		ev.SrcIp = srcIP
+		ev.SrcPort = srcPort
+		ev.DstIp = dstIP
+		ev.DstPort = dstPort
+		ev.Protocol = strField(payload, "proto")
+		ev.Type = strField(payload, "state")
+
+	case "es":
+		ev.Type = strField(payload, "event_type")
+	}
+}
+
+// mapLogSeverityETW converts a Windows Security Event ID to a severity level.
+func mapLogSeverityETW(eid int32) string {
+	switch int(eid) {
+	case 4625, 4648, 4719: // logon failure, explicit creds, audit policy change
+		return "high"
+	case 4688, 4689: // process create/exit
+		return "info"
+	case 7045: // service installed
+		return "medium"
+	default:
+		return "info"
+	}
+}
+
+// mapLogSeverityWin maps Windows Event Log event types to severity levels.
+func mapLogSeverityWin(t string) string {
+	switch t {
+	case "error":
+		return "high"
+	case "warning":
+		return "medium"
+	case "audit_failure":
+		return "high"
+	case "audit_success", "information":
+		return "info"
+	default:
+		return "info"
 	}
 }
 
