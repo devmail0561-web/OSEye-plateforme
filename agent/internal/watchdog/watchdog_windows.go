@@ -171,6 +171,11 @@ func (w *Watchdog) readMemMB() (float64, error) {
 }
 
 // filetimeToNs converts a FILETIME (100-ns intervals since 1601) to nanoseconds.
+// Parentheses are required: without them Go precedence gives
+//
+//	HighDateTime << (32 & (LowDateTime * 100))   ← wrong
+//
+// The correct formula ORs the two 32-bit halves then multiplies by 100.
 func filetimeToNs(ft windows.Filetime) uint64 {
-	return uint64(ft.HighDateTime)<<32&uint64(ft.LowDateTime) * 100
+	return (uint64(ft.HighDateTime)<<32 | uint64(ft.LowDateTime)) * 100
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-	"unsafe"
 
 	"github.com/oseye/agent/internal/collector"
 	"golang.org/x/sys/unix"
@@ -122,50 +121,12 @@ func (w *Watchdog) readCPUPercent() (float64, error) {
 	return dCPU / dWall * 100.0, nil
 }
 
-// mach_task_basic_info mirrors the macOS structure for task RSS.
-// Defined in mach/task_info.h — 4 uint64 + 2 uint32 + 2 uint64.
-const (
-	machTaskBasicInfo     = 20
-	machTaskBasicInfoSize = 20 // count of int32 words
-)
-
-type machTaskBasicInfoT struct {
-	VirtualSize        uint64
-	ResidentSize       uint64
-	ResidentSizeMax    uint64
-	UserTime           [2]int32 // struct time_value_t {seconds, microseconds}
-	SystemTime         [2]int32
-	Policy             int32
-	SuspendCount       int32
-}
-
-// readMemMB returns the process RSS in megabytes via task_info(mach_task_self()).
+// readMemMB returns the peak RSS in megabytes via getrusage(RUSAGE_SELF).
+// ru_maxrss is in bytes on macOS (unlike Linux where it is KB).
 func (w *Watchdog) readMemMB() (float64, error) {
-	// Use getrusage as a portable fallback — ru_maxrss on macOS is bytes.
 	var ru unix.Rusage
 	if err := unix.Getrusage(unix.RUSAGE_SELF, &ru); err != nil {
 		return 0, fmt.Errorf("getrusage: %w", err)
 	}
-	// ru_maxrss is peak RSS in bytes on macOS (unlike Linux where it's KB)
 	return float64(ru.Maxrss) / (1024 * 1024), nil
-}
-
-// taskInfo calls task_info via syscall as a fallback for live RSS.
-// Kept for reference — using getrusage maxrss is sufficient for throttling.
-func taskInfoRSS() (uint64, error) {
-	var info machTaskBasicInfoT
-	count := uint32(machTaskBasicInfoSize)
-	_, _, errno := unix.Syscall6(
-		unix.SYS_SYSCTL, // not correct but kept as placeholder
-		uintptr(machTaskBasicInfo),
-		uintptr(unsafe.Pointer(nil)),
-		uintptr(unsafe.Pointer(&count)),
-		uintptr(unsafe.Pointer(&info)),
-		uintptr(unsafe.Pointer(&count)),
-		0,
-	)
-	if errno != 0 {
-		return 0, errno
-	}
-	return info.ResidentSize, nil
 }
