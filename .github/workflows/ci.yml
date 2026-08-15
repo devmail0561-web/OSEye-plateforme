@@ -69,7 +69,9 @@ jobs:
 
       - name: Install
         working-directory: server
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e "../sdk"
+          pip install -e ".[dev]"
 
       - name: Test (SQLite + in-memory bus)
         working-directory: server
