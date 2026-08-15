@@ -41,6 +41,17 @@ from oseye.normalizer.adapters.linux.netlink import NetlinkAdapter
 from oseye.normalizer.adapters.linux.procfs import ProcfsAdapter
 from oseye.normalizer.adapters.linux.syslog import SyslogAdapter
 from oseye.normalizer.adapters.linux.udev import UdevAdapter
+from oseye.normalizer.adapters.windows.etw import EtwAdapter
+from oseye.normalizer.adapters.windows.eventlog import EventlogAdapter
+from oseye.normalizer.adapters.windows.fswatch import FswatchAdapter
+from oseye.normalizer.adapters.windows.registry import RegistryAdapter
+from oseye.normalizer.adapters.windows.toolhelp32 import Toolhelp32Adapter
+from oseye.normalizer.adapters.windows.winnetstat import WinnetstatAdapter
+from oseye.normalizer.adapters.darwin.darwinnet import DarwinnetAdapter
+from oseye.normalizer.adapters.darwin.es import EsAdapter
+from oseye.normalizer.adapters.darwin.kqueue import KqueueAdapter
+from oseye.normalizer.adapters.darwin.ps import PsAdapter
+from oseye.normalizer.adapters.darwin.unifiedlog import UnifiedlogAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +99,19 @@ class NormalizerEngine:
         self.register_adapter("linux", "journald", JournaldAdapter())
         self.register_adapter("linux", "syslog", SyslogAdapter())
         self.register_adapter("linux", "udev", UdevAdapter())
+        # Windows adapters
+        self.register_adapter("windows", "toolhelp32", Toolhelp32Adapter())
+        self.register_adapter("windows", "etw", EtwAdapter())
+        self.register_adapter("windows", "registry", RegistryAdapter())
+        self.register_adapter("windows", "eventlog", EventlogAdapter())
+        self.register_adapter("windows", "fswatch", FswatchAdapter())
+        self.register_adapter("windows", "winnetstat", WinnetstatAdapter())
+        # macOS adapters
+        self.register_adapter("darwin", "ps", PsAdapter())
+        self.register_adapter("darwin", "kqueue", KqueueAdapter())
+        self.register_adapter("darwin", "unifiedlog", UnifiedlogAdapter())
+        self.register_adapter("darwin", "darwinnet", DarwinnetAdapter())
+        self.register_adapter("darwin", "es", EsAdapter())
 
     def register_adapter(self, os_name: str, source: str, adapter: object) -> None:
         """Register *adapter* for the (os_name, source) pair."""
