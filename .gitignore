@@ -11,7 +11,9 @@ agent/internal/platform/linux/ebpf/*.o
 
 # Python
 __pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
 *.pyo
 .venv/
 server/.venv/

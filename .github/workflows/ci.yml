@@ -69,12 +69,11 @@ jobs:
         working-directory: server
         env:
           # No postgres/redis — tests use SQLite + MemoryBus by default
-          OSEYE_CHECKPOINT_HMAC_KEY: ci-test-key
+          OSEYE_CHECKPOINT_HMAC_KEY: ${{ secrets.CI_CHECKPOINT_HMAC_KEY || 'ci-test-key-local' }}
           OSEYE_INSECURE: "true"
-          # Force dev defaults so tests that hardcode admin123/analyst123 pass.
-          # bcrypt truncation fix in auth.py prevents 72-byte crash on long sys passwords.
-          OSEYE_ADMIN_PASSWORD: admin123
-          OSEYE_ANALYST_PASSWORD: analyst123
+          # Dev-only passwords (never used in production — server rejects them at startup)
+          OSEYE_ADMIN_PASSWORD: ${{ secrets.CI_ADMIN_PASSWORD || 'admin123' }}
+          OSEYE_ANALYST_PASSWORD: ${{ secrets.CI_ANALYST_PASSWORD || 'analyst123' }}
         run: pytest tests/unit/ tests/scenarios/ -q
 
   test-typescript:
