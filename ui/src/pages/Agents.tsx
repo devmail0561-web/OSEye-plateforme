@@ -1,20 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Monitor } from 'lucide-react'
+import { Monitor, Terminal, AppWindow, AppWindowMac } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { agentsApi, type AgentInfo } from '@/api/client'
 import { Badge, EmptyState, Spinner } from '@/components/ui'
 import RelativeTime from '@/components/RelativeTime'
 
-const PLATFORM_ICONS: Record<string, string> = {
-  linux:   '🐧',
-  windows: '🪟',
-  darwin:  '🍎',
+const PLATFORM_ICON: Record<string, LucideIcon> = {
+  linux:   Terminal,
+  windows: AppWindow,
+  darwin:  AppWindowMac,
+}
+
+const PLATFORM_COLOR: Record<string, string> = {
+  linux:   'text-yellow-500 dark:text-yellow-400',
+  windows: 'text-blue-500 dark:text-blue-400',
+  darwin:  'text-gray-500 dark:text-gray-400',
 }
 
 function PlatformBadge({ platform }: { platform: string }) {
-  const icon = PLATFORM_ICONS[platform] ?? '💻'
+  const Icon = PLATFORM_ICON[platform] ?? Monitor
+  const color = PLATFORM_COLOR[platform] ?? 'text-gray-400 dark:text-gray-500'
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title={platform}>
-      <span className="text-sm">{icon}</span>
+    <span className="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300" title={platform}>
+      <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${color}`} />
       <span className="capitalize">{platform}</span>
     </span>
   )

@@ -100,8 +100,8 @@ export default function Entities() {
                   {e.hostname}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <span className={`font-semibold tabular-nums ${RISK_COLOR(e.risk_score)}`}>
-                    {e.risk_score.toFixed(1)}
+                  <span className={`font-semibold tabular-nums ${RISK_COLOR(e.risk_score ?? 0)}`}>
+                    {(e.risk_score ?? 0).toFixed(1)}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-400">

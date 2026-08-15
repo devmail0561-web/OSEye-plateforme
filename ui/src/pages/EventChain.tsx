@@ -101,7 +101,7 @@ export default function EventChain() {
                         <div className="font-mono text-gray-700 dark:text-gray-300 truncate">{ev.process_name}</div>
                       </div>
                     )}
-                    {ev.pid !== undefined && ev.pid !== 0 && (
+                    {ev.pid > 0 && (
                       <div>
                         <span className="text-gray-400 dark:text-gray-500">PID</span>
                         <div className="font-mono text-gray-700 dark:text-gray-300">{ev.pid}</div>
