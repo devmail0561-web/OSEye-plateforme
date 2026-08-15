@@ -6,6 +6,34 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] — 2026-08-15
 
+### Performance
+
+**Agent Go — 12 fichiers, chemin chaud**
+- `engine.go` : fast path `getField` sans alloc sur champs simples (95% des cas), `strconv` vs `fmt.Sprintf`, `CompiledCondition` pré-extrait (type assertions supprimées par event), `matchIn` O(1) via set pré-construit
+- `correlator.go` : two-level map `ruleID→groupValue→state` — suppression de la concaténation de clé par event
+- `batcher.go` : handoff de slice au lieu de `make+copy` par flush ; timer `Reset` au lieu de `NewTimer` par batch
+- `buffer.go` : `DELETE WHERE id <= ?` au lieu de N DELETE individuels par `Pop` ; slices pré-allouées
+- `chain.go` : `AppendTo(*[32]byte)` zero-alloc heap (API additive)
+- `collector/manager.go` : N goroutines fan-in supprimées — collectors écrivent directement dans `m.out`
+- `hostprofile/profile.go` : `portsStr []string` précalculé à l'update ; `strconv.Itoa` remplace `fmt.Sprintf`
+- `dedup.go` : concaténation directe remplace `fmt.Sprintf` ; `signer.go` : `PublicKey()` depuis cache
+- `watchdog.go` : stack buffer `[4096]byte` remplace `bufio.NewScanner` ; `bytes.Fields` remplace `strings.Fields`
+- `procfs/collector.go` : deux timers réutilisés (`pauseTimer`, `scanTimer`) remplacent `time.After` par cycle
+
+**Serveur Python — 9 fichiers, chemin chaud**
+- `evaluator.py` : `ast.parse + compile` → cache `compiled_code` au chargement des règles (élimine 35 compilations/event) ; classes `_Event`/`_SafeCallable` au niveau module ; `re.sub` précalculé
+- `rule_engine/engine.py` : `model_dump()` une seule fois par event (était appelé 35× par règle) ; index immuable sans lock ; règles désactivées exclues à l'indexation ; `entity_key` lazy
+- `redis_bus.py` : `publish_batch` pipeline Redis (1 RTT/batch vs N RTTs) ; `count` 10→100 dans `xreadgroup` ; SCAN topics 100ms→5s
+- `bus/interface.py` + `memory_bus.py` : `publish_batch` ajouté au Protocol
+- `grpc_service.py` : `asyncio.get_running_loop()` try/except et `_get_agent_key(cn)` sortis de la boucle events ; `publish_batch` utilisé
+- `features.py` : `@lru_cache(maxsize=512)` sur `_stable_hash_norm` ; division `timestamp_ns` unifiée
+- `correlation/engine.py` : `_min_severity_ord` et `_max_timeframe` précalculés à l'init
+- `alerts.py` : suppression objet `AlertRow` throw-away dans `update()`
+- `normalizer/engine.py` + `rule_worker.py` : `sys.intern` sur clés, variables locales cachées hors boucle
+
+**Makefile**
+- `DEV_ENV` : ajout `OSEYE_CHECKPOINT_HMAC_KEY` (généré via `openssl rand -hex 32`) et `OSEYE_INSECURE=true` — `make run-server` fonctionne sans intervention manuelle
+
 ### Changed
 
 **Collecteurs — modèle delta (tous les agents)**
