@@ -21,6 +21,7 @@ import (
 	"github.com/oseye/agent/internal/buffer"
 	"github.com/oseye/agent/internal/chain"
 	"github.com/oseye/agent/internal/collector"
+	"github.com/oseye/agent/internal/commands"
 	"github.com/oseye/agent/internal/config"
 	"github.com/oseye/agent/internal/enrollment"
 	"github.com/oseye/agent/internal/mapper"
@@ -133,6 +134,15 @@ func main() {
 	// Watchdog — monitors CPU/RAM, calls mgr.SetThrottle when over budget
 	wd := watchdog.New(cfg.MaxCPUPct, float64(cfg.MaxMemMB), mgr)
 	go wd.Run(ctx)
+
+	// Commands client — receives server commands (BlockIP, KillProcess, Snapshot…)
+	if client != nil {
+		cmdClient := commands.NewClient(
+			client.ServiceClient(), agentIDBytes, mgr,
+			nil, nil, nil, cfg.QuarantineDir,
+		).WithConfig(cfg)
+		go cmdClient.Run(ctx)
+	}
 
 	// Start all collectors via manager
 	if err := mgr.Start(ctx); err != nil {
