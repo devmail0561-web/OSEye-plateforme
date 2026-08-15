@@ -77,9 +77,10 @@ jobs:
           # No postgres/redis — tests use SQLite + MemoryBus by default
           OSEYE_CHECKPOINT_HMAC_KEY: ci-test-key
           OSEYE_INSECURE: "true"
-          # Override any long shell password to stay within bcrypt 72-byte limit
-          OSEYE_ADMIN_PASSWORD: admin-ci-test
-          OSEYE_ANALYST_PASSWORD: analyst-ci-test
+          # Force dev defaults so tests that hardcode admin123/analyst123 pass.
+          # bcrypt truncation fix in auth.py prevents 72-byte crash on long sys passwords.
+          OSEYE_ADMIN_PASSWORD: admin123
+          OSEYE_ANALYST_PASSWORD: analyst123
         run: pytest tests/unit/ tests/scenarios/ -q
 
   test-typescript:
