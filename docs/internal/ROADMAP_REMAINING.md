@@ -1,9 +1,58 @@
 # OSEye — Plan de développement : travaux restants
 
-**Date :** 2026-08-11  
-**Base :** Post-Phase 10 + extensions (UI refonte, sécurité CIA, Response Engine, Plugin/ML/Policy câblés)
+**Date :** 2026-08-11 — **Mis à jour :** 2026-08-15
+**Base :** Post-Phase 10 + extensions + Session 2026-08-15
 
-**Statut au 2026-08-14 :** Moteur d'autonomie locale livré (v0.1.0-alpha.1). Audit complet 94 findings corrigés.
+**Statut au 2026-08-15 :**
+- v0.2.0-alpha.1 taggée et publiée
+- Phases 2–10 TOUTES COMPLÈTES
+- Agents Windows + macOS livrés (collecteurs + normalizers)
+- CI self-hosted opérationnel (run #67 ✅)
+- 502 Python + 85 JS + 28 Go packages — 0 failure
+
+---
+
+## Travaux restants post-2026-08-15
+
+### 1. Agents Windows/macOS — fonctionnalités avancées `[ ]`
+- `main_windows.go` / `main_darwin.go` : ajouter watchdog, policy client (profils de surveillance)
+- Windows responder : BlockIP via Windows Firewall (`netsh advfirewall`), KillProcess, QuarantineFile
+- macOS responder : BlockIP via `pfctl`, KillProcess via `kill(2)`, QuarantineFile
+- Autonomy engine pour Windows/macOS (localrules + hostprofile)
+- Tests unitaires collecteurs Windows/macOS (actuellement 0 tests)
+
+### 2. EndpointSecurity macOS (CGO) `[ ]`
+- Implémentation complète avec CGO + entitlement `com.apple.developer.endpoint-security.client`
+- Notarisation Apple pour distribution
+- Actuellement : stub qui émet un seul événement `available=false`
+
+### 3. ETW Windows — enrichissement `[ ]`
+- Ajouter Microsoft-Windows-Kernel-Process (process create/exit en temps réel)
+- Ajouter Microsoft-Windows-Kernel-Network (connexions réseau kernel)
+- Actuellement : polling Get-WinEvent toutes les 5s (événements passés, pas temps réel)
+
+### 4. CI cross-platform `[ ]`
+- Tester les builds Windows/macOS sur runners dédiés (GitHub Actions ou VM)
+- Tests d'intégration agent→serveur multi-plateforme
+- `GOOS=windows go test ./...` : impossible localement (pas de Windows)
+
+### 5. Dashboard UI — pages manquantes `[ ]`
+- Page Entities (`GET /entities`) — non implémentée dans l'UI
+- Page Chain (`GET /events/{id}/chain`) — non implémentée
+- Indicateur plateforme agent (linux/windows/darwin) dans la vue Agents
+
+### 6. STIX/TAXII — Threat Intelligence `[ ]`
+- Ingestion de feeds IOC depuis TAXII 2.1
+- Import STIX 2.1 bundles
+- Scheduler refresh IOC (différé depuis Phase 4)
+
+### 7. Packaging Windows/macOS `[ ]`
+- Installeur Windows : MSI ou NSIS
+- Installeur macOS : .pkg ou .dmg
+- Enrollment automatique au premier démarrage (équivalent enroll-agent.sh)
+- Actuellement : seul le packaging `.deb`/`.rpm` Linux est opérationnel
+
+---
 
 **Statut au 2026-08-12 : TOUS LES BLOCS LIVRÉS ET AUDITÉS — 12+25 findings corrigés (commits 52716de, a7da4b1)**
 

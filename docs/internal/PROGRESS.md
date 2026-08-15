@@ -1,9 +1,70 @@
 # OSEye — Suivi de progression
 
-**Version :** 3.9
-**Dernière mise à jour :** 2026-08-14
-**Branche active :** `main` (`latest`)
-**Phase courante :** Post-Phase 10 — Autonomie locale + Audit complet 2026-08-14
+**Version :** 4.0
+**Dernière mise à jour :** 2026-08-15
+**Branche active :** `main` (tag `v0.2.0-alpha.1`)
+**Phase courante :** Multi-plateforme — Agents Windows + macOS + CI self-hosted
+
+---
+
+## Session 2026-08-15 — Multi-plateforme + CI + Phases 2-7 + Release `[x]` TERMINÉ
+
+### Release v0.2.0-alpha.1
+- Tag `v0.2.0-alpha.1` créé et poussé sur `main`
+- Binaires dans `dist/` : `oseye-agent-linux-amd64`, `oseye-config-linux-amd64`, `oseye-server-linux-amd64`
+- Symlinks aliases : `oseye-agent → oseye-agent-linux-amd64`, etc.
+- SHA256SUMS mis à jour
+- CHANGELOG.md renseigné
+
+### Phases 2–7 complétées
+| Phase | Contenu | Statut |
+|-------|---------|--------|
+| Phase 2 (M12-M18) | Buffer replay/AckUntil, backpressure, K8s DaemonSet, normalizers Phase 2 | `[x]` |
+| Phase 3 | 35 règles YAML MITRE, 31 scénarios < 500ms | `[x]` |
+| Phase 4 | 3 linkers corrélation, `/events/{id}/chain`, `/entities` | `[x]` |
+| Phase 5 | WS `/ws/decisions`, `GET /decisions/journal/verify` | `[x]` |
+| Phase 6 | A/B test MLWorker, benchmarks FP/recall | `[x]` |
+| Phase 7 | Snapshot collector Go (TAKE_SNAPSHOT, mTLS POST) | `[x]` |
+
+### CI self-hosted (runner sur machine locale)
+- Compte GitHub verrouillé (billing) → runner self-hosted configuré
+- Runner : `~/actions-runner/run.sh` — Go 1.25 installé, Python 3.12 via actions
+- Bugs CI corrigés : `go.mod 1.25.0`, `bcrypt<4.0`, `oseye_sdk`, credentials tests, `agent/gen/` commité
+- Workflow `ci.yml` : 5 jobs (test-go, lint-go, test-python, test-ts, build-agent)
+- Run `#67` : premier run 100% vert ✅
+
+### Agents Windows + macOS
+**Architecture :** un binaire par plateforme via build tags Go
+- `main_linux.go` — agent complet (watchdog, responder, autonomy, policy)
+- `main_windows.go` — agent minimal (collection + transport gRPC)
+- `main_darwin.go` — agent minimal (collection + transport gRPC)
+
+**Collecteurs Windows (6) :** toolhelp32, etw, registry, eventlog, fswatch, winnetstat
+**Collecteurs macOS (5) :** ps, es (stub), kqueue, unifiedlog, darwinnet
+
+**Normalizers Python (11) :** adapters Windows + macOS enregistrés dans NormalizerEngine
+
+**Cross-compilation :**
+- `linux/amd64` ✅ `windows/amd64` ✅ `darwin/amd64` ✅ `darwin/arm64` ✅
+
+**Audit plateformes — 10 findings corrigés (commit `250df28`) :**
+3 CRITICAL (fswatch FILE_FLAG_OVERLAPPED, buffer overflow slice, eventlog record 0), 2 HIGH (registry sync blocking, kqueue fd race), 5 MEDIUM
+
+### Audits session
+- Audit M16+M18 : 4 findings (stream mesuré inexistant, active_cns leak, image K8s latest, Namespace)
+- Audit Phase 4-5-6 : 6 findings (EventFilter non-instanciable, incident.events inexistant, word-boundary)
+- Audit Phase 7 : 5 findings (inodeToPID O(N×M), parseHexAddr panic, APIURL exfiltration, secrets cmdline, cap processus)
+- Audit plateformes Windows/macOS : 10 findings (voir ci-dessus)
+
+### Tests 2026-08-15
+- Python : **502 passed, 0 failed** (unit + scenarios)
+- Go : **28 packages, 0 failure** (linux/amd64)
+- TypeScript : **85 passed**
+- Cross-compilation : 4 cibles, 0 erreur
+
+### Documentation
+- `docs/internal/COMPATIBILITY_MATRIX.md` créé — problèmes versions CI documentés
+- CHANGELOG.md mis à jour pour v0.2.0-alpha.1
 
 ---
 

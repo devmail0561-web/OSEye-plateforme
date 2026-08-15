@@ -1,9 +1,68 @@
-# OSEye — Plan de développement Agent Go + Serveur Python (Phases 2-3)
+# OSEye — Plan de développement Agent Go + Serveur Python (Multi-plateforme)
 
-**Version :** 1.2  
-**Date :** 2026-08-07  
-**Basé sur :** commit `314f1f1` (M22 mergé)  
-**Périmètre :** Agent Go (`agent/`) + Server Python (`server/oseye/`) + Règles de détection (`rules/`)
+**Version :** 2.0  
+**Date :** 2026-08-15 (mise à jour depuis v1.2 du 2026-08-07)
+**Basé sur :** commit `ed76ee4` (normalizers Windows/macOS livrés)
+**Périmètre :** Agent Go multi-plateforme + Server Python + Règles + CI
+
+---
+
+## Architecture multi-plateforme (2026-08-15)
+
+### Entrées par plateforme
+
+```
+cmd/oseye-agent/
+├── main_linux.go        //go:build linux   — agent complet
+├── main_windows.go      //go:build windows — agent minimal
+├── main_darwin.go       //go:build darwin  — agent minimal
+├── platform_linux.go    — import driver Linux
+├── platform_windows.go  — import driver Windows
+└── platform_darwin.go   — import driver macOS
+```
+
+### Drivers plateformes
+
+```
+internal/platform/
+├── linux/     — 9 collecteurs (ebpf, auditd, fanotify, inotify, procfs, netlink, journald, syslog, udev)
+├── windows/   — 6 collecteurs (toolhelp32, etw, registry, eventlog, fswatch, winnetstat)
+└── darwin/    — 5 collecteurs (ps, es[stub], kqueue, unifiedlog, darwinnet)
+```
+
+### Normalizers serveur
+
+```
+server/oseye/normalizer/adapters/
+├── linux/     — 9 adapters
+├── windows/   — 6 adapters (toolhelp32, etw, registry, eventlog, fswatch, winnetstat)
+└── darwin/    — 5 adapters (ps, kqueue, unifiedlog, darwinnet, es)
+```
+
+### Différences Linux vs Windows/macOS
+
+| Fonctionnalité | Linux | Windows/macOS |
+|----------------|-------|---------------|
+| Watchdog CPU/RAM | ✅ | ❌ (à faire) |
+| Responder (BlockIP, Kill) | ✅ | ❌ (à faire) |
+| Autonomy engine | ✅ | ❌ (à faire) |
+| Policy client | ✅ | ❌ (à faire) |
+| Commands client | ✅ | ❌ (à faire) |
+| Collection + transport | ✅ | ✅ |
+
+### Cross-compilation
+
+```bash
+make build-agent              # linux/amd64
+make build-windows            # windows/amd64 → oseye-agent-windows-amd64.exe
+make build-darwin-amd64       # darwin/amd64
+make build-darwin-arm64       # darwin/arm64 (Apple Silicon)
+make build-all-agents         # tous les 4 en une commande
+```
+
+---
+
+## Récapitulatif de l'existant
 
 ---
 
