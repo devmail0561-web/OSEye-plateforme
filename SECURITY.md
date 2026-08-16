@@ -57,6 +57,7 @@ Les mécanismes de sécurité implémentés dans OSEye sont décrits dans :
 [`docs/ARCHITECTURE.md` — Section 5 : Architecture de sécurité](docs/ARCHITECTURE.md)
 
 Points clés :
+- **Container non-root** — `USER oseye` dans le Dockerfile ; le volume `/etc/oseye` doit être accessible au groupe `oseye` (`chown root:oseye /etc/oseye && chmod 750 /etc/oseye` sur l'hôte)
 - **PKI interne** — mTLS strict entre agent et server (refus démarrage si certs absents)
 - **CA key passphrase** — `OSEYE_TLS_CA_KEY_PASSWORD` active le chiffrement AES de la clé CA sur disque
 - **JWT RS256** — authentification API ; rôles décodés à chaque chargement, jamais en localStorage
@@ -75,9 +76,14 @@ Points clés :
 
 ### `oseye-server init` — génération PKI et répertoires
 
-`oseye-server init` (Python, `server/oseye/cli/cmd_init.py`) applique `os.umask(0o077)` avant tout appel openssl — les clés privées sont créées directement en mode **0600**, sans fenêtre TOCTOU. Le token d'enrollment est créé via `os.open()` avec `O_CREAT` et le mode cible dès la première ouverture.
+`oseye-server init` (Python, `server/oseye/cli/cmd_init.py`) :
 
-Le résumé final n'affiche **jamais** le mot de passe admin en clair.
+- **Modes de répertoires exacts** — `create_dirs()` utilise `os.umask(0)` pour que les modes passés à `mkdir()` (0o700 / 0o750 / 0o755) soient appliqués sans interférence de l'umask du shell appelant.
+- **Clés privées** — `generate_pki()` utilise `os.umask(0o077)` pendant les appels openssl, garantissant que CA key, server key et JWT key sont créés directement en mode **0600** sans fenêtre TOCTOU.
+- **Nettoyage PKI** — `san.tmp` et `server.csr` supprimés dans un `try/finally`, même en cas d'échec partiel. Un re-run avec `--force` ne réutilise jamais des SANs périmés.
+- **Erreurs OpenSSL** — stderr décodé et inclus dans le `RuntimeError` pour un diagnostic immédiat (disk full, entropie insuffisante, etc.).
+- **Token d'enrollment** — créé via `write_secure()` avec `os.O_CREAT` et le mode cible dès la première ouverture.
+- Le résumé final n'affiche **jamais** le mot de passe admin en clair.
 
 ```bash
 sudo oseye-server init [--hostname HOST] [--ip IP] [--force]
@@ -88,6 +94,7 @@ sudo oseye-server init [--hostname HOST] [--ip IP] [--force]
 `oseye-server setup` (Python, `server/oseye/cli/cmd_setup.py`) :
 
 - **Fichiers créés atomiquement** — `write_secure()` utilise `os.open()` avec le mode cible dès le premier `open()`. Pas de TOCTOU entre création et `chmod`.
+- **Modes de répertoires garantis** — création des répertoires manquants avec `os.umask(0)` pour des modes exacts (0o700 / 0o750 / 0o755), indépendamment de l'umask du shell.
 - **Mot de passe DB isolé** — pour PostgreSQL, `OSEYE_DB_URL` (avec mot de passe percent-encodé) est écrit **uniquement** dans `secrets.env` (mode 600).
 - **Validation hostname** — rejet si `/` ou espace avant injection dans `-subj` OpenSSL.
 - **Validation IP** — `ipaddress.ip_address()` avant injection dans la SAN.
@@ -103,12 +110,27 @@ sudo oseye-server setup
 
 - **Crypto natif** — génération RSA-2048 et CSR via `crypto/rsa` + `crypto/x509`, sans dépendance à openssl.
 - **TOFU sécurisé** — `InsecureSkipVerify` uniquement pour la requête initiale de fetch CA ; toutes les requêtes suivantes utilisent le pool CA.
-- **Écriture atomique** — `os.OpenFile(O_CREAT|O_TRUNC, 0600)` sans étape chmod séparée.
+- **Écriture atomique de tous les fichiers** — `agent.key`, `ca.crt`, `agent.crt` et `agent.env` sont tous écrits via `writeSecureFile` (`os.O_CREATE|O_TRUNC`, mode fixé dès l'ouverture) — jamais soumis à l'umask courant.
 - **IPv6 et scheme** — `net.SplitHostPort` + strip du scheme `https://` si fourni par l'opérateur.
 
 ```bash
 sudo oseye-config enroll --server HOST:PORT --token TOKEN
 ```
+
+### Durcissement Docker
+
+Le Dockerfile du serveur applique les protections suivantes :
+
+- **`USER oseye`** — le processus serveur tourne en utilisateur non-root à l'intérieur du container.
+- **Préparation du volume hôte** — exécuter une fois sur l'hôte avant `docker compose up` :
+  ```bash
+  sudo groupadd -r oseye 2>/dev/null || true
+  sudo chown root:oseye /etc/oseye
+  sudo chmod 750 /etc/oseye
+  # Répertoires 750 accessibles au groupe oseye :
+  sudo chown -R root:oseye /etc/oseye/plugins /var/lib/oseye /var/run/oseye
+  ```
+- **Digest pinning** — en production, remplacer le tag `python:3.12-slim` par un digest immutable (`@sha256:…`) pour éviter les mutations silencieuses de l'image upstream.
 
 ### Modèle de permissions des répertoires
 
