@@ -71,6 +71,52 @@ Points clés :
 - **TLS 1.3 uniquement** sur gRPC (`GRPC_SSL_CIPHER_SUITES` restreint aux suites TLS 1.3)
 - **Full-jitter backoff** — reconnexions agent distribuées uniformément (anti thundering herd)
 
+## Sécurité post-installation
+
+### Génération PKI et répertoires (`scripts/init-server.sh`)
+
+`init-server.sh` applique `umask 077` en subshell avant chaque `openssl genrsa` — les clés privées sont créées directement en mode **0600**, sans fenêtre où un autre processus pourrait les lire :
+
+```bash
+(umask 077; openssl genrsa -out /etc/oseye/certs/ca.key 4096)
+```
+
+Le token d'enrollment est créé de la même façon :
+
+```bash
+(umask 077; date +%s > "$TOKEN_DIR/$TOKEN")
+```
+
+Le résumé final n'affiche **jamais** `OSEYE_ADMIN_PASSWORD` en clair (protection contre les logs CI et les enregistrements de session SSH).
+
+### Wizard de configuration (`scripts/setup-server.py`)
+
+- **Fichiers de config créés atomiquement** — `_write_secure()` utilise `os.open()` avec le mode cible dès le premier `open()`. Pas de TOCTOU entre création et `chmod`.
+- **Mot de passe DB isolé** — pour PostgreSQL, `OSEYE_DB_URL` (qui contient le mot de passe) est écrit **uniquement** dans `secrets.env` (mode 600). `server.env` (mode 640) ne contient que les paramètres non-sensibles.
+- **Validation du hostname** — tout hostname contenant `/` ou espace est rejeté avant l'injection dans le champ `-subj` OpenSSL.
+- **Génération PKI** — `os.umask(0o077)` est positionné avant les appels openssl (subprocessus hérite du umask du parent).
+
+### Modèle de permissions des répertoires
+
+| Répertoire | Mode | Justification |
+|------------|------|---------------|
+| `/etc/oseye/certs` | 700 | Clés privées TLS et JWT |
+| `/etc/oseye/enrollment_tokens` | 700 | Tokens à usage unique |
+| `/etc/oseye/agent_keys` | 700 | Clés publiques Ed25519 agents |
+| `/etc/oseye/plugin_keys` | 700 | Clés de vérification plugins |
+| `/etc/oseye/plugins` | 750 | Code plugin — lisible par le groupe `oseye` |
+| `/var/lib/oseye` | 750 | Checkpoint ML, buffer — lisible par le groupe `oseye` |
+| `/var/run/oseye` | 755 | Socket IPC plugin — accessible au service |
+
+### Séparation server.env / secrets.env
+
+| Fichier | Mode | Contenu |
+|---------|------|---------|
+| `/etc/oseye/server.env` | 640 | Configuration non-sensible (ports, profils, DB backend…) |
+| `/etc/oseye/secrets.env` | 600 | `OSEYE_SECRET_KEY`, passwords, API keys, `OSEYE_DB_URL` PostgreSQL |
+
+Ne jamais committer `secrets.env`. En production, utiliser un secrets manager (Vault, AWS Secrets Manager) et injecter via `EnvironmentFile=` systemd ou Docker secrets.
+
 ## Remerciements
 
 Nous remercions les chercheurs en sécurité qui contribuent à améliorer OSEye via une divulgation responsable.

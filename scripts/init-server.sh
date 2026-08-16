@@ -33,6 +33,11 @@ fi
 # ── Create directories ────────────────────────────────────────────────────────
 install -d -m 700 "$CERTS_DIR"
 install -d -m 700 "$TOKEN_DIR"
+install -d -m 700 /etc/oseye/agent_keys
+install -d -m 750 /etc/oseye/plugins
+install -d -m 700 /etc/oseye/plugin_keys
+install -d -m 750 /var/lib/oseye
+install -d -m 755 /var/run/oseye
 
 # ── Detect server hostname and IP for SAN ────────────────────────────────────
 SERVER_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
@@ -47,8 +52,7 @@ echo ""
 
 # ── 1. Root CA (4096-bit RSA, 10 years) ──────────────────────────────────────
 echo "==> Generating CA (4096-bit, 10 years)..."
-openssl genrsa -out "$CERTS_DIR/ca.key" 4096 2>/dev/null
-chmod 600 "$CERTS_DIR/ca.key"
+(umask 077; openssl genrsa -out "$CERTS_DIR/ca.key" 4096 2>/dev/null)
 openssl req -new -x509 -days 3650 \
     -key "$CERTS_DIR/ca.key" \
     -out "$CERTS_DIR/ca.crt" \
@@ -57,8 +61,7 @@ openssl req -new -x509 -days 3650 \
 
 # ── 2. Server certificate (4096-bit, 825 days, SAN = hostname + IP) ──────────
 echo "==> Generating server certificate..."
-openssl genrsa -out "$CERTS_DIR/server.key" 4096 2>/dev/null
-chmod 600 "$CERTS_DIR/server.key"
+(umask 077; openssl genrsa -out "$CERTS_DIR/server.key" 4096 2>/dev/null)
 openssl req -new \
     -key "$CERTS_DIR/server.key" \
     -out "$CERTS_DIR/server.csr" \
@@ -78,8 +81,7 @@ rm -f "$CERTS_DIR/server.csr"
 
 # ── 3. JWT RS256 key pair (4096-bit) ─────────────────────────────────────────
 echo "==> Generating JWT RS256 key pair..."
-openssl genrsa -out "$CERTS_DIR/jwt_private.pem" 4096 2>/dev/null
-chmod 600 "$CERTS_DIR/jwt_private.pem"
+(umask 077; openssl genrsa -out "$CERTS_DIR/jwt_private.pem" 4096 2>/dev/null)
 openssl rsa -in "$CERTS_DIR/jwt_private.pem" \
     -pubout -out "$CERTS_DIR/jwt_public.pem" \
     2>/dev/null
@@ -89,19 +91,16 @@ if [[ -z "${OSEYE_ADMIN_PASSWORD:-}" ]]; then
     echo ""
     read -r -s -p "Set OSEYE_ADMIN_PASSWORD: " OSEYE_ADMIN_PASSWORD
     echo ""
-    if [[ ${#OSEYE_ADMIN_PASSWORD} -lt 12 ]]; then
-        echo "ERROR: Password must be at least 12 characters."
-        exit 1
-    fi
+fi
+if [[ ${#OSEYE_ADMIN_PASSWORD} -lt 12 ]]; then
+    echo "ERROR: Password must be at least 12 characters."
+    exit 1
 fi
 
 # ── 5. Enrollment token ───────────────────────────────────────────────────────
-# Suppress shell tracing around the token to avoid log exposure
-set +x
 TOKEN=$(openssl rand -hex 32)
 TOKEN_FILE="$TOKEN_DIR/$TOKEN"
-date +%s > "$TOKEN_FILE"
-chmod 600 "$TOKEN_FILE"
+(umask 077; date +%s > "$TOKEN_FILE")
 
 # ── 6. Display summary ────────────────────────────────────────────────────────
 echo ""
@@ -124,8 +123,7 @@ echo "║   OSEYE_SERVER=$SERVER_HOSTNAME:8000 \\"
 echo "║   OSEYE_TOKEN=$TOKEN \\"
 echo "║   sudo bash enroll-agent.sh"
 echo "╠══════════════════════════════════════════════════════════════════╣"
-echo "║ IMPORTANT: add to /etc/oseye/secrets.env:"
-echo "║   OSEYE_ADMIN_PASSWORD=$OSEYE_ADMIN_PASSWORD"
+echo "║ IMPORTANT: set OSEYE_ADMIN_PASSWORD in /etc/oseye/secrets.env  ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Next: copy packaging/config/server.env.example to /etc/oseye/server.env"
