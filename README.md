@@ -1,4 +1,27 @@
-# OSEye
+<div align="center">
+
+<h1>
+  <img src="https://img.shields.io/badge/OSEye-0d1117?style=flat-square&labelColor=0d1117&color=0d1117" alt="" />
+  <br/>
+  OSEye
+</h1>
+
+<p><em>La plateforme EDR/SIEM Linux qui voit tout — légère, modulaire et intelligente</em></p>
+
+<br/>
+
+[![Licence](https://img.shields.io/badge/Licence-Apache_2.0-0078d4?style=flat-square)](LICENSE)
+[![Agent](https://img.shields.io/badge/Agent-Go_1.23-00ADD8?style=flat-square&logo=go&logoColor=white)](agent/)
+[![Server](https://img.shields.io/badge/Server-Python_3.12-3776AB?style=flat-square&logo=python&logoColor=white)](server/)
+[![eBPF](https://img.shields.io/badge/Collecteur-eBPF-f97316?style=flat-square)](agent/internal/platform/linux/ebpf/)
+[![ML](https://img.shields.io/badge/ML-River_online-8b5cf6?style=flat-square)](server/oseye/ml_engine/)
+[![UI](https://img.shields.io/badge/UI-React_18-61DAFB?style=flat-square&logo=react&logoColor=black)](ui/)
+[![Transport](https://img.shields.io/badge/Transport-mTLS_TLS_1.3-22c55e?style=flat-square)](SECURITY.md)
+[![Tests](https://img.shields.io/badge/Tests-293_Python_%7C_20%2B_Go-16a34a?style=flat-square)](#qualité)
+
+<br/>
+
+</div>
 
 **OSEye** est une plateforme EDR/SIEM Linux open-core — légère, modulaire et intelligente.
 
