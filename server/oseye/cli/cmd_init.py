@@ -11,8 +11,8 @@ import sys
 import time
 from pathlib import Path
 
-from ._pki import DIR_MODES, create_dirs, generate_pki, write_secure
-from ._ui import GREEN, BOLD, DIM, c, err, ok, warn, header
+from ._pki import create_dirs, generate_pki, write_secure
+from ._ui import BOLD, DIM, GREEN, c, err, header, ok, warn
 
 
 def run(argv: list[str] | None = None) -> None:

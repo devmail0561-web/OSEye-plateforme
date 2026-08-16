@@ -52,7 +52,10 @@ class UserActivityLinker:
         timeline = incident.timeline or []
         # Use word-boundary matching to avoid false positives where a short
         # process_name (e.g. "su", "bash") appears as a substring in unrelated titles.
-        proc = alert.process_name
+        from pathlib import Path as _Path
+        proc = _Path(alert.process_name).name  # strip any path prefix
+        if len(proc) < 2 or " " in proc:
+            return 0.0
         matched = any(
             f" {proc} " in f" {e.title} " or e.title == proc or e.title.startswith(f"{proc} ")
             for e in timeline

@@ -66,11 +66,9 @@ class PluginVerifier:
             logger.exception("Failed to read plugin or signature file")
             return False
 
-        digest = hashlib.sha256(plugin_bytes).digest()
-
         for key in self._keys:
             try:
-                key.verify(sig_bytes, digest)
+                key.verify(sig_bytes, plugin_bytes)
                 logger.info(
                     "Plugin signature verified for %s", plugin_path.name
                 )

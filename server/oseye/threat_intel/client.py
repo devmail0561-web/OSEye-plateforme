@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 # ThreatIntelClient raises ValueError for validation errors so it can be used
 # outside a FastAPI request context (e.g. TIWorker background task).
 # API routers that call lookup() should catch ValueError and convert to HTTPException.
-
 from oseye.threat_intel.cache import MemoryTICache, TICache
 from oseye.threat_intel.models import AggregatedTIReport, ThreatIntelReport
 from oseye.threat_intel.providers.base import ThreatIntelProvider

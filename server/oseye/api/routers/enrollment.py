@@ -34,7 +34,10 @@ class TokenCreateBody(BaseModel):
         default=None,
         ge=1,
         le=8760,  # 1 year max
-        description="TTL in hours. Omit to use the server default (OSEYE_ENROLLMENT_TOKEN_DEFAULT_TTL_HOURS).",
+        description=(
+            "TTL in hours. Omit to use the server default "
+            "(OSEYE_ENROLLMENT_TOKEN_DEFAULT_TTL_HOURS)."
+        ),
     )
 
 

@@ -16,9 +16,9 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Path as FastPath, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 
 from oseye.api.auth.rbac import require_role

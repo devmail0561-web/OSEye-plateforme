@@ -23,7 +23,8 @@ os.environ.setdefault(
 # Provide a deterministic test key so tests can instantiate MLEngine() freely.
 os.environ.setdefault(
     "OSEYE_CHECKPOINT_HMAC_KEY",
-    "test-checkpoint-hmac-key-for-pytest-only-32b",
+    # 32-byte deterministic test key (hex-encoded, audit L-25 fix)
+    "74657374636865636b706f696e74686d61636b657966727079746573743132333435",
 )
 
 

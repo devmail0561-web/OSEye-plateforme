@@ -54,14 +54,11 @@ class PidLineageLinker:
         ):
             base = _BASE_ENTITY
         elif alert.pid is not None:
-            # Parse pids from timeline entries whose title ends with ":PID" (entity_id format).
-            incident_pids = {
-                int(e.title.rsplit(":", 1)[-1])
-                for e in timeline
-                if ":" in e.title and e.title.rsplit(":", 1)[-1].isdigit()
-            }
-            if alert.pid in incident_pids:
-                base = _BASE_PID
+            # TODO(audit M-27): This branch is broken — incident timeline entries have
+            # titles like "Suspicious shell execution" (rule names), not "hostname:pid".
+            # incident_pids is therefore always empty and _BASE_PID (0.7) is unreachable.
+            # Fix: store entity_id on IncidentEvent at creation time and compare directly.
+            pass
 
         if base == 0.0:
             return 0.0

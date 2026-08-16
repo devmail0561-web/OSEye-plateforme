@@ -93,7 +93,10 @@ def generate_pki(certs_dir: Path, hostname: str, ip: str, *, force: bool = False
                          "-out", str(certs_dir / "ca.crt"),
                          "-subj", "/CN=OSEye-CA/O=OSEye/C=FR"])
 
-            write_secure(san_file, f"subjectAltName=DNS:{hostname},DNS:localhost,IP:{ip},IP:127.0.0.1", 0o600)
+            san_content = (
+                f"subjectAltName=DNS:{hostname},DNS:localhost,IP:{ip},IP:127.0.0.1"
+            )
+            write_secure(san_file, san_content, 0o600)
             run_openssl(["openssl", "genrsa", "-out", str(certs_dir / "server.key"), "4096"])
             run_openssl(["openssl", "req", "-new",
                          "-key", str(certs_dir / "server.key"),

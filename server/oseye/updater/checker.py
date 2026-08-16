@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 import platform
-import sys
 import re
+import sys
 from dataclasses import dataclass
-
-import httpx
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+
+import httpx
 
 _logger = logging.getLogger(__name__)
 

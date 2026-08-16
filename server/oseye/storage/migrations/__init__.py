@@ -191,7 +191,8 @@ async def _migrate_enrollment_tokens(conn: AsyncConnection, dialect: str) -> Non
 
     # create_all already handles new installs via Base.metadata.
     # This covers upgrades from the file-based token store where the table was absent.
-    # The UNIQUE constraint on token_hash implicitly creates an index — no separate CREATE INDEX needed.
+    # The UNIQUE constraint on token_hash implicitly creates an index —
+    # no separate CREATE INDEX needed.
     if dialect == "postgresql":
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS enrollment_tokens (

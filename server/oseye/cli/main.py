@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 
-
 _USAGE = """\
 oseye-server — OSEye server management
 

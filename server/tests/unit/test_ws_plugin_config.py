@@ -206,9 +206,8 @@ class TestPluginVerifier:
         plugin_file = tmp_path / "myplugin.py"
         plugin_file.write_bytes(b"print('hello from plugin')")
 
-        # Sign it: Ed25519.sign over sha256 digest
-        digest = hashlib.sha256(plugin_file.read_bytes()).digest()
-        signature = private_key.sign(digest)
+        # Sign it: Ed25519.sign over raw plugin bytes (no prehash — audit H-16 fix)
+        signature = private_key.sign(plugin_file.read_bytes())
 
         sig_file = tmp_path / "myplugin.sig"
         sig_file.write_bytes(signature)
@@ -240,8 +239,7 @@ class TestPluginVerifier:
         other_private = Ed25519PrivateKey.generate()
         plugin_file = tmp_path / "myplugin.py"
         plugin_file.write_bytes(b"print('tampered plugin')")
-        digest = hashlib.sha256(plugin_file.read_bytes()).digest()
-        bad_signature = other_private.sign(digest)
+        bad_signature = other_private.sign(plugin_file.read_bytes())
 
         sig_file = tmp_path / "myplugin.sig"
         sig_file.write_bytes(bad_signature)

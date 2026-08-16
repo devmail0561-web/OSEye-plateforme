@@ -176,7 +176,9 @@ class CaseManager:
             case.evidence.append(item)
             case.updated_at = now
             await self._repo.update(case)
-            await self._append_custody(case, operator, "evidence_added", f"evidence_id={item.evidence_id}")
+            await self._append_custody(
+                case, operator, "evidence_added", f"evidence_id={item.evidence_id}"
+            )
             return item
 
     async def close_case(self, case_id: UUID, operator: str, resolution: str) -> ForensicCase:

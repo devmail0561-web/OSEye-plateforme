@@ -116,6 +116,13 @@ class CorrelationEngine:
         # than linkers[0]._timeframe are not invisible when multiple linkers exist.
         since = datetime.now(UTC) - timedelta(seconds=self._max_timeframe)
         candidates = await self._repo.find_open_incidents_for_host(alert.hostname, since)
+        if len(candidates) > 50:
+            _log.warning(
+                "correlation_candidates_capped",
+                hostname=alert.hostname,
+                total=len(candidates),
+            )
+            candidates = candidates[:50]
 
         # Correction 1: score every (linker, incident) pair, pick best match
         best_incident: Incident | None = None

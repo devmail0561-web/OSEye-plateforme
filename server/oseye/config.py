@@ -10,7 +10,9 @@ Usage:
 
 from __future__ import annotations
 
-from pydantic import Field, Literal, SecretStr, model_validator
+from typing import Literal
+
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -55,7 +57,10 @@ class Settings(BaseSettings):
     )
     otel_insecure: bool = Field(
         default=False,
-        description="Allow insecure OTLP connection (OSEYE_OTEL_INSECURE). Takes priority over OTEL_INSECURE.",
+        description=(
+            "Allow insecure OTLP connection (OSEYE_OTEL_INSECURE). "
+            "Takes priority over OTEL_INSECURE."
+        ),
     )
     service_name: str = Field(default="oseye-server")
 
@@ -93,7 +98,10 @@ class Settings(BaseSettings):
     # PKI — CA private key (used by enrollment endpoint to sign agent certs)
     tls_ca_key_file: str = Field(default="/etc/oseye/certs/ca.key")
     # Passphrase to decrypt the CA private key. Empty string means unencrypted key.
-    tls_ca_key_password: SecretStr = Field(default=SecretStr(""), description="Passphrase for the CA private key (OSEYE_TLS_CA_KEY_PASSWORD).")
+    tls_ca_key_password: SecretStr = Field(
+        default=SecretStr(""),
+        description="Passphrase for the CA private key (OSEYE_TLS_CA_KEY_PASSWORD).",
+    )
 
     # Enrollment token default TTL in hours (admin can override per token)
     enrollment_token_default_ttl_hours: int = Field(default=24, ge=1, le=8760)

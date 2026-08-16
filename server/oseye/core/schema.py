@@ -6,7 +6,32 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, IPvAnyAddress
+import ipaddress as _ipaddress
+from typing import Annotated
+
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+def _validate_ip(v: object) -> str | None:
+    """Normalise IP address fields.
+
+    Valid IPv4/IPv6 addresses are accepted and returned as strings.
+    Non-IP values (wildcards, hostnames) are passed through as-is so that
+    normalizer adapters that store '*' or domain names are not broken.
+    """
+    if v is None:
+        return None
+    s = str(v)
+    try:
+        _ipaddress.ip_address(s)
+    except ValueError:
+        # Not a valid IP — pass through (wildcard '*', hostname, etc.)
+        pass
+    return s
+
+
+# IP field type: stored as str, validated as a real IP address.
+_IPStr = Annotated[str, BeforeValidator(_validate_ip)]
 
 # ---------------------------------------------------------------------------
 # Universal Event
@@ -46,13 +71,12 @@ class UniversalEvent(BaseModel):
     file_hash_after: str | None = None
 
     # Network fields
-    # IPvAnyAddress validates IPv4 and IPv6; pydantic v2 serialises to string in
-    # model_dump() / model_dump_json(). Use str(event.src_ip) for plain-string
+    # _IPStr validates and normalises IP addresses as plain strings (audit M-34).
     # contexts (e.g. TI lookups, log messages) when the raw IPv4Address object
     # is not acceptable.
-    src_ip: IPvAnyAddress | None = None
+    src_ip: _IPStr | None = None
     src_port: int | None = Field(default=None, ge=0, le=65535)
-    dst_ip: IPvAnyAddress | None = None
+    dst_ip: _IPStr | None = None
     dst_port: int | None = Field(default=None, ge=0, le=65535)
     protocol: str | None = None
     bytes_sent: int | None = None

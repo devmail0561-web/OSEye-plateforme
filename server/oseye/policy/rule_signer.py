@@ -116,15 +116,15 @@ class RuleSigner:
             )
         except TypeError as exc:
             # Password-protected key — load_pem_private_key raises TypeError when
-            # password=None is passed to an encrypted key.
+            # password=None is passed to an encrypted key. This is fatal at startup.
             raise RuntimeError(
                 f"Rule signing key at {path!r} is password-protected. "
-                "Decrypt it first or provide OSEYE_TLS_CA_KEY_PASSWORD."
+                "Decrypt it first or provide the passphrase via the config."
             ) from exc
         except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(
-                f"Failed to load rule signing key from {path!r}: {exc}"
-            ) from exc
+            # File not found, permission denied, invalid PEM, etc. — log and
+            # continue without signing (rules pushed unsigned).
+            _logger.error("rule_signer.key_load_failed", path=path, error=str(exc))
 
     def build_ruleset(self, version: int | None = None) -> bytes:
         """Return JSON bytes matching Go's ``localrules.RuleSet`` struct.

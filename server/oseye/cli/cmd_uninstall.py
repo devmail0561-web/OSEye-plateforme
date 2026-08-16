@@ -7,9 +7,8 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-
 
 _SYSTEMCTL = "/usr/bin/systemctl"
 
@@ -168,7 +167,10 @@ def run(argv: list[str] | None = None) -> None:
         help="Also remove config (/etc/oseye) and data (/var/lib/oseye)",
     )
     parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompts")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be removed without making changes")
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Show what would be removed without making changes",
+    )
     args = parser.parse_args(argv)
 
     _require_root()

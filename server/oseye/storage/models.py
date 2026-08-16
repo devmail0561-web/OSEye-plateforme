@@ -328,7 +328,8 @@ class EntityHourlyStatsRow(Base):
     __table_args__ = (
         # L-22: unique=True garantit l'unicité (hostname, category, hour_bucket) au niveau DB.
         # Migration nécessaire : DROP INDEX ix_ehs_hostname_cat_hour;
-        #   CREATE UNIQUE INDEX ix_ehs_hostname_cat_hour ON entity_hourly_stats (hostname, category, hour_bucket)
+        #   CREATE UNIQUE INDEX ix_ehs_hostname_cat_hour
+        #     ON entity_hourly_stats (hostname, category, hour_bucket)
         Index("ix_ehs_hostname_cat_hour", "hostname", "category", "hour_bucket", unique=True),
     )
 

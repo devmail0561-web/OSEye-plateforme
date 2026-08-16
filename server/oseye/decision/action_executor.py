@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import re
 import uuid
 from typing import TYPE_CHECKING
 

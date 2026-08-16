@@ -7,7 +7,8 @@ import hmac
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import delete as sql_delete, select
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.storage.models import EnrollmentTokenRow

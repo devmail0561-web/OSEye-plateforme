@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import secrets
 import subprocess
@@ -14,9 +13,18 @@ from urllib.parse import quote as _url_quote
 
 from ._pki import DIR_MODES, generate_pki, write_secure
 from ._ui import (
-    GREEN, BOLD, DIM,
-    ask, ask_password, ask_yn,
-    c, err, header, ok, step, warn,
+    BOLD,
+    DIM,
+    GREEN,
+    ask,
+    ask_password,
+    ask_yn,
+    c,
+    err,
+    header,
+    ok,
+    step,
+    warn,
 )
 
 
@@ -31,10 +39,6 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
     if subprocess.run(["openssl", "version"], capture_output=True).returncode != 0:
         err("openssl not found in PATH")
         sys.exit(1)
-    if sys.version_info < (3, 12):
-        err(f"Python 3.12+ required (got {sys.version})")
-        sys.exit(1)
-
     missing = [d for d in DIR_MODES if not Path(d).is_dir()]
     if missing:
         warn("Missing directories (run 'oseye-server init' first):")
@@ -50,10 +54,10 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
         finally:
             os.umask(old_umask)
 
-    TOTAL = 9
+    _total_steps = 9
 
     # ── Step 1: Network ───────────────────────────────────────────────────────
-    step(1, TOTAL, "Network & hostname")
+    step(1, _total_steps, "Network & hostname")
     hostname = (
         subprocess.run(["hostname", "-f"], capture_output=True, text=True).stdout.strip()
         or subprocess.run(["hostname"], capture_output=True, text=True).stdout.strip()
@@ -67,7 +71,7 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
     cors      = ask("CORS origins (JSON array)", f'["https://{hostname}"]')
 
     # ── Step 2: PKI ───────────────────────────────────────────────────────────
-    step(2, TOTAL, "TLS / PKI")
+    step(2, _total_steps, "TLS / PKI")
     certs_dir = Path("/etc/oseye/certs")
     print(c("  Generating PKI (this takes a moment)...", DIM))
     try:
@@ -81,7 +85,7 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
         ok("PKI already present — skipping")
 
     # ── Step 3: Database ──────────────────────────────────────────────────────
-    step(3, TOTAL, "Database")
+    step(3, _total_steps, "Database")
     print(c("  Options: sqlite (dev/test), postgresql (production)", DIM))
     db_backend = ask("Backend", "postgresql")
     db_user = db_host = db_port_db = db_name = db_password = ""
@@ -104,19 +108,19 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
     ok(f"Database: {db_backend}")
 
     # ── Step 4: Redis ─────────────────────────────────────────────────────────
-    step(4, TOTAL, "Redis (event bus)")
+    step(4, _total_steps, "Redis (event bus)")
     redis_url = ask("Redis URL", "redis://localhost:6379/0")
     ok(f"Redis: {redis_url}")
 
     # ── Step 5: Credentials ───────────────────────────────────────────────────
-    step(5, TOTAL, "Admin credentials")
+    step(5, _total_steps, "Admin credentials")
     admin_pw   = ask_password("Admin password (min 12 chars)")
     analyst_pw = ask_password("Analyst password (min 12 chars)")
     secret_key = secrets.token_hex(32)
     ok("Credentials set")
 
     # ── Step 6: Threat Intelligence (optional) ────────────────────────────────
-    step(6, TOTAL, "Threat Intelligence APIs (optional — press Enter to skip)")
+    step(6, _total_steps, "Threat Intelligence APIs (optional — press Enter to skip)")
     abuseipdb_key  = ask("AbuseIPDB API key", "")
     virustotal_key = ask("VirusTotal API key", "")
     misp_url       = ask("MISP URL", "")
@@ -125,10 +129,11 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
         f"OSEYE_MISP_URL={misp_url}\nOSEYE_MISP_API_KEY={misp_key}"
         if misp_url else "OSEYE_MISP_URL=\nOSEYE_MISP_API_KEY="
     )
-    ok("TI providers configured" if any([abuseipdb_key, virustotal_key, misp_url]) else "TI providers skipped")
+    ti_configured = any([abuseipdb_key, virustotal_key, misp_url])
+    ok("TI providers configured" if ti_configured else "TI providers skipped")
 
     # ── Step 7: OpenTelemetry (optional) ──────────────────────────────────────
-    step(7, TOTAL, "Observability")
+    step(7, _total_steps, "Observability")
     log_level = ask("Log level", "INFO")
     otel_endpoint = ""
     if ask_yn("Enable OpenTelemetry export?", default=False):
@@ -142,14 +147,14 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
     )
 
     # ── Step 8: Surveillance profile ─────────────────────────────────────────
-    step(8, TOTAL, "Agent surveillance profile")
+    step(8, _total_steps, "Agent surveillance profile")
     profiles = ["workstation", "server", "minimal", "stealth", "investigation", "compliance"]
     print(c(f"  Available profiles: {', '.join(profiles)}", DIM))
     profile = ask("Default profile", "workstation")
     ok(f"Default profile: {profile}")
 
     # ── Step 9: Write files ───────────────────────────────────────────────────
-    step(9, TOTAL, "Writing configuration files")
+    step(9, _total_steps, "Writing configuration files")
 
     if db_backend == "sqlite":
         db_url_line = f"OSEYE_DB_URL={db_url}"

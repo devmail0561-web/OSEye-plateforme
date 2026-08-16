@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import os
 import socket
-import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -164,7 +163,10 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             ti_providers.append(
                 MISPProvider(
                     misp_url=settings.misp_url,
-                    api_key=settings.misp_api_key.get_secret_value() if settings.misp_api_key else None,
+                    api_key=(
+                        settings.misp_api_key.get_secret_value()
+                        if settings.misp_api_key else None
+                    ),
                 )
             )
 
