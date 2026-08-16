@@ -10,7 +10,7 @@ Usage:
 
 from __future__ import annotations
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, Literal, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OSEYE_", case_sensitive=False)
 
     # Database
-    db_backend: str = Field(default="sqlite", description="sqlite | postgresql | clickhouse")
+    db_backend: Literal["sqlite", "postgresql", "clickhouse"] = Field(
+        default="sqlite", description="sqlite | postgresql | clickhouse"
+    )
     db_url: str = Field(default="sqlite+aiosqlite:///./oseye_dev.db")
     db_pool_size: int = 10
     db_max_overflow: int = 20
@@ -51,6 +53,10 @@ class Settings(BaseSettings):
     otel_endpoint: str | None = Field(
         default=None, description="OTLP gRPC endpoint, e.g. localhost:4317"
     )
+    otel_insecure: bool = Field(
+        default=False,
+        description="Allow insecure OTLP connection (OSEYE_OTEL_INSECURE). Takes priority over OTEL_INSECURE.",
+    )
     service_name: str = Field(default="oseye-server")
 
     # Worker settings
@@ -58,10 +64,10 @@ class Settings(BaseSettings):
     batch_max_size: int = Field(default=500)
 
     # Threat Intelligence API keys
-    abuseipdb_api_key: str | None = Field(default=None)
-    virustotal_api_key: str | None = Field(default=None)
+    abuseipdb_api_key: SecretStr | None = Field(default=None)
+    virustotal_api_key: SecretStr | None = Field(default=None)
     misp_url: str | None = Field(default=None)
-    misp_api_key: str | None = Field(default=None)
+    misp_api_key: SecretStr | None = Field(default=None)
 
     # Threat Intelligence runtime settings
     ti_cache_ttl_seconds: int = 3600

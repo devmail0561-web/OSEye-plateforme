@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -128,6 +129,9 @@ class ActionExecutor:
         Called by HumanApprovalQueue after an operator approves the decision.
         KILL_PROCESS is only issued here — never autonomously.
         """
+        # H-14: refuse to act if human approval is still pending
+        if decision.requires_human and getattr(decision, "human_decision", None) != "approved":
+            return
         if not decision.requires_human:
             return
 
@@ -249,8 +253,10 @@ class ActionExecutor:
             )
             return None
 
-        # D-02: refuse to block loopback, link-local, unspecified, or private addresses
-        if addr.is_loopback or addr.is_link_local or addr.is_unspecified or addr.is_private:
+        # D-02 / H-14: refuse to block loopback, link-local, unspecified, private,
+        # multicast, or reserved addresses
+        if (addr.is_loopback or addr.is_link_local or addr.is_unspecified
+                or addr.is_private or addr.is_multicast or addr.is_reserved):
             _log.warning(
                 "action_executor: refusing to block private/loopback IP",
                 ip=dst_ip,

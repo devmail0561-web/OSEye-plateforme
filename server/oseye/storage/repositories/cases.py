@@ -258,7 +258,9 @@ class SQLCaseRepository:
 
             rows = (
                 await session.execute(
-                    stmt.offset(pagination.offset).limit(pagination.limit)
+                    stmt.order_by(ForensicCaseRow.created_at.desc())
+                    .offset(pagination.offset)
+                    .limit(pagination.limit)
                 )
             ).scalars().all()
             items = [_row_to_case(r) for r in rows]

@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.storage.models import AgentRow
@@ -24,44 +23,40 @@ class SQLAgentRepository:
         active_profile: str = "workstation",
         platform: str = "linux",
     ) -> None:
-        """Insert or update an agent record atomically via INSERT OR REPLACE.
+        """Insert or update an agent record using a dialect-agnostic merge pattern.
 
-        Uses SQLite's INSERT … ON CONFLICT DO UPDATE to avoid the TOCTOU race
-        in the previous select→add/modify pattern (PC-04).
+        H-08: replaced SQLite-specific INSERT … ON CONFLICT DO UPDATE with a
+        SELECT → INSERT/UPDATE pattern so the repository works against both
+        SQLite (dev) and PostgreSQL (prod) without dialect-specific imports.
+        The operation runs inside a single transaction to minimise the TOCTOU
+        window (PC-04).
         """
         now = datetime.now(UTC)
-        # Build the set_ dict conditionally so that None values do not overwrite
-        # existing data when only a partial update is supplied.
-        update_values: dict[str, object] = {"last_seen": now, "online": online}
-        if ip_address is not None:
-            update_values["ip_address"] = ip_address
-        if version is not None:
-            update_values["version"] = version
-        if active_profile:
-            update_values["active_profile"] = active_profile
-        if platform:
-            update_values["platform"] = platform
-
-        stmt = (
-            sqlite_insert(AgentRow)
-            .values(
-                cn=cn,
-                first_seen=now,
-                last_seen=now,
-                version=version,
-                active_profile=active_profile,
-                ip_address=ip_address,
-                online=online,
-                platform=platform,
-            )
-            .on_conflict_do_update(
-                index_elements=["cn"],
-                set_=update_values,
-            )
-        )
         async with self._session_factory() as session:
-            await session.execute(stmt)
-            await session.commit()
+            async with session.begin():
+                row = await session.get(AgentRow, cn)
+                if row is None:
+                    session.add(AgentRow(
+                        cn=cn,
+                        first_seen=now,
+                        last_seen=now,
+                        version=version,
+                        active_profile=active_profile,
+                        ip_address=ip_address,
+                        online=online,
+                        platform=platform,
+                    ))
+                else:
+                    row.last_seen = now
+                    row.online = online
+                    if ip_address is not None:
+                        row.ip_address = ip_address
+                    if version is not None:
+                        row.version = version
+                    if active_profile:
+                        row.active_profile = active_profile
+                    if platform:
+                        row.platform = platform
 
     async def set_offline(self, cn: str) -> None:
         """Mark an agent as offline."""

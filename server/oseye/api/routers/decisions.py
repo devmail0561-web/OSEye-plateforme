@@ -15,6 +15,8 @@ from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
@@ -30,6 +32,10 @@ class _Pagination:
 _logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
+
+# TODO(sec): each router instantiates its own Limiter; a shared request.app.state.limiter
+# would allow the global RateLimitExceeded handler in app.py to intercept 429s correctly.
+_limiter = Limiter(key_func=get_remote_address)
 
 _require_reader = require_role("analyst", "admin")
 _require_admin = require_role("admin")
@@ -87,11 +93,14 @@ async def list_decisions(
 @router.get("/pending")
 async def list_pending_decisions(
     request: Request,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     _: dict[str, Any] = Depends(_require_reader),
 ) -> list[Decision]:
-    """Return all decisions awaiting human approval."""
+    """Return decisions awaiting human approval (paginated)."""
     repo = _get_decision_repo(request)
-    return cast(list[Decision], await repo.get_pending())
+    all_pending = cast(list[Decision], await repo.get_pending())
+    return all_pending[offset : offset + limit]
 
 
 @router.get("/{decision_id}")
@@ -141,6 +150,7 @@ async def reject_decision(
 
 
 @router.get("/journal/verify")
+@_limiter.limit("5/minute")
 async def verify_journal_integrity(
     request: Request,
     limit: int = Query(default=1000, ge=1, le=10000),

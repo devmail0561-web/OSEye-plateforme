@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
-from collections import OrderedDict
+import weakref
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -47,22 +47,18 @@ class CaseManager:
 
     def __init__(self, case_repo: SQLCaseRepository) -> None:
         self._repo = case_repo
-        # F-06: use OrderedDict for insertion-order tracking so we can evict the
-        # oldest entries (LRU cap) when the dict exceeds 1 000 entries.
-        self._case_locks: OrderedDict[UUID, asyncio.Lock] = OrderedDict()
+        # WeakValueDictionary: locks are automatically removed by GC when no coroutine
+        # holds a reference, preventing the eviction-of-held-lock bug (audit M-20).
+        self._case_locks: weakref.WeakValueDictionary[UUID, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     async def _get_case_lock(self, case_id: UUID) -> asyncio.Lock:
-        if case_id in self._case_locks:
-            # Move to end — most recently used
-            self._case_locks.move_to_end(case_id)
-        else:
-            # F-06: evict oldest 100 entries when the cap is reached
-            if len(self._case_locks) >= 1000:
-                for _ in range(100):
-                    if self._case_locks:
-                        self._case_locks.popitem(last=False)
-            self._case_locks[case_id] = asyncio.Lock()
-        return self._case_locks[case_id]
+        lock = self._case_locks.get(case_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._case_locks[case_id] = lock
+        return lock
 
     async def _append_custody(
         self,
@@ -152,7 +148,7 @@ class CaseManager:
             case.notes.append(note)
             case.updated_at = now
             await self._repo.update(case)
-            await self._append_custody(case, author, "note_added", content[:200])
+            await self._append_custody(case, author, "note_added", f"note_id={note.note_id}")
             return note
 
     async def add_evidence(
@@ -180,8 +176,7 @@ class CaseManager:
             case.evidence.append(item)
             case.updated_at = now
             await self._repo.update(case)
-            detail = description or content[:200]
-            await self._append_custody(case, operator, "evidence_added", detail)
+            await self._append_custody(case, operator, "evidence_added", f"evidence_id={item.evidence_id}")
             return item
 
     async def close_case(self, case_id: UUID, operator: str, resolution: str) -> ForensicCase:

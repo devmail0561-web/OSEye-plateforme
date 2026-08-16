@@ -6,8 +6,13 @@ import json
 import uuid
 from typing import Any
 
+from oseye.core.observability import get_logger
 from oseye.core.schema import UniversalEvent
 from oseye.normalizer.secret_masker import mask
+
+_logger = get_logger(__name__)
+
+_EXTRA_JSON_MAX_BYTES = 65536  # 64 KiB hard cap to prevent DoS via oversized payloads
 
 
 def pb_to_event(pb: Any, agent_id_override: str | None = None) -> UniversalEvent:
@@ -57,12 +62,20 @@ def pb_to_event(pb: Any, agent_id_override: str | None = None) -> UniversalEvent
     extra: dict[str, object] = {}
     raw_extra = bytes(pb.extra_json)
     if raw_extra:
-        try:
-            parsed = json.loads(raw_extra.decode("utf-8"))
-            if isinstance(parsed, dict):
-                extra = parsed
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
+        if len(raw_extra) > _EXTRA_JSON_MAX_BYTES:
+            # SEC: reject oversized extra_json to prevent DoS via unbounded JSON parsing.
+            _logger.warning(
+                "extra_json_too_large",
+                size=len(raw_extra),
+                limit=_EXTRA_JSON_MAX_BYTES,
+            )
+        else:
+            try:
+                parsed = json.loads(raw_extra.decode("utf-8"))
+                if isinstance(parsed, dict):
+                    extra = parsed
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
 
     # --- hash_chain / signature (stored as hex strings in Pydantic model) ---
     hash_chain_bytes = bytes(pb.hash_chain)
@@ -98,7 +111,7 @@ def pb_to_event(pb: Any, agent_id_override: str | None = None) -> UniversalEvent
         cwd=pb.cwd,
         session_id=session_id,
         resource=pb.resource,
-        result=pb.result if pb.result else "success",
+        result=pb.result if pb.result else "unknown",
         file_hash_before=pb.file_hash_before if pb.file_hash_before else None,
         file_hash_after=pb.file_hash_after if pb.file_hash_after else None,
         src_ip=pb.src_ip if pb.src_ip else None,

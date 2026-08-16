@@ -36,7 +36,7 @@ class DecisionJournal:
         self._last_hash: str = last_hash
         # D-06: keep a rolling history of prev hashes so rollback() can validate
         # that the caller holds a genuine prev_hash from a recent commit().
-        self._commit_history: deque[str] = deque(maxlen=20)
+        self._commit_history: deque[str] = deque(maxlen=200)
 
     @property
     def last_hash(self) -> str:
@@ -94,7 +94,7 @@ class DecisionJournal:
             ``prev_journal_hash`` (or the genesis hash for the very first entry)
             so partial-chain verification is correct.  Defaults to the genesis hash.
         """
-        broken: list[int] = []
+        broken: set[int] = set()
         prev = start_hash if start_hash is not None else _GENESIS_HASH
 
         for i, decision in enumerate(decisions):
@@ -107,7 +107,7 @@ class DecisionJournal:
                 broken.append(i)
             prev = decision.journal_hash
 
-        return broken
+        return sorted(broken)
 
 
 def _decision_to_fields(decision: Decision) -> dict[str, object]:

@@ -59,23 +59,42 @@ class SQLResponseActionsRepository:
             result = await session.execute(q)
             return list(result.scalars().all())
 
-    async def mark_executed(self, command_id: str) -> None:
+    async def mark_executed(self, command_id: str) -> bool:
+        """Transition pending_report → executed.
+
+        H-10: WHERE status = 'pending_report' guard prevents double-execution
+        and invalid state transitions. Returns True if exactly one row was
+        updated (i.e. the transition occurred), False otherwise.
+        """
         async with self._session_factory() as session:
-            await session.execute(
+            result = await session.execute(
                 update(ResponseActionRow)
-                .where(ResponseActionRow.command_id == command_id)
+                .where(
+                    ResponseActionRow.command_id == command_id,
+                    ResponseActionRow.status == "pending_report",
+                )
                 .values(status="executed", executed_at=datetime.now(UTC))
             )
             await session.commit()
+            return result.rowcount == 1
 
-    async def mark_failed(self, command_id: str, error: str) -> None:
+    async def mark_failed(self, command_id: str, error: str) -> bool:
+        """Transition pending_report → failed.
+
+        H-10: WHERE status = 'pending_report' guard prevents overwriting a
+        terminal state. Returns True if the transition occurred.
+        """
         async with self._session_factory() as session:
-            await session.execute(
+            result = await session.execute(
                 update(ResponseActionRow)
-                .where(ResponseActionRow.command_id == command_id)
+                .where(
+                    ResponseActionRow.command_id == command_id,
+                    ResponseActionRow.status == "pending_report",
+                )
                 .values(status="failed", error=error)
             )
             await session.commit()
+            return result.rowcount == 1
 
     async def mark_rolled_back(self, command_id: str) -> None:
         async with self._session_factory() as session:

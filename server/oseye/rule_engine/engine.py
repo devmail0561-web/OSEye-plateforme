@@ -243,7 +243,8 @@ class RuleEngine:
         path_str = str(path)
 
         def _write_state() -> None:
-            with open(tmp_path, "w") as fh:
+            fd = _os.open(tmp_path, _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC, 0o600)
+            with open(fd, "w") as fh:
                 fh.write(serialized)
             _os.replace(tmp_path, path_str)
 

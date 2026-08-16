@@ -60,7 +60,7 @@ async def list_alerts(
     # API-05: restrict status to known values so invalid inputs are rejected at
     # the FastAPI validation layer rather than being forwarded to the repository.
     alert_status: Literal["open", "acknowledged", "investigating", "resolved", "false_positive"] | None = Query(default=None, alias="status"),  # noqa: E501
-    severity: str | None = Query(default=None),
+    severity: Literal["low", "medium", "high", "critical"] | None = Query(default=None),
     hostname: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),

@@ -34,6 +34,12 @@ _MAX_SESSION_LIFETIME_SECONDS: float = 24 * 3600  # 24 hours
 # SEC-006: in-memory rate limiter for /auth/refresh — bounded LRU to 10 000 IPs
 # ---------------------------------------------------------------------------
 _RATE_STORE_CAP = 10_000
+# NOTE (M): _refresh_rate_store is per-worker (in-process only). In a multi-worker
+# deployment (gunicorn --workers N, or multiple replicas behind a load-balancer),
+# each worker maintains its own independent store, making the effective per-IP
+# limit max_calls * num_workers. For accurate enforcement in production use a
+# shared Redis backend — e.g. replace _check_rate_limit with slowapi + a Redis
+# storage backend (slowapi.extension.Limiter with storage_uri="redis://...").
 _refresh_rate_store: OrderedDict[str, list[float]] = OrderedDict()
 
 
@@ -71,8 +77,24 @@ def _hash(pw: str) -> str:
 # Override OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD in production.
 # ---------------------------------------------------------------------------
 
-_ADMIN_PW_RAW = os.getenv("OSEYE_ADMIN_PASSWORD") or "admin123"
-_ANALYST_PW_RAW = os.getenv("OSEYE_ANALYST_PASSWORD") or "analyst123"
+# L-02: treat an empty env var the same as "not set" and log an explicit warning
+# so that a misconfigured container (OSEYE_ADMIN_PASSWORD=) doesn't silently
+# activate the weak dev default without any trace in the logs.
+_ADMIN_PW_ENV = os.getenv("OSEYE_ADMIN_PASSWORD")
+if _ADMIN_PW_ENV == "":
+    logger.warning(
+        "OSEYE_ADMIN_PASSWORD is set but empty — "
+        "falling back to dev default 'admin123'"
+    )
+_ADMIN_PW_RAW: str = _ADMIN_PW_ENV if _ADMIN_PW_ENV else "admin123"
+
+_ANALYST_PW_ENV = os.getenv("OSEYE_ANALYST_PASSWORD")
+if _ANALYST_PW_ENV == "":
+    logger.warning(
+        "OSEYE_ANALYST_PASSWORD is set but empty — "
+        "falling back to dev default 'analyst123'"
+    )
+_ANALYST_PW_RAW: str = _ANALYST_PW_ENV if _ANALYST_PW_ENV else "analyst123"
 
 # C-1: in production, weak/missing passwords are a fatal misconfiguration.
 _OSEYE_ENV = os.getenv("OSEYE_ENV", "development").lower()
@@ -115,9 +137,15 @@ _USERS: dict[str, dict[str, Any]] = {
 
 
 def _authenticate(username: str, password: str) -> dict[str, Any] | None:
-    """Return the user record if credentials are valid, else None."""
+    """Return the user record if credentials are valid, else None.
+
+    H-03: when the username is not found, call dummy_verify() to consume the
+    same time as a real bcrypt check and prevent timing-based username enumeration.
+    """
     user = _USERS.get(username)
     if user is None:
+        # H-03: uniform response time — prevents username enumeration via timing.
+        _pwd_ctx.dummy_verify()
         return None
     if not _pwd_ctx.verify(password, user["hashed_password"]):
         return None

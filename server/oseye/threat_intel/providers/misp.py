@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import socket
 from urllib.parse import urlparse
 
 from oseye.threat_intel.models import ThreatIntelReport
@@ -26,16 +27,19 @@ class MISPProvider:
                     f"MISP URL must use http/https, got {parsed.scheme!r}"
                 )
             if parsed.hostname:
+                # Resolve the hostname and check every resolved address to prevent
+                # SSRF via hostname pointing to a private/internal address (H-17).
                 try:
-                    addr = ipaddress.ip_address(parsed.hostname)
-                except ValueError:
-                    pass  # hostname is a domain name, not an IP — acceptable
-                else:
-                    if addr.is_loopback or addr.is_private:
-                        raise ValueError(
-                            f"MISP URL must not point to a loopback/private address: "
-                            f"{parsed.hostname}"
-                        )
+                    resolved = socket.getaddrinfo(parsed.hostname, None)
+                    for _, _, _, _, sockaddr in resolved:
+                        addr = ipaddress.ip_address(sockaddr[0])
+                        if addr.is_loopback or addr.is_private or addr.is_link_local:
+                            raise ValueError(
+                                f"MISP URL resolves to a non-routable address "
+                                f"({sockaddr[0]}): SSRF protection"
+                            )
+                except socket.gaierror:
+                    pass  # DNS resolution failure at init — allow, will fail at request time
             # TI-MED-002: log only that MISP is configured, never the URL itself
             # (which may contain an internal hostname or embedded credentials).
             logger.warning(

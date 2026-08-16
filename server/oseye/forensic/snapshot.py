@@ -50,8 +50,8 @@ def _row_to_snapshot(row: SnapshotRow) -> AgentSnapshot:
         agent_id=UUID(row.agent_id),
         hostname=row.hostname,
         taken_at=datetime.fromisoformat(row.taken_at),
-        processes=[ProcessInfo(**p) for p in json.loads(row.processes)],
-        connections=[ConnectionInfo(**c) for c in json.loads(row.connections)],
+        processes=[ProcessInfo.model_validate(p) for p in json.loads(row.processes)],
+        connections=[ConnectionInfo.model_validate(c) for c in json.loads(row.connections)],
         case_id=UUID(row.case_id) if row.case_id else None,
     )
 

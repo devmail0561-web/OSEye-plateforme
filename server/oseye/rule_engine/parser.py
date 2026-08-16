@@ -33,9 +33,10 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
         threshold_raw = data.get("threshold")
         threshold = int(str(threshold_raw)) if threshold_raw is not None else None
         actions_raw = data.get("actions", ["ALERT"])
-        actions: list[str] = [
-            str(a) for a in (actions_raw if isinstance(actions_raw, list) else [])
-        ]
+        if not isinstance(actions_raw, list):
+            _log.warning("rule_actions_not_list", rule_id=rule_id, actions=actions_raw)
+            actions_raw = [str(actions_raw)]
+        actions: list[str] = [str(a) for a in actions_raw]
         tags_raw = data.get("tags", [])
         tags: list[str] = [str(t) for t in (tags_raw if isinstance(tags_raw, list) else [])]
         mitre_raw = data.get("mitre", [])
@@ -51,6 +52,13 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
         explanation = str(data.get("explanation", ""))
         entity_key_raw = data.get("entity_key")
         entity_key = str(entity_key_raw) if entity_key_raw else None
+        if timeframe is not None and timeframe <= 0:
+            _log.warning("rule_invalid_timeframe", rule_id=rule_id, timeframe=timeframe)
+            return None
+        if threshold is not None and threshold < 1:
+            _log.warning("rule_invalid_threshold", rule_id=rule_id, threshold=threshold)
+            return None
+
         return RuleDefinition(
             id=rule_id,
             name=name,

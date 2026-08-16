@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import socket
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -71,6 +72,15 @@ from oseye.workers.ti_worker import TIWorker
 _RULES_ROOT = Path(__file__).parent.parent.parent / "rules"
 
 _logger = get_logger(__name__)
+
+
+def _task_done_callback(task: asyncio.Task) -> None:  # type: ignore[type-arg]
+    """Log unexpected worker task crashes so they are never silently swallowed."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        _logger.error("worker_task_crashed", name=task.get_name(), exc_info=exc)
 
 
 @lru_cache(maxsize=1)
@@ -135,7 +145,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         if settings.abuseipdb_api_key:
             ti_providers.append(
                 AbuseIPDBProvider(
-                    api_key=settings.abuseipdb_api_key,
+                    api_key=settings.abuseipdb_api_key.get_secret_value(),
                     http_client=http_client,
                     fail_max=settings.ti_breaker_fail_max,
                     reset_timeout=settings.ti_breaker_reset_timeout,
@@ -144,7 +154,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         if settings.virustotal_api_key:
             ti_providers.append(
                 VirusTotalProvider(
-                    api_key=settings.virustotal_api_key,
+                    api_key=settings.virustotal_api_key.get_secret_value(),
                     http_client=http_client,
                     fail_max=settings.ti_breaker_fail_max,
                     reset_timeout=settings.ti_breaker_reset_timeout,
@@ -152,7 +162,10 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             )
         if settings.misp_url:
             ti_providers.append(
-                MISPProvider(misp_url=settings.misp_url, api_key=settings.misp_api_key)
+                MISPProvider(
+                    misp_url=settings.misp_url,
+                    api_key=settings.misp_api_key.get_secret_value() if settings.misp_api_key else None,
+                )
             )
 
         ti_cache: TICache

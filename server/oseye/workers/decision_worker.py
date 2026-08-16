@@ -186,12 +186,19 @@ class DecisionWorker:
         # Broadcast to WebSocket clients
         if self._ws_decision_manager is not None:
             try:
+                import re as _re
+                raw_hostname = getattr(decision, "hostname", None)
+                safe_hostname = (
+                    raw_hostname
+                    if raw_hostname and _re.match(r'^[\w.\-]{1,253}$', raw_hostname)
+                    else "unknown"
+                )
                 await self._ws_decision_manager.broadcast(
                     json.dumps({
                         "decision_id": str(decision.decision_id),
                         "decision_type": decision.decision_type,
                         "risk_score": getattr(decision, "risk_score", None),
-                        "hostname": getattr(decision, "hostname", None),
+                        "hostname": safe_hostname,
                         "created_at": decision.created_at.isoformat(),
                     }).encode()
                 )

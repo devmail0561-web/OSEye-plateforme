@@ -30,6 +30,9 @@ PUBLISH_TOPIC_PREFIX = "analysis:rules"
 
 _DEFAULT_RULES_ROOT = Path(__file__).parent.parent.parent.parent / "rules"
 
+# Minimum seconds between two alerts for the same (rule_id, entity_id) pair.
+_ALERT_COOLDOWN_S = 60.0
+
 
 class RuleWorker:
     """Evaluates normalized events against all enabled rules.
@@ -58,6 +61,8 @@ class RuleWorker:
         self._total_evaluated = 0
         self._total_matches = 0
         self._total_alerts = 0
+        # Cooldown tracking: (rule_id, entity_id) → last-fired timestamp (float, epoch seconds)
+        self._alert_cooldowns: dict[tuple[str, str], float] = {}
 
     async def run(self, *, stop_event: asyncio.Event | None = None) -> None:
         """Main loop — runs until *stop_event* is set or task is cancelled."""
@@ -149,6 +154,19 @@ class RuleWorker:
 
     async def _create_alert(self, event: UniversalEvent, match: RuleMatch) -> None:
         now = datetime.now(tz=UTC)
+        # Cooldown: skip alert creation if same (rule_id, entity_id) fired recently.
+        cooldown_key = (match.rule_id, f"{event.hostname}:{event.pid}")
+        now_ts = now.timestamp()
+        last_fired = self._alert_cooldowns.get(cooldown_key, 0.0)
+        if now_ts - last_fired < _ALERT_COOLDOWN_S:
+            _log.debug(
+                "alert_cooldown_suppressed",
+                rule_id=match.rule_id,
+                entity_id=cooldown_key[1],
+            )
+            return
+        self._alert_cooldowns[cooldown_key] = now_ts
+
         severity = match.severity if match.severity != "info" else "low"
         alert = Alert(
             alert_id=uuid.uuid4(),
@@ -189,7 +207,7 @@ class RuleWorker:
         # so it does not block the asyncio event loop.
         if self._ml_engine is not None and match.mitre:
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(
                     None,
                     self._ml_engine.learn_from_alert,
@@ -214,12 +232,12 @@ class RuleWorker:
             )
 
         # Publish to TI enrichment pipeline if there are network indicators (optional).
-        indicators: dict[str, list[str]] = {"ips": [], "hashes": []}
+        indicators: dict[str, list[str]] = {"ips": []}
         if event.dst_ip:
             indicators["ips"].append(event.dst_ip)
         if event.src_ip:
             indicators["ips"].append(event.src_ip)
-        if indicators["ips"] or indicators["hashes"]:
+        if indicators["ips"]:
             try:
                 await self._bus.publish(
                     "alerts:enrichment",

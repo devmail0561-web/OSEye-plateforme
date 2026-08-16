@@ -107,6 +107,12 @@ class SQLIncidentRepository:
             return _to_domain(row, alerts)
 
     async def update(self, incident: Incident) -> Incident:
+        # NOTE (M refactor — divergence risk): update() syncs only the denormalized
+        # alert_ids JSON column on IncidentRow. It does NOT touch incident_alerts rows.
+        # If add_alert() is called concurrently or interleaved with update(), the two
+        # representations can diverge (IncidentRow.alert_ids vs incident_alerts table).
+        # Future refactor: make incident_alerts the single source of truth and derive
+        # alert_ids / alert_count from it at read time (drop the JSON column).
         async with self._session_factory() as session:
             async with session.begin():
                 row = await session.get(IncidentRow, str(incident.incident_id))

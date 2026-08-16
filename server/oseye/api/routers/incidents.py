@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -36,7 +36,12 @@ async def list_incidents(
     # SEC-INPUT-001: max_length on filter string params to prevent DoS.
     # F12: rename param to incident_status to avoid shadowing fastapi.status.
     hostname: Annotated[str | None, Query(max_length=253)] = None,
-    incident_status: Annotated[str | None, Query(alias="status", max_length=50)] = None,
+    # SEC-INPUT-002: restrict status to known values to reject invalid inputs at the
+    # FastAPI validation layer rather than forwarding garbage to the repository.
+    incident_status: Annotated[
+        Literal["open", "investigating", "contained", "resolved", "closed"] | None,
+        Query(alias="status"),
+    ] = None,
     page: int = 1,
     page_size: int = 20,
     _: dict[str, Any] = Depends(_require_incident_reader),

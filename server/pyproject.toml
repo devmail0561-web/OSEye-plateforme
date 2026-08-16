@@ -64,6 +64,9 @@ dependencies = [
 
     # Correlation graph
     "rustworkx>=0.15.1",
+
+    # Version comparison (update checker)
+    "packaging>=24.0",
 ]
 
 [project.optional-dependencies]

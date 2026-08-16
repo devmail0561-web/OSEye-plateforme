@@ -98,7 +98,9 @@ class AlertRow(Base):
     entity_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     hostname: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
-    trigger_event_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    # L-23: index ajouté pour accélérer les lookups trigger_event_id → alert.
+    # Migration nécessaire : CREATE INDEX ix_alerts_trigger_event_id ON alerts (trigger_event_id)
+    trigger_event_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     related_event_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")  # JSON
     incident_chain_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
@@ -235,6 +237,10 @@ class ApiKeyRow(Base):
     expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    # L-20: soft-delete pour conserver la piste d'audit — la ligne reste en base avec
+    # deleted_at renseigné. verify() et list() filtrent les clés soft-deleted.
+    # Migration nécessaire : ALTER TABLE api_keys ADD COLUMN deleted_at VARCHAR(64) NULL
+    deleted_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class EnrollmentTokenRow(Base):
@@ -264,8 +270,11 @@ class IncidentRow(Base):
     __table_args__ = (Index("ix_incidents_hostname_status", "hostname", "status"),)
 
     incident_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    created_at: Mapped[str] = mapped_column(String(32), index=True)
-    updated_at: Mapped[str] = mapped_column(String(32), index=True)
+    # L-21: String(64) pour accueillir les ISO-8601 avec timezone (+HH:MM).
+    # Migration nécessaire : ALTER TABLE incidents ALTER COLUMN created_at TYPE VARCHAR(64)
+    #                        ALTER TABLE incidents ALTER COLUMN updated_at TYPE VARCHAR(64)
+    created_at: Mapped[str] = mapped_column(String(64), index=True)
+    updated_at: Mapped[str] = mapped_column(String(64), index=True)
     hostname: Mapped[str] = mapped_column(String(255), index=True)
     severity: Mapped[str] = mapped_column(String(20), index=True)
     status: Mapped[str] = mapped_column(String(20), index=True, default="open")
@@ -282,7 +291,9 @@ class IncidentAlertRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     incident_id: Mapped[str] = mapped_column(String(36), index=True)
     alert_id: Mapped[str] = mapped_column(String(36), index=True, unique=True)
-    added_at: Mapped[str] = mapped_column(String(32))
+    # L-21: String(64) pour accueillir les ISO-8601 avec timezone (+HH:MM).
+    # Migration nécessaire : ALTER TABLE incident_alerts ALTER COLUMN added_at TYPE VARCHAR(64)
+    added_at: Mapped[str] = mapped_column(String(64))
     severity: Mapped[str] = mapped_column(String(20))
     title: Mapped[str] = mapped_column(String(500))
     hostname: Mapped[str] = mapped_column(String(255))
@@ -315,7 +326,10 @@ class EntityHourlyStatsRow(Base):
 
     __tablename__ = "entity_hourly_stats"
     __table_args__ = (
-        Index("ix_ehs_hostname_cat_hour", "hostname", "category", "hour_bucket"),
+        # L-22: unique=True garantit l'unicité (hostname, category, hour_bucket) au niveau DB.
+        # Migration nécessaire : DROP INDEX ix_ehs_hostname_cat_hour;
+        #   CREATE UNIQUE INDEX ix_ehs_hostname_cat_hour ON entity_hourly_stats (hostname, category, hour_bucket)
+        Index("ix_ehs_hostname_cat_hour", "hostname", "category", "hour_bucket", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

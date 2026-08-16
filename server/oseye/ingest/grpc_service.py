@@ -92,7 +92,7 @@ def _require_cn(
         context.abort(grpc.StatusCode.UNAUTHENTICATED, "mTLS client certificate CN required")
         return None
     if not _CN_RE.match(cn):
-        context.abort(grpc.StatusCode.UNAUTHENTICATED, f"Invalid agent CN format: {cn!r}")
+        context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid client certificate format")
         return None
     if blocked_cns is not None and blocked_lock is not None:
         with blocked_lock:
@@ -201,7 +201,13 @@ class AgentServiceServicer:
         try:
             if self._agent_repo is not None and self._loop is not None:
                 _peer = context.peer() or ""
-                _ip = _peer.split(":")[1] if _peer.startswith("ipv4:") else None
+                if _peer.startswith("ipv4:"):
+                    _ip = _peer.split(":")[1]
+                elif _peer.startswith("ipv6:["):
+                    # Format: ipv6:[::1]:PORT — extract address between brackets.
+                    _ip = _peer[6:_peer.rfind("]")]
+                else:
+                    _ip = None
                 asyncio.run_coroutine_threadsafe(
                     self._agent_repo.upsert(cn=cn, online=True, ip_address=_ip),
                     self._loop,
@@ -253,22 +259,11 @@ class AgentServiceServicer:
                 result = self._validator.validate(request, agent_public_key=agent_public_key)
                 total_accepted += result.accepted
                 total_rejected += result.rejected
-                # [MEDIUM-4] cap accumulated errors to avoid unbounded growth
-                if len(all_errors) < 1000:
-                    all_errors.extend(result.errors[:10])
+                # [AUDIT] cap accumulated errors to at most 1000 total
+                all_errors.extend(result.errors[:max(0, 1000 - len(all_errors))])
 
-                # [HIGH-1] build rejected-index set once — O(M) — instead of O(N×M)
-                rejected_indices: set[int] = set()
-                for err in result.errors:
-                    if not err.startswith("event "):
-                        continue
-                    parts = err.split(" ")
-                    if len(parts) < 2:
-                        continue
-                    try:
-                        rejected_indices.add(int(parts[1].rstrip(":")))
-                    except ValueError:
-                        pass
+                # [AUDIT] use rejected_indices from ValidationResult directly
+                rejected_indices = result.rejected_indices
 
                 # Collect valid payloads for this batch, then publish in one shot.
                 batch_payloads: list[bytes] = []
@@ -364,7 +359,7 @@ class AgentServiceServicer:
                 msg_queue.put(None)  # sentinel — signals end of stream
 
         if self._loop is not None and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(_subscriber(), self._loop)
+            _policy_fut = asyncio.run_coroutine_threadsafe(_subscriber(), self._loop)
         else:
             _logger.error("policy_stream_no_loop", agent_id=cn)
             return
@@ -372,30 +367,29 @@ class AgentServiceServicer:
         if _pb2 is None:  # pragma: no cover
             return
 
-        while context.is_active() is not False:
-            try:
-                raw = msg_queue.get(timeout=1.0)
-            except _queue.Empty:
-                continue
-            if raw is None:
-                break
-            try:
-                # [MEDIUM-5] pass config_json raw bytes — avoid double json round-trip
-                data = json.loads(raw)
-                config_raw: bytes = (
-                    raw
-                    if set(data.keys()) == {"config"}
-                    else json.dumps(data.get("config", {})).encode("utf-8")
-                )
-                profile = _pb2.SurveillanceProfilePB(
-                    name=data.get("name", ""),
-                    description=data.get("description", ""),
-                    version=data.get("version", 1),
-                    config_json=config_raw,
-                )
-                yield profile
-            except Exception as exc:  # noqa: BLE001
-                _logger.error("policy_deserialize_error", error=str(exc))
+        try:
+            while context.is_active() is not False:
+                try:
+                    raw = msg_queue.get(timeout=1.0)
+                except _queue.Empty:
+                    continue
+                if raw is None:
+                    break
+                try:
+                    # [AUDIT] always extract config sub-key — avoids leaking unrelated keys
+                    data = json.loads(raw)
+                    config_raw: bytes = json.dumps(data.get("config", {})).encode("utf-8")
+                    profile = _pb2.SurveillanceProfilePB(
+                        name=data.get("name", ""),
+                        description=data.get("description", ""),
+                        version=data.get("version", 1),
+                        config_json=config_raw,
+                    )
+                    yield profile
+                except Exception as exc:  # noqa: BLE001
+                    _logger.error("policy_deserialize_error", error=str(exc))
+        finally:
+            _policy_fut.cancel()
 
     # ------------------------------------------------------------------
     # StreamCommands — server-streaming RPC
@@ -433,7 +427,7 @@ class AgentServiceServicer:
                 cmd_queue.put(None)  # sentinel
 
         if self._loop is not None and self._loop.is_running():
-            asyncio.run_coroutine_threadsafe(_subscriber(), self._loop)
+            _cmd_fut = asyncio.run_coroutine_threadsafe(_subscriber(), self._loop)
         else:
             _logger.error("commands_stream_no_loop", agent_id=cn)
             return
@@ -441,25 +435,28 @@ class AgentServiceServicer:
         if _pb2 is None:  # pragma: no cover
             return
 
-        while context.is_active() is not False:
-            try:
-                raw = cmd_queue.get(timeout=1.0)
-            except _queue.Empty:
-                continue
-            if raw is None:
-                break
-            try:
-                # [MEDIUM-5] parse only once; pass payload_json bytes directly
-                data = json.loads(raw)
-                payload_raw: bytes = json.dumps(data.get("payload", {})).encode("utf-8")
-                cmd = _pb2.AgentCommand(
-                    command_id=data.get("command_id", ""),
-                    command_type=data.get("command_type", ""),
-                    payload_json=payload_raw,
-                )
-                yield cmd
-            except Exception as exc:  # noqa: BLE001
-                _logger.error("command_deserialize_error", error=str(exc))
+        try:
+            while context.is_active() is not False:
+                try:
+                    raw = cmd_queue.get(timeout=1.0)
+                except _queue.Empty:
+                    continue
+                if raw is None:
+                    break
+                try:
+                    # [MEDIUM-5] parse only once; pass payload_json bytes directly
+                    data = json.loads(raw)
+                    payload_raw: bytes = json.dumps(data.get("payload", {})).encode("utf-8")
+                    cmd = _pb2.AgentCommand(
+                        command_id=data.get("command_id", ""),
+                        command_type=data.get("command_type", ""),
+                        payload_json=payload_raw,
+                    )
+                    yield cmd
+                except Exception as exc:  # noqa: BLE001
+                    _logger.error("command_deserialize_error", error=str(exc))
+        finally:
+            _cmd_fut.cancel()
 
     # ------------------------------------------------------------------
     # ReportActions — client-streaming RPC

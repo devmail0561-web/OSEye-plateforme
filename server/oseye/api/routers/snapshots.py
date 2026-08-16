@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -69,11 +69,9 @@ async def get_snapshot(
 async def list_agent_snapshots(
     agent_id: UUID,
     request: Request,
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=200),
     _: dict[str, Any] = Depends(_require_reader),
 ) -> list[AgentSnapshot]:
-    if not 1 <= limit <= 200:
-        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
     repo = _get_snapshot_repo(request)
     return await repo.list_by_agent(agent_id, limit=limit)  # type: ignore[no-any-return]
 
@@ -95,4 +93,8 @@ async def diff_snapshots(
         raise HTTPException(status_code=404, detail=f"Snapshot {before_id} not found")
     if after is None:
         raise HTTPException(status_code=404, detail=f"Snapshot {after_id} not found")
+    if before.agent_id != after.agent_id:
+        raise HTTPException(status_code=400, detail="Cannot diff snapshots from different agents")
+    # TODO(audit L-08): IDOR — any analyst can access any snapshot by UUID.
+    # Future: verify snapshot belongs to an agent the caller is allowed to view.
     return _diff(before, after)

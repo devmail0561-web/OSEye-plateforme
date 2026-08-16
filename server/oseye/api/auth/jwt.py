@@ -23,7 +23,7 @@ from oseye.core.observability import get_logger
 
 _logger = get_logger(__name__)
 
-_data_dir = pathlib.Path(os.environ.get("OSEYE_DATA_DIR", "/tmp"))  # noqa: S108
+_data_dir = pathlib.Path(os.environ.get("OSEYE_DATA_DIR", "/var/lib/oseye"))
 _BLOCKLIST_FILE = _data_dir / "revoked_tokens.json"
 
 
@@ -61,11 +61,16 @@ class JWTHandler:
         # Bounded: revoked entries are pruned on every verify call once expired.
         # B-05: persisted to disk so the blocklist survives restarts.
         _data_dir.mkdir(parents=True, exist_ok=True)
-        if _BLOCKLIST_FILE.exists():
+        # TOCTOU fix: open the fd first, then fchmod on the fd to eliminate the
+        # exists() → chmod() race window where the file could be replaced.
+        try:
+            _bl_fd = os.open(str(_BLOCKLIST_FILE), os.O_RDONLY)
             try:
-                _BLOCKLIST_FILE.chmod(0o600)
-            except OSError:
-                pass
+                os.fchmod(_bl_fd, 0o600)
+            finally:
+                os.close(_bl_fd)
+        except OSError:
+            pass
         self._revoked_lock = threading.Lock()
         self._revoked: dict[str, datetime] = self._load_blocklist()
 
@@ -187,10 +192,17 @@ class JWTHandler:
             self._save_blocklist()
 
     def _load_blocklist(self) -> dict[str, datetime]:
-        """Load the blocklist from disk. Returns an empty dict on any error.
+        """Load the blocklist from disk. Returns an empty dict if the file does not exist.
 
         B-05: format on disk is {jti: expiry_iso_string}.
+
+        H-02: if the file exists but is unreadable or corrupted, log the error and
+        raise RuntimeError (fail-closed) so that a corrupted blocklist cannot silently
+        open the gate for revoked tokens. Set OSEYE_INSECURE=true to bypass (recovery
+        only — never use in production).
         """
+        if not _BLOCKLIST_FILE.exists():
+            return {}
         try:
             raw: dict[str, str] = json.loads(_BLOCKLIST_FILE.read_text())
             result: dict[str, datetime] = {}
@@ -200,8 +212,23 @@ class JWTHandler:
                 except (ValueError, TypeError):
                     pass
             return result
-        except Exception:  # noqa: BLE001
-            return {}
+        except Exception as exc:  # noqa: BLE001
+            _logger.error(
+                "jwt_blocklist_load_failed",
+                error=str(exc),
+                path=str(_BLOCKLIST_FILE),
+            )
+            if os.environ.get("OSEYE_INSECURE", "").lower() == "true":
+                _logger.warning(
+                    "jwt_blocklist_bypassed_insecure",
+                    path=str(_BLOCKLIST_FILE),
+                )
+                return {}
+            raise RuntimeError(
+                f"Blocklist file {_BLOCKLIST_FILE} exists but could not be loaded: {exc}. "
+                "Fix or remove the file, or set OSEYE_INSECURE=true to bypass "
+                "(not recommended in production)."
+            ) from exc
 
     def _save_blocklist(self) -> None:
         """Write the blocklist to disk atomically (write + rename).

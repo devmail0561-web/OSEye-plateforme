@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -30,8 +32,12 @@ async def health_detailed(
 
     Requires at least 'analyst' role.
     """
+    try:
+        ver = _pkg_version("oseye-server")
+    except PackageNotFoundError:
+        ver = "dev"
     return {
         "status": "ok",
         "service": "oseye-server",
-        "version": "0.1.0",
+        "version": ver,
     }

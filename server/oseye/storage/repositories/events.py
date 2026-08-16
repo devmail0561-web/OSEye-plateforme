@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from uuid import UUID
 
-from sqlalchemy import Select, and_, func, insert, select, update
+from sqlalchemy import Select, and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.core.pagination import PageResult
@@ -184,10 +184,23 @@ class SQLEventRepository:
         self._session_factory = session_factory
 
     async def insert_batch(self, events: list[UniversalEvent]) -> None:
+        # H-09: skip duplicate event_ids silently instead of raising an IntegrityError.
+        # Dialect is detected at runtime so the same code works on SQLite (dev) and
+        # PostgreSQL (prod).
         async with self._session_factory() as session:
             async with session.begin():
                 rows = [_event_to_dict(event) for event in events]
-                await session.execute(insert(EventRow), rows)
+                conn = await session.connection()
+                if conn.dialect.name == "postgresql":
+                    from sqlalchemy.dialects.postgresql import insert as pg_insert
+                    stmt = pg_insert(EventRow).on_conflict_do_nothing(
+                        index_elements=["event_id"]
+                    )
+                else:
+                    # SQLite (and any other dialect): INSERT OR IGNORE
+                    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+                    stmt = sqlite_insert(EventRow).prefix_with("OR IGNORE")
+                await session.execute(stmt, rows)
 
     async def get(self, event_id: UUID) -> UniversalEvent | None:
         async with self._session_factory() as session:

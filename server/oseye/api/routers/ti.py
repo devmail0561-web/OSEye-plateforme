@@ -82,9 +82,12 @@ async def lookup(
 
     ti_client = _get_ti_client(request)
 
-    if ip is not None:
-        _logger.info("ti_lookup_request", indicator=ip, indicator_type="ip")
-        return cast(AggregatedTIReport, await ti_client.lookup(ip, "ip"))
+    try:
+        if ip is not None:
+            _logger.info("ti_lookup_request", indicator=ip, indicator_type="ip")
+            return cast(AggregatedTIReport, await ti_client.lookup(ip, "ip"))
 
-    _logger.info("ti_lookup_request", indicator=hash, indicator_type="hash")
-    return cast(AggregatedTIReport, await ti_client.lookup(hash, "hash"))
+        _logger.info("ti_lookup_request", indicator=hash, indicator_type="hash")
+        return cast(AggregatedTIReport, await ti_client.lookup(hash, "hash"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

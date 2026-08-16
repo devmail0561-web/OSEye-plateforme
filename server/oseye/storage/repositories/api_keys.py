@@ -95,7 +95,8 @@ class SQLApiKeyRepository:
             row = (
                 await session.execute(select(ApiKeyRow).where(ApiKeyRow.key_hash == h))
             ).scalars().first()
-        if row is None or row.revoked:
+        # L-20: also reject soft-deleted keys
+        if row is None or row.revoked or row.deleted_at is not None:
             return None
         if row.expires_at and datetime.fromisoformat(row.expires_at) < datetime.now(UTC):
             return None
@@ -116,20 +117,33 @@ class SQLApiKeyRepository:
         return True
 
     async def delete(self, key_id: str) -> bool:
-        """Permanently delete a key row. Returns True if found and deleted."""
-        from sqlalchemy import delete as sql_delete
+        """Soft-delete a key by recording deleted_at; the row is retained for audit.
+
+        L-20: physical DELETE replaced by soft-delete so the key identity, name,
+        and creator are preserved in the audit trail. verify() and list() already
+        filter out rows where deleted_at IS NOT NULL.
+        Requires migration: ALTER TABLE api_keys ADD COLUMN deleted_at VARCHAR(64) NULL
+        """
+        now = datetime.now(UTC).isoformat()
         async with self._session_factory() as session:
             async with session.begin():
-                result = await session.execute(
-                    sql_delete(ApiKeyRow).where(ApiKeyRow.key_id == key_id)
+                row = await session.get(ApiKeyRow, key_id)
+                if row is None:
+                    return False
+                _log_keys.info(
+                    "api_key.soft_delete key_id=%s name=%r created_by=%r",
+                    key_id, row.name, row.created_by,
                 )
-        return result.rowcount > 0
+                row.deleted_at = now
+        return True
 
     async def list(self, include_revoked: bool = False) -> list[dict[str, object]]:
         async with self._session_factory() as session:
             stmt = select(ApiKeyRow)
             if not include_revoked:
                 stmt = stmt.where(ApiKeyRow.revoked == False)  # noqa: E712
+            # L-20: always hide soft-deleted keys from listings
+            stmt = stmt.where(ApiKeyRow.deleted_at == None)  # noqa: E711
             rows = (await session.execute(stmt)).scalars().all()
         return [
             {

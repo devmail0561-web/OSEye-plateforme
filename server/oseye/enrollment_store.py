@@ -45,6 +45,8 @@ class EnrollmentStore:
         self._ca_key = serialization.load_pem_private_key(
             Path(settings.tls_ca_key_file).read_bytes(), password=_ca_key_password
         )
+        # Cache CA cert to avoid re-reading on every sign_csr() call (audit L note).
+        self._ca_cert = x509.load_pem_x509_certificate(self._ca_cert_path.read_bytes())
 
     # ------------------------------------------------------------------
     # Token management
@@ -112,7 +114,7 @@ class EnrollmentStore:
         if not csr.is_signature_valid:
             raise ValueError("CSR signature is invalid")
 
-        ca_cert = x509.load_pem_x509_certificate(self._ca_cert_path.read_bytes())
+        ca_cert = self._ca_cert
         if not isinstance(self._ca_key, rsa.RSAPrivateKey):
             raise ValueError("CA key must be an RSA private key")
         ca_key = self._ca_key

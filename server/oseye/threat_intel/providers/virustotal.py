@@ -84,7 +84,11 @@ class VirusTotalProvider:
             provider=self.name,
             tags=tags,
             last_seen=last_seen,
-            raw=dict(data),
+            raw={
+                "stats": attributes.get("last_analysis_stats"),
+                "last_analysis_date": attributes.get("last_analysis_date"),
+                "tags": attributes.get("tags", [])[:20],
+            },
             cached_at=datetime.now(tz=UTC),
         )
 

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, IPvAnyAddress
 
 # ---------------------------------------------------------------------------
 # Universal Event
@@ -46,10 +46,14 @@ class UniversalEvent(BaseModel):
     file_hash_after: str | None = None
 
     # Network fields
-    src_ip: str | None = None
-    src_port: int | None = None
-    dst_ip: str | None = None
-    dst_port: int | None = None
+    # IPvAnyAddress validates IPv4 and IPv6; pydantic v2 serialises to string in
+    # model_dump() / model_dump_json(). Use str(event.src_ip) for plain-string
+    # contexts (e.g. TI lookups, log messages) when the raw IPv4Address object
+    # is not acceptable.
+    src_ip: IPvAnyAddress | None = None
+    src_port: int | None = Field(default=None, ge=0, le=65535)
+    dst_ip: IPvAnyAddress | None = None
+    dst_port: int | None = Field(default=None, ge=0, le=65535)
     protocol: str | None = None
     bytes_sent: int | None = None
     bytes_recv: int | None = None
@@ -68,6 +72,10 @@ class UniversalEvent(BaseModel):
 
     extra: dict[str, object] = Field(default_factory=dict)
 
+    # frozen=False is intentional: server-side enrichment pipeline adds fields
+    # (ml_score, risk_score, rule_match_ids, mitre_techniques, ti_tags,
+    # incident_chain_id) to events after collection. Immutability would require
+    # creating new objects for every enrichment step, which is wasteful.
     model_config = {"frozen": False}
 
 

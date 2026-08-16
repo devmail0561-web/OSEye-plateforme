@@ -16,6 +16,8 @@ from oseye.core.schema import UniversalEvent
 router = APIRouter(prefix="/api/v1", tags=["events"])
 
 # SEC-RATELIMIT-001: list events is expensive (full-table scan with filters).
+# TODO(sec): each router instantiates its own Limiter; a shared request.app.state.limiter
+# would allow the global RateLimitExceeded handler in app.py to intercept 429s correctly.
 _limiter = Limiter(key_func=get_remote_address)
 
 # ---------------------------------------------------------------------------
@@ -129,6 +131,7 @@ async def get_event(
 
 
 @router.get("/events/{event_id}/chain")
+@_limiter.limit("30/minute")
 async def get_event_chain(
     event_id: UUID,
     request: Request,

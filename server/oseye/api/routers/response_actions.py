@@ -45,8 +45,8 @@ def _get_executor(request: Request) -> Any:
 @router.get("")
 async def list_response_actions(
     request: Request,
-    agent_cn: str | None = None,
-    action_status: str | None = None,
+    agent_cn: str | None = Query(default=None, max_length=253),
+    action_status: str | None = Query(default=None, max_length=50),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     _auth: dict[str, Any] = Depends(require_analyst),

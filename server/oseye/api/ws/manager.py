@@ -86,6 +86,5 @@ class WebSocketManager:
                 dead.append(ws)
 
         if dead:
-            async with self._lock:
-                for ws in dead:
-                    self._connections.discard(ws)
+            for ws in dead:
+                await self.disconnect(ws)

@@ -100,10 +100,14 @@ class PolicyEngine:
         if self._default_profile in self._profiles:
             await self.push_to_agent(agent_id, self._default_profile)
         else:
-            _logger.warning(
+            _logger.error(
                 "policy.default_profile_not_found",
                 default=self._default_profile,
                 loaded=[p.name for p in self.list_profiles()],
+            )
+            raise RuntimeError(
+                f"Default surveillance profile {self._default_profile!r} is not loaded. "
+                "Ensure OSEYE_DEFAULT_SURVEILLANCE_PROFILE matches a profile on disk."
             )
 
     # ------------------------------------------------------------------
@@ -139,6 +143,7 @@ class PolicyEngine:
                 payload_data["rule_set"] = json.loads(ruleset_bytes)
             except Exception as exc:  # noqa: BLE001
                 _logger.error("policy.ruleset_build_failed", error=str(exc))
+                return  # do not push a profile without its rule_set
 
         topic = f"policy:push:{agent_id}"
         payload: bytes = json.dumps(payload_data).encode("utf-8")

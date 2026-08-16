@@ -89,7 +89,12 @@ class MLEngine:
                     "OSEYE_CHECKPOINT_HMAC_KEY environment variable is not set. "
                     "Generate a secret with: openssl rand -hex 32"
                 )
-            self._hmac_key = raw.encode()
+            try:
+                self._hmac_key = bytes.fromhex(raw)
+            except ValueError as exc:
+                raise RuntimeError(
+                    "OSEYE_CHECKPOINT_HMAC_KEY must be a hex string (e.g. openssl rand -hex 32)"
+                ) from exc
         self._anomaly = anomaly_detector or EntityAnomalyDetector()
         self._classifier = classifier or MITREClassifier()
 
@@ -156,8 +161,11 @@ class MLEngine:
         try:
             with open(clf_tmp, "wb") as fh:
                 pickle.dump(self._classifier, fh, protocol=pickle.HIGHEST_PROTOCOL)
+            # Write MAC to final path BEFORE the atomic rename of the pkl file,
+            # so the pkl that lands on disk always has a companion .mac ready.
+            clf_mac_path = clf_path.with_suffix(clf_path.suffix + ".mac")
+            clf_mac_path.write_bytes(_compute_mac(clf_tmp, self._hmac_key))
             os.replace(clf_tmp, clf_path)
-            _write_mac(clf_path, self._hmac_key)
         except Exception:
             clf_tmp.unlink(missing_ok=True)
             raise

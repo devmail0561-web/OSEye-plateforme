@@ -17,7 +17,12 @@ from oseye.core.observability import get_logger
 
 _logger = get_logger(__name__)
 
-_EVENTS_RAW_KEY = "events:normalized"
+# BP-KEY: we monitor the *raw* stream (events:raw) rather than events:normalized.
+# Rationale: raw represents the producer-side queue; measuring it before
+# normalisation lets us throttle agents early — before CPU-intensive normalisation
+# adds further latency. If the normalised stream were monitored instead, we would
+# only react after the expensive step had already occurred.
+_EVENTS_RAW_KEY = "events:raw"
 _CHECK_INTERVAL_S = 10
 _LAG_THRESHOLD = 10_000
 _LAG_CLEAR_THRESHOLD = 5_000

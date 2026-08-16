@@ -16,18 +16,19 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Path as FastPath, Request, UploadFile, status
 from pydantic import BaseModel
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger
 
-# SEC-PLUGIN-001: only allow plugin installs from this directory (configurable via env)
-_DEFAULT_PLUGIN_UPLOAD_DIR = "/tmp/oseye-plugin-uploads"  # noqa: S108
+# SEC-PLUGIN-001: only allow plugin installs from this directory (configurable via env).
+# Default is /var/lib/oseye/plugin-uploads (not /tmp) to avoid world-readable staging
+# on systems where /tmp is globally accessible; override via OSEYE_PLUGIN_UPLOAD_DIR.
 _PLUGIN_UPLOAD_DIR = Path(
-    os.environ.get("OSEYE_PLUGIN_UPLOAD_DIR", _DEFAULT_PLUGIN_UPLOAD_DIR)
+    os.environ.get("OSEYE_PLUGIN_UPLOAD_DIR", "/var/lib/oseye/plugin-uploads")
 ).resolve()
 
 _logger = get_logger(__name__)
@@ -173,7 +174,7 @@ async def install_plugin(
 
     mgr = _get_plugin_manager(request)
     if not resolved.exists():
-        raise HTTPException(status_code=422, detail=f"Path not found: {body.path}")
+        raise HTTPException(status_code=422, detail="Plugin file not found")
     try:
         info = await mgr.install(resolved, verify=body.verify)
     except PermissionError as exc:

@@ -23,6 +23,7 @@ Message format published (alerts:enriched)::
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 from typing import TYPE_CHECKING
 
@@ -104,6 +105,14 @@ class TIWorker:
 
         # Look up all IPs
         for ip in ips:
+            try:
+                addr = ipaddress.ip_address(ip)
+            except ValueError:
+                _log.warning("ti_worker_invalid_ip", ip=ip)
+                continue
+            if addr.is_private or addr.is_loopback or addr.is_link_local:
+                _log.debug("ti_worker_ip_skipped", ip=ip, reason="private/loopback/link-local")
+                continue
             try:
                 report = await self._ti_client.lookup(ip, "ip")
                 if report.max_score > max_score:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import keyword
 import logging
 import shutil
 from dataclasses import dataclass
@@ -233,6 +234,14 @@ class PluginManager:
         """
         for py_file in sorted(self._plugins_dir.glob("*.py")):
             name = py_file.stem
+            # C-01: reject names that would produce invalid or shadowed module identifiers
+            if not (name.isidentifier() and not keyword.iskeyword(name)):
+                logger.warning(
+                    "plugin_discover_invalid_name: %r is not a valid Python identifier "
+                    "— plugin skipped",
+                    name,
+                )
+                continue
             if self._require_signature:
                 sig_path = py_file.with_suffix(".sig")
                 if not sig_path.exists():

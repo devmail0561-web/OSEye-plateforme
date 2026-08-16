@@ -6,6 +6,16 @@ import asyncio
 import os
 from concurrent import futures
 
+# SEC-CIPHER: restrict gRPC C-core to TLS 1.3-only cipher suites.
+# This env var MUST be set before the first `import grpc` statement because the
+# gRPC C-core reads it during C-core initialisation — setting it inside a function
+# is too late once the C-core has already been loaded by a prior import in the
+# same process.
+os.environ.setdefault(
+    "GRPC_SSL_CIPHER_SUITES",
+    "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
+)
+
 import grpc
 import grpc.aio
 
@@ -71,13 +81,6 @@ async def create_grpc_server(
 
     The server is created and bound but not yet started — call server.start().
     """
-    # SEC-CIPHER: restrict to TLS 1.3-only cipher suites via gRPC C-core env.
-    # Must be set before the first grpc import creates the C-core channel.
-    os.environ.setdefault(
-        "GRPC_SSL_CIPHER_SUITES",
-        "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256",
-    )
-
     validator = BatchValidator()
     # SEC-002: pass the running event loop so IngestEvents / ReceivePolicy /
     # StreamCommands can bridge from gRPC's sync threads back to the async bus

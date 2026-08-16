@@ -54,7 +54,11 @@ def configure(log_level: str = "INFO", service_name: str = "oseye-server") -> No
     provider = TracerProvider(resource=resource)
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    insecure = os.getenv("OTEL_INSECURE", "false").lower() == "true"
+    # OSEYE_OTEL_INSECURE takes priority over the generic OTEL_INSECURE so it is
+    # visible to 'oseye-server validate' and properly namespaced (audit L-26).
+    insecure = (
+        os.getenv("OSEYE_OTEL_INSECURE", os.getenv("OTEL_INSECURE", "false")).lower() == "true"
+    )
     exporter: SpanExporter
     if otlp_endpoint:
         exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=insecure)

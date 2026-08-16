@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
+import errno
 import logging
 import os
 import resource
@@ -83,15 +85,14 @@ class PluginSandbox:
         def _preexec() -> None:
             # Network namespace isolation: CLONE_NEWNET = 0x40000000
             # Prevents the plugin from making any outbound connections.
-            import ctypes
+            # Imports are at module level to avoid import-lock deadlock after fork()
+            # in a multi-threaded asyncio process.
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
             if libc.unshare(0x40000000) != 0:
-                import errno as _errno
                 err = ctypes.get_errno()
                 # Non-fatal: log and continue. The process will still be sandboxed
                 # by rlimits. Linux < 3.8 or missing CAP_SYS_ADMIN may fail here.
-                import sys
-                code = _errno.errorcode.get(err, err)
+                code = errno.errorcode.get(err, err)
                 print(f"sandbox: unshare(CLONE_NEWNET) failed: {code}", file=sys.stderr)
             _apply_rlimits(cpu_limit, mem_limit)
             if self._cgroup_path is not None:
@@ -107,6 +108,15 @@ class PluginSandbox:
             stderr=asyncio.subprocess.PIPE,
             preexec_fn=_preexec,
         )
+
+        async def _drain(stream: asyncio.StreamReader | None) -> None:
+            if stream is not None:
+                async for _ in stream:
+                    pass
+
+        asyncio.create_task(_drain(self._process.stdout), name="plugin_stdout_drain")
+        asyncio.create_task(_drain(self._process.stderr), name="plugin_stderr_drain")
+
         logger.info(
             "Started plugin %r in subprocess pid=%d",
             self._plugin_module,

@@ -6,7 +6,9 @@ import re
 
 PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
-        re.compile(r"(?i)(password|passwd|secret|token|key|api[_-]?key)\s*[=:]\s*\S+"),
+        # SEC-MASK-001: negative lookbehind (?<!\w) prevents matching mid-word
+        # occurrences (e.g. "x_password_hash" should not be masked).
+        re.compile(r"(?i)(?<!\w)(password|passwd|secret|token|key|api[_-]?key)\s*[=:]\s*\S+"),
         r"\1=***",
     ),
     (
@@ -22,6 +24,26 @@ PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     (
         re.compile(r"(?i)(Authorization:\s*Bearer\s+)\S+"),
+        r"\1***",
+    ),
+    (
+        # SEC-MASK-002: HTTP Basic authentication credentials.
+        re.compile(r"(?i)(Authorization:\s*Basic\s+)\S+"),
+        r"\1***",
+    ),
+    (
+        # SEC-MASK-003: token-based Authorization header (e.g. DRF Token auth).
+        re.compile(r"(?i)(Authorization:\s*Token\s+)\S+"),
+        r"\1***",
+    ),
+    (
+        # SEC-MASK-004: X-Api-Key header (common REST API key header).
+        re.compile(r"(?i)(X-Api-Key:\s*)\S+"),
+        r"\1***",
+    ),
+    (
+        # SEC-MASK-005: X-Auth-Token header (used by OpenStack and others).
+        re.compile(r"(?i)(X-Auth-Token:\s*)\S+"),
         r"\1***",
     ),
 ]

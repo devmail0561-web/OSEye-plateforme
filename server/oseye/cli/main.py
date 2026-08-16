@@ -13,6 +13,8 @@ Usage:
   oseye-server setup
   oseye-server start     [--validate-only]
   oseye-server validate
+  oseye-server update      [--check-only] [--yes] [--pre]
+  oseye-server uninstall   [--server] [--agent] [--purge] [--yes] [--dry-run]
   oseye-server version
 
 Commands:
@@ -20,6 +22,8 @@ Commands:
   setup       Interactive configuration wizard — writes server.env and secrets.env
   start       Start the OSEye server (API + gRPC + workers)
   validate    Validate the current configuration and report missing files
+  update      Check for and install the latest binary release
+  uninstall   Remove server and/or agent from the system (requires root)
   version     Show version
 """
 
@@ -44,6 +48,12 @@ def main(argv: list[str] | None = None) -> None:
         run(rest)
     elif cmd == "validate":
         from .cmd_validate import run
+        run(rest)
+    elif cmd == "update":
+        from .cmd_update import run
+        run(rest)
+    elif cmd == "uninstall":
+        from .cmd_uninstall import run
         run(rest)
     elif cmd in ("version", "--version", "-v"):
         try:

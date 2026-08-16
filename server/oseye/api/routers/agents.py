@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 
 from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.observability import get_logger
@@ -68,12 +68,14 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 @router.get("")
 async def list_agents(
     request: Request,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     _auth: dict[str, Any] = Depends(require_analyst),
 ) -> list[dict[str, Any]]:
-    """List all known agents ordered by last_seen."""
+    """List all known agents ordered by last_seen (paginated)."""
     repo = _get_agent_repo(request)
     rows = await repo.list()
-    return [_row_to_dict(r) for r in rows]
+    return [_row_to_dict(r) for r in rows][offset : offset + limit]
 
 
 @router.get("/blocked")

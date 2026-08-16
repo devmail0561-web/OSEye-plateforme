@@ -30,7 +30,7 @@ def build_timeline(
                 "type": "event",
                 "severity": ev.severity,
                 "title": f"{ev.category}/{ev.type}",
-                "detail": ev.resource or ev.cmdline,
+                "detail": ev.resource or ev.cmdline or "",
                 "hostname": ev.hostname,
                 "id": str(ev.event_id),
             }

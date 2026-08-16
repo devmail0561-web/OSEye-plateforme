@@ -201,6 +201,10 @@ class DecisionEngine:
         correlation_depth = incident.alert_count
 
         final_score = self._scorer.compute(rule_score, ml_score, ti_score, correlation_depth)
+        # TODO(audit H-13): incident.hostname comes from agent-supplied data and is not
+        # validated against the authenticated CN of the agent's TLS certificate.
+        # A compromised agent could spoof a whitelisted hostname to force score=0 → IGNORE.
+        # Fix: validate incident.hostname against SQLAgentRepository before applying overrides.
         final_score = self._overrides.apply(incident.hostname, final_score)
 
         decision_types = _apply_risk_matrix(final_score)

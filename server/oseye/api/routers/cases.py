@@ -76,7 +76,10 @@ class _CreateCaseBody(BaseModel):
     title: Annotated[str, StringConstraints(min_length=1, max_length=500)]
     severity: Literal["low", "medium", "high", "critical"]
     description: Annotated[str, StringConstraints(max_length=10_000)] = ""
-    tags: list[str] = Field(default_factory=list, max_length=50)
+    # SEC-CASES-002: cap each individual tag at 100 chars in addition to the list limit.
+    tags: list[Annotated[str, StringConstraints(max_length=100)]] = Field(
+        default_factory=list, max_length=50
+    )
     alert_ids: list[UUID] = Field(default_factory=list, max_length=500)
     event_ids: list[UUID] = Field(default_factory=list, max_length=500)
 
@@ -87,8 +90,11 @@ class _UpdateCaseBody(BaseModel):
     description: Annotated[str, StringConstraints(max_length=10_000)] | None = None
     severity: Literal["low", "medium", "high", "critical"] | None = None
     status: Literal["open", "investigating", "closed"] | None = None
-    assigned_to: str | None = None
-    tags: list[str] | None = Field(default=None, max_length=50)
+    assigned_to: Annotated[str, StringConstraints(max_length=200)] | None = None
+    # SEC-CASES-002: cap each individual tag at 100 chars in addition to the list limit.
+    tags: list[Annotated[str, StringConstraints(max_length=100)]] | None = Field(
+        default=None, max_length=50
+    )
 
 
 class _AddNoteBody(BaseModel):

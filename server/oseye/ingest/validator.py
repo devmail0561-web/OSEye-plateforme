@@ -15,6 +15,7 @@ class ValidationResult:
     accepted: int
     rejected: int
     errors: list[str] = field(default_factory=list)
+    rejected_indices: set[int] = field(default_factory=set)
 
 
 class BatchValidator:
@@ -39,6 +40,16 @@ class BatchValidator:
         4. Return a ValidationResult with accepted / rejected counts and error
            messages index-matched with rejected events.
         """
+        # [AUDIT] Reject oversized batches before materialising them in memory.
+        n_events = len(request.events)  # type: ignore[attr-defined]
+        if n_events > 10_000:
+            return ValidationResult(
+                accepted=0,
+                rejected=n_events,
+                errors=["batch too large: max 10000 events"],
+                rejected_indices=set(range(n_events)),
+            )
+
         events = list(request.events)  # type: ignore[attr-defined]
 
         # --- Batch-level signature check ---
@@ -56,6 +67,7 @@ class BatchValidator:
             try:
                 pub_key = load_der_public_key(agent_public_key)
                 if not isinstance(pub_key, Ed25519PublicKey):
+                    all_indices = set(range(len(events)))
                     return ValidationResult(
                         accepted=0,
                         rejected=len(events),
@@ -63,12 +75,14 @@ class BatchValidator:
                             f"event {i}: batch signature public key is not Ed25519"
                             for i in range(len(events))
                         ],
+                        rejected_indices=all_indices,
                     )
                 pub_key.verify(
                     bytes(request.batch_signature),  # type: ignore[attr-defined]
                     digest,
                 )
             except InvalidSignature:
+                all_indices = set(range(len(events)))
                 return ValidationResult(
                     accepted=0,
                     rejected=len(events),
@@ -76,23 +90,35 @@ class BatchValidator:
                         f"event {i}: batch signature verification failed"
                         for i in range(len(events))
                     ],
+                    rejected_indices=all_indices,
                 )
 
         # --- Per-event field validation ---
         accepted = 0
         rejected = 0
         errors: list[str] = []
+        rejected_indices: set[int] = set()
 
         for i, ev in enumerate(events):
             missing = [
-                f for f in self._REQUIRED_FIELDS if not getattr(ev, f, None)
+                f
+                for f in self._REQUIRED_FIELDS
+                # [AUDIT] Only reject if the field is absent or an empty string/bytes.
+                # Integer fields with value 0 are valid and must not be rejected.
+                if (lambda v: v is None or v == "" or v == b"")(getattr(ev, f, None))
             ]
             if missing:
                 rejected += 1
+                rejected_indices.add(i)
                 errors.append(
                     f"event {i}: missing required fields: {', '.join(missing)}"
                 )
             else:
                 accepted += 1
 
-        return ValidationResult(accepted=accepted, rejected=rejected, errors=errors)
+        return ValidationResult(
+            accepted=accepted,
+            rejected=rejected,
+            errors=errors,
+            rejected_indices=rejected_indices,
+        )

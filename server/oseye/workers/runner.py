@@ -52,7 +52,7 @@ async def run_workers(settings: Settings) -> None:
         async for topic, message in await bus.subscribe_pattern("events:raw:*"):
             # topic format: events:raw:{agent_id}
             parts = topic.split(":")
-            agent_id_raw = parts[2] if len(parts) >= 3 else "unknown"
+            agent_id_raw = ":".join(parts[2:]) if len(parts) >= 3 else "unknown"
             # PC-07: validate agent_id is UUID-parseable; keep raw string on failure
             # so non-UUID CNs (e.g. hostnames) are forwarded as-is rather than dropped.
             try:
@@ -74,11 +74,19 @@ async def run_workers(settings: Settings) -> None:
             if stop.is_set():
                 break
 
+    async def _run_with_stop(coro: object) -> None:
+        """Wrapper: set the stop event then re-raise on any unexpected error."""
+        try:
+            await coro  # type: ignore[misc]
+        except (asyncio.CancelledError, Exception):
+            stop.set()
+            raise
+
     try:
         await asyncio.gather(
-            _normalizer_loop(),
-            writer.run(stop_event=stop),
-            rule_worker.run(stop_event=stop),
+            _run_with_stop(_normalizer_loop()),
+            _run_with_stop(writer.run(stop_event=stop)),
+            _run_with_stop(rule_worker.run(stop_event=stop)),
         )
     except asyncio.CancelledError:
         stop.set()

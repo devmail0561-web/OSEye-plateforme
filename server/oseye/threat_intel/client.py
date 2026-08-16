@@ -7,7 +7,9 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from fastapi import HTTPException
+# ThreatIntelClient raises ValueError for validation errors so it can be used
+# outside a FastAPI request context (e.g. TIWorker background task).
+# API routers that call lookup() should catch ValueError and convert to HTTPException.
 
 from oseye.threat_intel.cache import MemoryTICache, TICache
 from oseye.threat_intel.models import AggregatedTIReport, ThreatIntelReport
@@ -72,16 +74,13 @@ class ThreatIntelClient:
         SEC-005: prevents private/malformed values from reaching external TI APIs.
         """
         if not indicator or len(indicator) > 256:
-            raise HTTPException(
-                status_code=400,
-                detail="Indicator must be a non-empty string of at most 256 characters",
-            )
+            raise ValueError("Indicator must be a non-empty string of at most 256 characters")
 
         if indicator_type == "ip":
             try:
                 addr = ipaddress.ip_address(indicator)
             except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid IP address: {indicator!r}")
+                raise ValueError(f"Invalid IP address: {indicator!r}")
             # TI-02: normalise IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) to their
             # IPv4 form before checking non-public ranges, so they cannot bypass
             # the private-address guard.
@@ -96,19 +95,15 @@ class ThreatIntelClient:
                 logger.warning(
                     "ti_lookup_rejected_non_public indicator=%s reason=non_public_ip", indicator
                 )
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Non-routable IP address not queried against TI providers: {indicator}",
+                raise ValueError(
+                    f"Non-routable IP address not queried against TI providers: {indicator}"
                 )
 
         elif indicator_type == "hash":
             if not _HASH_RE.fullmatch(indicator) or len(indicator) not in _VALID_HASH_LENGTHS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Invalid hash value: must be hex-only and 32, 40, or 64 characters "
-                        f"(got length={len(indicator)})"
-                    ),
+                raise ValueError(
+                    f"Invalid hash value: must be hex-only and 32, 40, or 64 characters "
+                    f"(got length={len(indicator)})"
                 )
 
     async def lookup(

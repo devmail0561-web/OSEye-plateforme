@@ -56,6 +56,7 @@ class MemoryTICache:
             if time.monotonic() > expires_at:
                 del self._store[key]
                 return None
+            self._store.move_to_end(key)
             return report
 
     async def set(

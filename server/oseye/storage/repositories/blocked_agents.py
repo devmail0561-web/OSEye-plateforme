@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from oseye.storage.models import BlockedAgentRow
@@ -14,11 +13,13 @@ class SQLBlockedAgentsRepository:
         self._session_factory = session_factory
 
     async def block(self, cn: str, reason: str | None = None) -> None:
+        # H-08: dialect-agnostic merge pattern — SELECT then INSERT if absent.
+        # Idempotent: calling block() on an already-blocked CN is a no-op.
         async with self._session_factory() as session:
-            stmt = sqlite_insert(BlockedAgentRow).values(cn=cn, reason=reason)
-            stmt = stmt.on_conflict_do_nothing(index_elements=["cn"])
-            await session.execute(stmt)
-            await session.commit()
+            async with session.begin():
+                row = await session.get(BlockedAgentRow, cn)
+                if row is None:
+                    session.add(BlockedAgentRow(cn=cn, reason=reason))
 
     async def unblock(self, cn: str) -> None:
         async with self._session_factory() as session:

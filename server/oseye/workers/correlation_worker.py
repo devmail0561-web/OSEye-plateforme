@@ -104,7 +104,7 @@ class CorrelationWorker:
 
     async def _stale_incidents_loop(self) -> None:
         """Close incidents with no activity for auto_close_after_seconds every 5 min."""
-        while True:
+        while not self._stop_event.is_set():
             await asyncio.sleep(300)
             try:
                 closed = await self._engine.close_stale_incidents()

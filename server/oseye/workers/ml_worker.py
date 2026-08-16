@@ -40,9 +40,9 @@ _log = get_logger(__name__)
 CONSUME_TOPIC = "events:normalized"
 PUBLISH_TOPIC = "analysis:ml"
 _DEFAULT_CHECKPOINT_INTERVAL_S = 300  # 5 minutes
-# Dev/CI-friendly default under XDG_RUNTIME_DIR or /tmp; production deployments
-# should always pass an explicit checkpoint_path.
-_DEFAULT_CHECKPOINT_PATH = Path("/tmp/oseye_ml_checkpoint.pkl")  # noqa: S108
+# Fallback path — production must pass settings.ml_checkpoint_path explicitly.
+# /tmp is intentionally avoided; callers should always supply the path from Settings.
+_DEFAULT_CHECKPOINT_PATH = Path("/var/lib/oseye/ml_checkpoint.pkl")
 
 
 class MLWorker:
@@ -127,7 +127,7 @@ class MLWorker:
         """Save the model state every checkpoint_interval_s seconds."""
         while True:
             await asyncio.sleep(self._checkpoint_interval_s)
-            self._try_save_checkpoint()
+            await asyncio.get_running_loop().run_in_executor(None, self._try_save_checkpoint)
 
     async def _process(self, event: UniversalEvent) -> None:
         # A/B test active: score_event internally scores both champion and
@@ -178,7 +178,7 @@ class MLWorker:
 
     def _try_save_checkpoint(self) -> None:
         try:
-            self._checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            self._checkpoint_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             self._engine.save_checkpoint(self._checkpoint_path)
             _log.info("ml_worker_checkpoint_saved", path=str(self._checkpoint_path))
         except Exception as exc:  # noqa: BLE001
