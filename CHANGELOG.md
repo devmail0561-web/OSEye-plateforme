@@ -4,6 +4,36 @@ All notable changes to OSEye are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 2026-08-16
+
+### Security
+
+**Agent Go — audit complet `agent/` (commit `2f7937b`)**  
+Détails : [`docs/internal/AUDIT_AGENT_2026-08-16.md`](docs/internal/AUDIT_AGENT_2026-08-16.md)
+
+53 findings corrigés (3 critical / 14 high / 23 medium / 13 low) :
+
+- **[C]** `responder/reporter.go` : race condition send-on-closed-channel → panique agent corrigée
+- **[C]** `policy/client.go` : borne minimale `throttle >= 0.01` — un serveur compromis ne peut plus aveugler les collecteurs
+- **[H]** `cmd/oseye-config/enroll.go` : `signCSR()` valide désormais CN et signature CA (`CheckSignatureFrom`) ; PKCS#8 remplace PKCS#1 ; `io.LimitReader` sur tous les `ReadAll`
+- **[H]** `responder/executor.go` : `RestoreFile` valide `originalPath` via `isAllowedPath` (même allowlist que `QuarantineFile`) ; symlinks résolus avant quarantaine ; handle nft validé numérique
+- **[H]** `ebpf/loader.go` : goroutine leak `rd.Read()` bloquant corrigé (`SetDeadline` sur `ctx.Done`)
+- **[H]** `fanotify/collector.go` : FD leak `meta.Fd > 0` → `>= 0` ; `Event_len < fanotifyMetadataSize` rejeté
+- **[H]** `procfs/collector.go` : cmdline tronquée à 4 096 octets + redaction regexp des secrets (`-p`, `--token=`, `Bearer`, `Authorization:`)
+- **[H]** `autonomy/controller.go` : `execKillProcess` ajoute `dedup.Allow` ; race `rolledBack` corrigée ; `doRollback` enveloppé avec `recover`
+- **[H]** `transport/batcher.go` : erreur `sendFn` loguée (était silencieusement ignorée)
+- **[H]** `transport/grpc_client.go` : chain head inclus dans `batchSignature` — empêche le replay de batch
+- **[M]** `enrollment/client.go` : fingerprint CA calculé sur DER (non PEM) — compatible `openssl x509 -fingerprint`
+- **[M]** `config.go` : `http://` pour `EnrollServerURL` déclenche un warning ou erreur selon `OSEYE_INSECURE`
+- **[M]** `executor_darwin.go` : `isAllowedPath` converti de liste noire en liste blanche positive
+- **[M]** `buffer/buffer.go` : cap à 100 000 lignes + éviction FIFO — prévient le remplissage disque
+- **[M]** `buffer/buffer_cgo.go` : `cache=shared` supprimé (incompatible WAL) ; range DELETE dans `Pop` ; `PRAGMA busy_timeout=5000`
+- **[M]** `autonomy/reporter.go` : `commandID` généré par `crypto/rand` ; `EventData` réduit au minimum dans le payload de décision
+- **[L]** `signer/signer.go` : avertissement si permissions clé privée > 0600
+- Test `TestBatchSignatureCorrectness` mis à jour pour couvrir le chain head dans le digest attendu
+
+---
+
 ## [Unreleased] — 2026-08-15
 
 ### Performance
