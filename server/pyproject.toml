@@ -99,5 +99,8 @@ python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 
+[project.scripts]
+oseye-server = "oseye.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["oseye"]

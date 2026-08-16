@@ -26,6 +26,7 @@ var sensitiveKeys = map[string]bool{
 var usage = `oseye-config — Agent configuration management
 
 Usage:
+  oseye-config enroll                Enroll this host as an OSEye agent (see --help)
   oseye-config show                  Show current effective configuration
   oseye-config validate              Validate current configuration
   oseye-config get <KEY>             Get a specific config value
@@ -56,6 +57,8 @@ func main() {
 	target := resolveEnvFile()
 
 	switch os.Args[1] {
+	case "enroll":
+		cmdEnroll(os.Args[2:])
 	case "show":
 		cmdShow()
 	case "validate":
