@@ -511,6 +511,33 @@ export const agentsApi = {
   },
 }
 
+// ── Enrollment tokens ─────────────────────────────────────────────────────────
+
+export interface EnrollmentToken {
+  token_id:   string
+  created_at: string
+  expires_at: string
+  created_by: string
+}
+
+export const enrollmentApi = {
+  create(expires_in_hours?: number): Promise<{ token: string; token_id: string }> {
+    return api
+      .post<{ token: string; token_id: string }>('/api/v1/enroll/tokens', {
+        expires_in_hours: expires_in_hours ?? null,
+      })
+      .then((r) => r.data)
+  },
+
+  list(): Promise<EnrollmentToken[]> {
+    return api.get<EnrollmentToken[]>('/api/v1/enroll/tokens').then((r) => r.data)
+  },
+
+  revoke(token_id: string): Promise<void> {
+    return api.delete(`/api/v1/enroll/tokens/${token_id}`).then(() => undefined)
+  },
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export const healthApi = {

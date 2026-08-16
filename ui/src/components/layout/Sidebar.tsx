@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
+  Ticket,
 } from 'lucide-react'
 import { useAlertStore } from '@/stores/alertStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -47,10 +48,11 @@ const CONFIG: NavItem[] = [
 ]
 
 const ADMIN: NavItem[] = [
-  { to: '/admin/response-actions', label: 'Actions réponse', icon: ShieldAlert },
-  { to: '/admin/api-keys',         label: 'API Keys',        icon: Key },
-  { to: '/admin/plugins',          label: 'Plugins',         icon: Puzzle },
-  { to: '/admin/policies',         label: 'Policies',        icon: SlidersHorizontal },
+  { to: '/admin/response-actions',   label: 'Actions réponse',  icon: ShieldAlert },
+  { to: '/admin/api-keys',           label: 'API Keys',         icon: Key },
+  { to: '/admin/enrollment-tokens',  label: 'Enrollment',       icon: Ticket },
+  { to: '/admin/plugins',            label: 'Plugins',          icon: Puzzle },
+  { to: '/admin/policies',           label: 'Policies',         icon: SlidersHorizontal },
 ]
 
 function SectionLabel({ children, collapsed }: { children: string; collapsed: boolean }) {

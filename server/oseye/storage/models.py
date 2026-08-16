@@ -237,6 +237,16 @@ class ApiKeyRow(Base):
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
+class EnrollmentTokenRow(Base):
+    __tablename__ = "enrollment_tokens"
+
+    token_id:   Mapped[str] = mapped_column(String(36),  primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    created_at: Mapped[str] = mapped_column(String(64),  nullable=False)
+    expires_at: Mapped[str] = mapped_column(String(64),  nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
 class RuleVersionRow(Base):
     __tablename__ = "rule_versions"
 

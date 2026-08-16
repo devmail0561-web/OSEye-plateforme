@@ -89,8 +89,8 @@ class Settings(BaseSettings):
     # Passphrase to decrypt the CA private key. Empty string means unencrypted key.
     tls_ca_key_password: SecretStr = Field(default=SecretStr(""), description="Passphrase for the CA private key (OSEYE_TLS_CA_KEY_PASSWORD).")
 
-    # Enrollment token directory (one file per token, TTL 24h)
-    enrollment_token_dir: str = Field(default="/etc/oseye/enrollment_tokens")
+    # Enrollment token default TTL in hours (admin can override per token)
+    enrollment_token_default_ttl_hours: int = Field(default=24, ge=1, le=8760)
 
     # Directory of DER-encoded Ed25519 public keys for agent batch signature verification.
     # One file per agent, named {cn}.pub (e.g. "my-agent-hostname.pub").

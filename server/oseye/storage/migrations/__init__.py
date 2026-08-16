@@ -27,6 +27,7 @@ async def run_migrations(engine: AsyncEngine) -> None:
         if engine.dialect.name == "sqlite":
             await _install_entity_hourly_stats_refresh_sqlite(conn)
             await _migrate_alerts_response_columns_sqlite(conn)
+        await _migrate_enrollment_tokens(conn, engine.dialect.name)
 
 
 async def _install_immutability_triggers(conn: AsyncConnection) -> None:
@@ -178,3 +179,36 @@ async def _install_entity_hourly_stats_refresh_sqlite(conn: AsyncConnection) -> 
         CREATE UNIQUE INDEX IF NOT EXISTS uq_ehs_hostname_cat_hour
         ON entity_hourly_stats (hostname, category, hour_bucket);
     """))
+
+
+async def _migrate_enrollment_tokens(conn: AsyncConnection, dialect: str) -> None:
+    """Idempotent: create enrollment_tokens table if it does not exist.
+
+    create_all already handles new installs; this covers upgrades from
+    the file-based token store where the table was absent.
+    """
+    from sqlalchemy import text
+
+    # create_all already handles new installs via Base.metadata.
+    # This covers upgrades from the file-based token store where the table was absent.
+    # The UNIQUE constraint on token_hash implicitly creates an index — no separate CREATE INDEX needed.
+    if dialect == "postgresql":
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS enrollment_tokens (
+                token_id   VARCHAR(36)  PRIMARY KEY,
+                token_hash VARCHAR(128) NOT NULL UNIQUE,
+                created_at VARCHAR(64)  NOT NULL,
+                expires_at VARCHAR(64)  NOT NULL,
+                created_by VARCHAR(255) NOT NULL
+            );
+        """))
+    else:
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS enrollment_tokens (
+                token_id   TEXT PRIMARY KEY,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_by TEXT NOT NULL
+            );
+        """))

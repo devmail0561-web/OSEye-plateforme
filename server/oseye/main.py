@@ -388,7 +388,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
 
         # Expose shared state to API routers
         from oseye.enrollment_store import EnrollmentStore
-        app.state.enrollment_store = EnrollmentStore(settings)  # type: ignore[attr-defined]
+        app.state.enrollment_store = EnrollmentStore(settings, backend.session_factory)  # type: ignore[attr-defined]
 
         app.state.jwt_handler = JWTHandler(  # type: ignore[attr-defined]
             private_key_path=settings.jwt_private_key_path,

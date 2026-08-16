@@ -20,7 +20,8 @@ const EventChain = lazy(() => import('@/pages/EventChain'))
 const ApiKeys = lazy(() => import('@/pages/admin/ApiKeys'))
 const Plugins = lazy(() => import('@/pages/admin/Plugins'))
 const Policies = lazy(() => import('@/pages/admin/Policies'))
-const ResponseActions = lazy(() => import('@/pages/admin/ResponseActions'))
+const ResponseActions    = lazy(() => import('@/pages/admin/ResponseActions'))
+const EnrollmentTokens  = lazy(() => import('@/pages/admin/EnrollmentTokens'))
 
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
@@ -47,10 +48,11 @@ const router = createBrowserRouter([
           {
             element: <ProtectedRoute requiredRole="admin" />,
             children: [
-              { path: '/admin/response-actions', element: <Suspense fallback={null}><ResponseActions /></Suspense> },
-              { path: '/admin/api-keys',         element: <Suspense fallback={null}><ApiKeys /></Suspense> },
-              { path: '/admin/plugins',          element: <Suspense fallback={null}><Plugins /></Suspense> },
-              { path: '/admin/policies',         element: <Suspense fallback={null}><Policies /></Suspense> },
+              { path: '/admin/response-actions',   element: <Suspense fallback={null}><ResponseActions /></Suspense> },
+              { path: '/admin/api-keys',          element: <Suspense fallback={null}><ApiKeys /></Suspense> },
+              { path: '/admin/plugins',           element: <Suspense fallback={null}><Plugins /></Suspense> },
+              { path: '/admin/policies',          element: <Suspense fallback={null}><Policies /></Suspense> },
+              { path: '/admin/enrollment-tokens', element: <Suspense fallback={null}><EnrollmentTokens /></Suspense> },
             ],
           },
         ],
