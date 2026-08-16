@@ -2,10 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir hatchling
+RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .
+RUN uv pip install --system --no-cache -e .
 
 COPY oseye/ oseye/
 COPY workers/ workers/
@@ -13,4 +13,5 @@ COPY gen/ gen/
 
 EXPOSE 8000 50051
 
-CMD ["uvicorn", "oseye.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# oseye-server is installed as a script entry point by pyproject.toml [project.scripts]
+CMD ["oseye-server", "start"]

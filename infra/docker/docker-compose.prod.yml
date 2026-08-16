@@ -1,15 +1,19 @@
 name: oseye-prod
 
-# Production deployment — requires init-server.sh to have been run first.
+# Production deployment.
+#
+# Prerequisites (run once on the host before starting):
+#   docker run --rm -v /etc/oseye:/etc/oseye ghcr.io/oseye/oseye/oseye-server:latest oseye-server init
+#   docker run --rm -it -v /etc/oseye:/etc/oseye ghcr.io/oseye/oseye/oseye-server:latest oseye-server setup
 #
 # Start:  docker compose -f infra/docker/docker-compose.prod.yml up -d
 # Stop:   docker compose -f infra/docker/docker-compose.prod.yml down
 #
-# Config files expected on the host:
-#   /etc/oseye/server.env    (copy from packaging/config/server.env.example)
-#   /etc/oseye/secrets.env   (copy from packaging/config/secrets.env.example)
-#   /etc/oseye/certs/        (populated by scripts/init-server.sh)
-#   /etc/oseye/enrollment_tokens/  (populated by scripts/init-server.sh)
+# Config files written by 'oseye-server setup':
+#   /etc/oseye/server.env    (mode 640)
+#   /etc/oseye/secrets.env   (mode 600)
+#   /etc/oseye/certs/        (populated by 'oseye-server init')
+#   /etc/oseye/enrollment_tokens/  (populated by 'oseye-server init')
 
 services:
 
