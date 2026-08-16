@@ -73,28 +73,42 @@ Points clés :
 
 ## Sécurité post-installation
 
-### Génération PKI et répertoires (`scripts/init-server.sh`)
+### `oseye-server init` — génération PKI et répertoires
 
-`init-server.sh` applique `umask 077` en subshell avant chaque `openssl genrsa` — les clés privées sont créées directement en mode **0600**, sans fenêtre où un autre processus pourrait les lire :
+`oseye-server init` (Python, `server/oseye/cli/cmd_init.py`) applique `os.umask(0o077)` avant tout appel openssl — les clés privées sont créées directement en mode **0600**, sans fenêtre TOCTOU. Le token d'enrollment est créé via `os.open()` avec `O_CREAT` et le mode cible dès la première ouverture.
 
-```bash
-(umask 077; openssl genrsa -out /etc/oseye/certs/ca.key 4096)
-```
-
-Le token d'enrollment est créé de la même façon :
+Le résumé final n'affiche **jamais** le mot de passe admin en clair.
 
 ```bash
-(umask 077; date +%s > "$TOKEN_DIR/$TOKEN")
+sudo oseye-server init [--hostname HOST] [--ip IP] [--force]
 ```
 
-Le résumé final n'affiche **jamais** `OSEYE_ADMIN_PASSWORD` en clair (protection contre les logs CI et les enregistrements de session SSH).
+### `oseye-server setup` — wizard de configuration
 
-### Wizard de configuration (`scripts/setup-server.py`)
+`oseye-server setup` (Python, `server/oseye/cli/cmd_setup.py`) :
 
-- **Fichiers de config créés atomiquement** — `_write_secure()` utilise `os.open()` avec le mode cible dès le premier `open()`. Pas de TOCTOU entre création et `chmod`.
-- **Mot de passe DB isolé** — pour PostgreSQL, `OSEYE_DB_URL` (qui contient le mot de passe) est écrit **uniquement** dans `secrets.env` (mode 600). `server.env` (mode 640) ne contient que les paramètres non-sensibles.
-- **Validation du hostname** — tout hostname contenant `/` ou espace est rejeté avant l'injection dans le champ `-subj` OpenSSL.
-- **Génération PKI** — `os.umask(0o077)` est positionné avant les appels openssl (subprocessus hérite du umask du parent).
+- **Fichiers créés atomiquement** — `write_secure()` utilise `os.open()` avec le mode cible dès le premier `open()`. Pas de TOCTOU entre création et `chmod`.
+- **Mot de passe DB isolé** — pour PostgreSQL, `OSEYE_DB_URL` (avec mot de passe percent-encodé) est écrit **uniquement** dans `secrets.env` (mode 600).
+- **Validation hostname** — rejet si `/` ou espace avant injection dans `-subj` OpenSSL.
+- **Validation IP** — `ipaddress.ip_address()` avant injection dans la SAN.
+- **Anti-injection newline** — toutes les valeurs saisies sont nettoyées de `\n\r`.
+
+```bash
+sudo oseye-server setup
+```
+
+### `oseye-config enroll` — enrollment agent
+
+`oseye-config enroll` (Go, `agent/cmd/oseye-config/enroll.go`) :
+
+- **Crypto natif** — génération RSA-2048 et CSR via `crypto/rsa` + `crypto/x509`, sans dépendance à openssl.
+- **TOFU sécurisé** — `InsecureSkipVerify` uniquement pour la requête initiale de fetch CA ; toutes les requêtes suivantes utilisent le pool CA.
+- **Écriture atomique** — `os.OpenFile(O_CREAT|O_TRUNC, 0600)` sans étape chmod séparée.
+- **IPv6 et scheme** — `net.SplitHostPort` + strip du scheme `https://` si fourni par l'opérateur.
+
+```bash
+sudo oseye-config enroll --server HOST:PORT --token TOKEN
+```
 
 ### Modèle de permissions des répertoires
 
