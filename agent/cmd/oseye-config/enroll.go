@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -61,13 +62,20 @@ func cmdEnroll(args []string) {
 		fatal("oseye-config enroll must be run as root")
 	}
 
-	apiBase := "https://" + *server
-	serverHost := strings.SplitN(*server, ":", 2)[0]
+	// Strip any user-supplied scheme, then parse host:port (handles IPv6)
+	rawServer := strings.TrimPrefix(strings.TrimPrefix(*server, "https://"), "http://")
+	apiBase := "https://" + rawServer
+
+	serverHost, _, err := net.SplitHostPort(rawServer)
+	if err != nil {
+		// No port in the string — treat the whole value as the host
+		serverHost = rawServer
+	}
 
 	// Resolve hostname
 	hostname, err := os.Hostname()
 	if err != nil {
-		hostname = "unknown"
+		fatal("resolve hostname: " + err.Error())
 	}
 
 	// Auto-generate agent ID
@@ -173,9 +181,15 @@ func cmdEnroll(args []string) {
 
 	// ── Step 6: Enable systemd service ────────────────────────────────────
 	if _, err := exec.LookPath("systemctl"); err == nil {
-		exec.Command("systemctl", "daemon-reload").Run()           //nolint:errcheck
-		exec.Command("systemctl", "enable", "--now", "oseye-agent").Run() //nolint:errcheck
-		fmt.Println("\n==> oseye-agent enabled and started.")
+		if out, err := exec.Command("systemctl", "daemon-reload").CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: systemctl daemon-reload: %v\n%s\n", err, out)
+		}
+		if out, err := exec.Command("systemctl", "enable", "--now", "oseye-agent").CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: systemctl enable oseye-agent: %v\n%s\n", err, out)
+			fmt.Fprintln(os.Stderr, "         Start manually: systemctl start oseye-agent")
+		} else {
+			fmt.Println("\n==> oseye-agent enabled and started.")
+		}
 	}
 
 	fmt.Println()
@@ -227,7 +241,9 @@ func fetchCA(apiBase, token, destPath string) {
 // signCSR posts the CSR to the server and returns the signed agent certificate PEM.
 func signCSR(apiBase, token string, caCertPEM []byte, csrPEM, hostname string) string {
 	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(caCertPEM)
+	if !pool.AppendCertsFromPEM(caCertPEM) {
+		fatal("CA certificate PEM is invalid or empty — cannot build TLS pool")
+	}
 
 	client := &http.Client{
 		Transport: &http.Transport{

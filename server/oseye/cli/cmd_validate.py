@@ -24,7 +24,6 @@ def run(argv: list[str] | None = None) -> None:
     print("OK — configuration is valid")
     print()
 
-    import textwrap
     rows = [
         ("DB",        f"{s.db_backend} — {s.db_url[:60]}{'…' if len(s.db_url) > 60 else ''}"),
         ("Redis",     s.redis_url),

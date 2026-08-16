@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import subprocess
 from pathlib import Path
@@ -33,11 +34,15 @@ def create_dirs(extra: dict[str, int] | None = None) -> list[str]:
     if extra:
         dirs.update(extra)
     created = []
-    for d, mode in dirs.items():
-        p = Path(d)
-        if not p.exists():
-            p.mkdir(mode=mode, parents=True, exist_ok=True)
-            created.append(d)
+    old_umask = os.umask(0o077)
+    try:
+        for d, mode in dirs.items():
+            p = Path(d)
+            if not p.exists():
+                p.mkdir(mode=mode, parents=True, exist_ok=True)
+                created.append(d)
+    finally:
+        os.umask(old_umask)
     return created
 
 
@@ -45,6 +50,10 @@ def generate_pki(certs_dir: Path, hostname: str, ip: str, *, force: bool = False
     """Generate CA + server cert + JWT keys. Returns True if generated, False if skipped."""
     if "/" in hostname or " " in hostname:
         raise ValueError(f"Invalid hostname {hostname!r}: must not contain '/' or spaces")
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        raise ValueError(f"Invalid IP address {ip!r}")
     ca_crt = certs_dir / "ca.crt"
     if ca_crt.exists() and not force:
         return False

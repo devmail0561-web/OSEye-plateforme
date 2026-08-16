@@ -52,6 +52,7 @@ def ask(prompt: str, default: str = "") -> str:
     except (EOFError, KeyboardInterrupt):
         print()
         sys.exit(0)
+    val = val.replace("\n", "").replace("\r", "")
     return val or default
 
 
@@ -82,13 +83,3 @@ def ask_yn(prompt: str, default: bool = False) -> bool:
     return (val in ("y", "yes")) if val else default
 
 
-def summary_box(title: str, lines: list[str], color: str = GREEN) -> None:
-    width = 64
-    print()
-    print(c("┌" + "─" * (width - 2) + "┐", color, BOLD))
-    print(c(f"│{title:^{width - 2}}│", color, BOLD))
-    print(c("├" + "─" * (width - 2) + "┤", color, BOLD))
-    for line in lines:
-        print(c(f"│ {line:<{width - 3}}│", color))
-    print(c("└" + "─" * (width - 2) + "┘", color, BOLD))
-    print()

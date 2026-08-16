@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 from textwrap import dedent
+from urllib.parse import quote as _url_quote
 
 from ._pki import DIR_MODES, generate_pki, write_secure
 from ._ui import (
@@ -89,9 +90,10 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
         db_user      = ask("Database user", "oseye")
         db_password  = ask_password("Database password")
         db_url       = f"postgresql+asyncpg://{db_user}@{db_host}:{db_port_db}/{db_name}"
+        _pw_encoded  = _url_quote(db_password, safe="")
         db_url_secret = (
             f"\n# Database URL (contains password — keep in this file only)\n"
-            f"OSEYE_DB_URL=postgresql+asyncpg://{db_user}:{db_password}"
+            f"OSEYE_DB_URL=postgresql+asyncpg://{db_user}:{_pw_encoded}"
             f"@{db_host}:{db_port_db}/{db_name}\n"
         )
     ok(f"Database: {db_backend}")
