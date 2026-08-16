@@ -1,0 +1,27 @@
+[Unit]
+Description=OSEye Server — Analysis Engine & API
+Documentation=https://github.com/devmail0561-web/OSEye-plateforme
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oseye
+Group=oseye
+EnvironmentFile=-/etc/oseye/server.env
+ExecStart=/usr/bin/oseye-server
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/oseye/server /etc/oseye
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

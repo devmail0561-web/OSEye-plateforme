@@ -1,0 +1,62 @@
+# nfpm v2 — oseye-server package configuration
+# Usage: VERSION=0.2.0-alpha.1 nfpm package --config packaging/nfpm-server.yaml --target dist/
+name: oseye-server
+arch: ${ARCH}
+platform: linux
+version: "${VERSION}"
+version_schema: semver
+maintainer: "OSEye Project <contact@oseye.io>"
+description: |
+  OSEye Server — Analysis engine, REST API, and management UI.
+  Receives telemetry from OSEye agents over mTLS-secured gRPC,
+  runs the rule engine, stores events, and exposes the management API.
+homepage: "https://github.com/devmail0561-web/OSEye-plateforme"
+license: "Apache-2.0"
+
+contents:
+  # Server binary (PyInstaller single-file)
+  - src: dist/oseye-server
+    dst: /usr/bin/oseye-server
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  # Config template
+  - src: packaging/config/server.env.example
+    dst: /etc/oseye/server.env.example
+    type: config|noreplace
+    file_info:
+      mode: 0640
+      owner: oseye
+      group: oseye
+
+  # Systemd unit
+  - src: packaging/systemd/oseye-server.service
+    dst: /usr/lib/systemd/system/oseye-server.service
+    file_info:
+      mode: 0644
+      owner: root
+      group: root
+
+  # Data directory
+  - dst: /var/lib/oseye/server/
+    type: dir
+    file_info:
+      mode: 0750
+      owner: oseye
+      group: oseye
+
+scripts:
+  preinstall:  packaging/scripts/server-preinst
+  postinstall: packaging/scripts/server-postinst
+  preremove:   packaging/scripts/server-prerm
+  postremove:  packaging/scripts/server-postrm
+
+deb:
+  fields:
+    Installed-Size: "110000"
+
+rpm:
+  group: "System Environment/Daemons"
+  summary: "OSEye Analysis Server"

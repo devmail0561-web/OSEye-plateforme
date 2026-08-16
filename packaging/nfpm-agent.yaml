@@ -10,7 +10,7 @@ description: |
   OSEye EDR Agent — eBPF-based Linux telemetry collector.
   Monitors process, file, network, and authentication events and forwards
   them to the OSEye server over mTLS-secured gRPC.
-homepage: "https://github.com/oseye/oseye"
+homepage: "https://github.com/devmail0561-web/OSEye-plateforme"
 license: "Apache-2.0"
 
 # The agent binary is statically linked (CGO_ENABLED=0).

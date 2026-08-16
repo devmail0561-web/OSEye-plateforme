@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+chown -R oseye:oseye /var/lib/oseye/server/ /etc/oseye/ 2>/dev/null || true
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl enable oseye-server
+    echo ""
+    echo "OSEye server installed. Next steps:"
+    echo "  1. Copy /etc/oseye/server.env.example to /etc/oseye/server.env and edit it."
+    echo "  2. Run: sudo systemctl start oseye-server"
+fi
