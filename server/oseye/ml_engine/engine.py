@@ -92,9 +92,19 @@ class MLEngine:
             try:
                 self._hmac_key = bytes.fromhex(raw)
             except ValueError as exc:
-                raise RuntimeError(
-                    "OSEYE_CHECKPOINT_HMAC_KEY must be a hex string (e.g. openssl rand -hex 32)"
-                ) from exc
+                if os.environ.get("OSEYE_INSECURE", "").lower() == "true":
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "OSEYE_CHECKPOINT_HMAC_KEY is not a hex string — "
+                        "using raw bytes (OSEYE_INSECURE=true). "
+                        "Use openssl rand -hex 32 in production."
+                    )
+                    self._hmac_key = raw.encode()
+                else:
+                    raise RuntimeError(
+                        "OSEYE_CHECKPOINT_HMAC_KEY must be a hex string "
+                        "(e.g. openssl rand -hex 32)"
+                    ) from exc
         self._anomaly = anomaly_detector or EntityAnomalyDetector()
         self._classifier = classifier or MITREClassifier()
 
