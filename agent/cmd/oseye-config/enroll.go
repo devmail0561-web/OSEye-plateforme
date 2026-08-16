@@ -148,7 +148,7 @@ func cmdEnroll(args []string) {
 	agentCertPEM := signCSR(apiBase, *token, caCertPEM, csrPEM, hostname)
 
 	agentCertPath := filepath.Join(*certsDir, "agent.crt")
-	if err := os.WriteFile(agentCertPath, []byte(agentCertPEM), 0644); err != nil {
+	if err := writeSecureFile(agentCertPath, []byte(agentCertPEM), 0644); err != nil {
 		fatal("write agent cert: " + err.Error())
 	}
 	fmt.Printf("    Saved to %s\n", agentCertPath)
@@ -233,7 +233,7 @@ func fetchCA(apiBase, token, destPath string) {
 	if err != nil {
 		fatal("read CA cert body: " + err.Error())
 	}
-	if err := os.WriteFile(destPath, body, 0644); err != nil {
+	if err := writeSecureFile(destPath, body, 0644); err != nil {
 		fatal("write CA cert: " + err.Error())
 	}
 }

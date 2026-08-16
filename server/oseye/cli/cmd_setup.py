@@ -41,9 +41,13 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
             warn(f"  • {d}")
         if not ask_yn("Create them now?", default=True):
             sys.exit(1)
-        for d in missing:
-            Path(d).mkdir(mode=DIR_MODES[d], parents=True, exist_ok=True)
-            ok(f"Created {d}")
+        old_umask = os.umask(0)
+        try:
+            for d in missing:
+                Path(d).mkdir(mode=DIR_MODES[d], parents=True, exist_ok=True)
+                ok(f"Created {d}")
+        finally:
+            os.umask(old_umask)
 
     TOTAL = 9
 

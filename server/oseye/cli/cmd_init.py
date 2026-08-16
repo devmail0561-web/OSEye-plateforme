@@ -85,7 +85,7 @@ def run(argv: list[str] | None = None) -> None:
         f"  {token}",
         "",
         "  To enroll an agent:",
-        f"    oseye-config enroll --server {hostname}:8000 --token {token}",
+        "    oseye-config enroll --server <host>:<api-port> --token " + token,
         "",
         "  Next: oseye-server setup",
     ]
