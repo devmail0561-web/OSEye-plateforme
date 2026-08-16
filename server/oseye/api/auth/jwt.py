@@ -23,12 +23,8 @@ from oseye.core.observability import get_logger
 
 _logger = get_logger(__name__)
 
-# API-03: default /tmp is world-readable (mode 0644).
-# In production, set OSEYE_DATA_DIR=/var/lib/oseye (owned root:oseye, mode 0750)
-# so that revoked_tokens.json is not accessible to other users on the host.
-_BLOCKLIST_FILE = pathlib.Path(
-    os.environ.get("OSEYE_DATA_DIR", "/tmp")  # noqa: S108
-) / "revoked_tokens.json"
+_data_dir = pathlib.Path(os.environ.get("OSEYE_DATA_DIR", "/tmp"))  # noqa: S108
+_BLOCKLIST_FILE = _data_dir / "revoked_tokens.json"
 
 
 class JWTHandler:
@@ -64,15 +60,14 @@ class JWTHandler:
         # SEC-JWT-001: jti blocklist — {jti: expiry_timestamp_utc}
         # Bounded: revoked entries are pruned on every verify call once expired.
         # B-05: persisted to disk so the blocklist survives restarts.
-        self._revoked_lock = threading.Lock()
-        self._revoked: dict[str, datetime] = self._load_blocklist()
-        # API-03: tighten permissions on the existing file so it is not
-        # world-readable even when OSEYE_DATA_DIR defaults to /tmp.
+        _data_dir.mkdir(parents=True, exist_ok=True)
         if _BLOCKLIST_FILE.exists():
             try:
                 _BLOCKLIST_FILE.chmod(0o600)
             except OSError:
                 pass
+        self._revoked_lock = threading.Lock()
+        self._revoked: dict[str, datetime] = self._load_blocklist()
 
     # ------------------------------------------------------------------
     # Token creation
@@ -212,14 +207,20 @@ class JWTHandler:
         """Write the blocklist to disk atomically (write + rename).
 
         B-05: uses a .tmp file to avoid a partial write being read on crash.
+        The tmp file is created with mode 0o600 via os.open so it is never
+        world-readable, even transiently (eliminates the chmod race).
         Caller must NOT hold _revoked_lock (acquires it internally).
         """
         try:
             with self._revoked_lock:
                 snapshot = {jti: exp.isoformat() for jti, exp in self._revoked.items()}
             tmp = _BLOCKLIST_FILE.with_suffix(".tmp")
-            tmp.write_text(json.dumps(snapshot))
+            _data_dir.mkdir(parents=True, exist_ok=True)
+            fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, json.dumps(snapshot).encode())
+            finally:
+                os.close(fd)
             tmp.rename(_BLOCKLIST_FILE)
-            _BLOCKLIST_FILE.chmod(0o600)
         except Exception as exc:  # noqa: BLE001
             _logger.warning("jwt_blocklist_save_failed", error=str(exc))

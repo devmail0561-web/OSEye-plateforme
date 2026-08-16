@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from pydantic import SecretStr
+
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -58,6 +60,7 @@ def _make_store(tmp_path: Path) -> EnrollmentStore:
     settings.enrollment_token_dir = str(token_dir)
     settings.tls_ca_cert_file = str(ca_cert)
     settings.tls_ca_key_file = str(ca_key)
+    settings.tls_ca_key_password = SecretStr("")
     return EnrollmentStore(settings)
 
 

@@ -58,8 +58,11 @@ Les mécanismes de sécurité implémentés dans OSEye sont décrits dans :
 
 Points clés :
 - **PKI interne** — mTLS strict entre agent et server (refus démarrage si certs absents)
+- **CA key passphrase** — `OSEYE_TLS_CA_KEY_PASSWORD` active le chiffrement AES de la clé CA sur disque
 - **JWT RS256** — authentification API ; rôles décodés à chaque chargement, jamais en localStorage
+- **JWT blocklist** — tokens révoqués persistés dans `OSEYE_DATA_DIR/revoked_tokens.json` (0600, créé atomiquement)
 - **RBAC 2 niveaux opérationnels** — analyst / admin ; admin hérite de analyst
+- **API Keys** — stockées uniquement sous forme HMAC-SHA256 (`OSEYE_SECRET_KEY`, requis ≥ 32 chars)
 - **Hash chain BLAKE3 + signature Ed25519** — intégrité des events ; clé de signature Ed25519 séparée de la clé mTLS (RSA)
 - **Vérification batch serveur** — `AgentServiceServicer` charge les clés publiques `.pub` au démarrage et vérifie chaque batch
 - **Journal immutable** — décisions protégées par hash chain BLAKE3 signé

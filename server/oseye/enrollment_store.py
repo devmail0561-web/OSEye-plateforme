@@ -34,6 +34,8 @@ class EnrollmentStore:
         self._token_dir = Path(settings.enrollment_token_dir)
         self._ca_cert_path = Path(settings.tls_ca_cert_file)
         self._ca_key_path = Path(settings.tls_ca_key_file)
+        _pw = settings.tls_ca_key_password.get_secret_value()
+        self._ca_key_password: bytes | None = _pw.encode() if _pw else None
         self._token_dir.mkdir(parents=True, exist_ok=True)
         # NE-R-05: serialises validate+consume under a lock to prevent TOCTOU races.
         self._lock = threading.Lock()
@@ -114,10 +116,11 @@ class EnrollmentStore:
         if not csr.is_signature_valid:
             raise ValueError("CSR signature is invalid")
 
-        # Load CA cert and key
+        # Load CA cert and key.
+        # Set OSEYE_TLS_CA_KEY_PASSWORD to decrypt a passphrase-protected CA key.
         ca_cert = x509.load_pem_x509_certificate(self._ca_cert_path.read_bytes())
         ca_key = serialization.load_pem_private_key(
-            self._ca_key_path.read_bytes(), password=None
+            self._ca_key_path.read_bytes(), password=self._ca_key_password
         )
         if not isinstance(ca_key, rsa.RSAPrivateKey):
             raise ValueError("CA key must be an RSA private key")

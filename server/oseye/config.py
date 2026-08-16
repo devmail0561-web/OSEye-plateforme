@@ -10,7 +10,7 @@ Usage:
 
 from __future__ import annotations
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,6 +86,8 @@ class Settings(BaseSettings):
 
     # PKI — CA private key (used by enrollment endpoint to sign agent certs)
     tls_ca_key_file: str = Field(default="/etc/oseye/certs/ca.key")
+    # Passphrase to decrypt the CA private key. Empty string means unencrypted key.
+    tls_ca_key_password: SecretStr = Field(default=SecretStr(""), description="Passphrase for the CA private key (OSEYE_TLS_CA_KEY_PASSWORD).")
 
     # Enrollment token directory (one file per token, TTL 24h)
     enrollment_token_dir: str = Field(default="/etc/oseye/enrollment_tokens")

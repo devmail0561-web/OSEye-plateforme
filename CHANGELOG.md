@@ -44,6 +44,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **Moteur de règles — opérateurs numériques**
 - `engine.go` : ajout des opérateurs `gt`, `lt`, `gte`, `lte` pour les conditions numériques (ex. `cpu_pct > 80`, `port < 1024`). Support de `float64`, `json.Number`, `string`, `int`, `int64` comme valeur de condition.
 
+### Security
+
+- **CA key passphrase** (`enrollment_store.py`) : `load_pem_private_key` accepte désormais une passphrase via `OSEYE_TLS_CA_KEY_PASSWORD`. La clé CA peut être stockée chiffrée sur disque ; variable vide = clé non chiffrée (comportement antérieur inchangé). Nouveau champ `tls_ca_key_password` dans `Settings`.
+- **JWT blocklist — race condition** (`api/auth/jwt.py`) : le fichier `.tmp` est créé avec `os.open(..., O_CREAT | O_TRUNC, 0o600)` au lieu d'un `write_text` + `chmod` ultérieur. Le fichier n'est plus world-readable même transitoirement. `OSEYE_DATA_DIR` est créé automatiquement au démarrage si absent.
+- **Documentation secrets** : `OSEYE_SECRET_KEY` (HMAC API keys, requis), `OSEYE_DATA_DIR` (répertoire JWT blocklist, défaut `/tmp` non recommandé en prod), et `OSEYE_TLS_CA_KEY_PASSWORD` ajoutés dans `.env.example` et `packaging/config/secrets.env.example`.
+
 ### Fixed
 
 - `procfs` : bug TOCTOU — un PID n'est ajouté à `currentPIDs` qu'après `readProcess` réussi ; un processus éphémère entre `ReadDir` et `readProcess` ne génère plus de `process_exit` orphelin.
