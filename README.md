@@ -151,3 +151,7 @@ Toutes les valeurs sont validées strictement au démarrage (ports numériques, 
 ## Licence
 
 Apache 2.0 — voir [`LICENSE`](LICENSE).
+
+---
+
+Copyright 2026 M. Tendeng — voir [`NOTICE.md`](NOTICE.md).
