@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -114,9 +115,13 @@ func cmdEnroll(args []string) {
 		fatal("generate key: " + err.Error())
 	}
 
+	keyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		fatal("marshal private key: " + err.Error())
+	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		Type:  "PRIVATE KEY",
+		Bytes: keyDER,
 	})
 
 	agentKeyPath := filepath.Join(*certsDir, "agent.key")
@@ -204,11 +209,14 @@ func cmdEnroll(args []string) {
 }
 
 // fetchCA downloads the CA certificate using TOFU (InsecureSkipVerify for
-// this single bootstrap request only).
+// this single bootstrap request only). The token is transmitted over an
+// unverified TLS channel — this is unavoidable for TOFU but the CA fingerprint
+// should be verified out-of-band after enrollment.
 func fetchCA(apiBase, token, destPath string) {
+	slog.Warn("fetchCA: InsecureSkipVerify=true for TOFU bootstrap — verify CA fingerprint after enrollment")
 	client := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec — intentional TOFU
 		},
 		Timeout: 30 * time.Second,
 	}
@@ -225,11 +233,12 @@ func fetchCA(apiBase, token, destPath string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		fatal(fmt.Sprintf("fetch CA cert: HTTP %d — %s", resp.StatusCode, body))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	// G-E-03: cap response size to 1 MB.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		fatal("read CA cert body: " + err.Error())
 	}
@@ -274,7 +283,8 @@ func signCSR(apiBase, token string, caCertPEM []byte, csrPEM, hostname string) s
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// G-E-03: cap response size to 1 MB.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		fatal("read sign response: " + err.Error())
 	}
@@ -288,6 +298,31 @@ func signCSR(apiBase, token string, caCertPEM []byte, csrPEM, hostname string) s
 	if err := json.Unmarshal(body, &result); err != nil || result.Cert == "" {
 		fatal(fmt.Sprintf("unexpected sign response: %s", body))
 	}
+
+	// G-E-04: validate the returned certificate — CN == hostname and signature from CA.
+	caBlock, _ := pem.Decode(caCertPEM)
+	if caBlock == nil {
+		fatal("CA cert PEM is invalid — cannot validate returned cert")
+	}
+	caCert, err := x509.ParseCertificate(caBlock.Bytes)
+	if err != nil {
+		fatal("parse CA cert for validation: " + err.Error())
+	}
+	certBlock, _ := pem.Decode([]byte(result.Cert))
+	if certBlock == nil {
+		fatal("returned cert PEM is invalid")
+	}
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		fatal("parse returned cert: " + err.Error())
+	}
+	if cert.Subject.CommonName != hostname {
+		fatal(fmt.Sprintf("cert CN %q does not match hostname %q", cert.Subject.CommonName, hostname))
+	}
+	if err := cert.CheckSignatureFrom(caCert); err != nil {
+		fatal("cert signature validation failed: " + err.Error())
+	}
+
 	return result.Cert
 }
 

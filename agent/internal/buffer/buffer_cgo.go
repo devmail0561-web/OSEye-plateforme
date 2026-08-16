@@ -5,6 +5,7 @@ package buffer
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3" // CGO SQLite — faster WAL writes
@@ -30,12 +31,14 @@ type Buffer struct {
 // WAL mode and NORMAL synchronous are set for maximum write throughput.
 // Use ":memory:" for an in-process ephemeral buffer (tests).
 func Open(path string) (*Buffer, error) {
-	db, err := sql.Open("sqlite3", path+"?_journal=WAL&_sync=NORMAL&cache=shared")
+	db, err := sql.Open("sqlite3", path+"?_journal=WAL&_sync=NORMAL")
 	if err != nil {
 		return nil, fmt.Errorf("buffer: open db: %w", err)
 	}
 
 	db.SetMaxOpenConns(1)
+
+	db.Exec("PRAGMA busy_timeout = 5000") //nolint:errcheck
 
 	if _, err := db.Exec(schemaCGO); err != nil {
 		db.Close()
@@ -118,16 +121,14 @@ func (b *Buffer) Pop(n int) ([][]byte, error) {
 	}
 
 	if len(ids) > 0 {
-		del, err := tx.Prepare(`DELETE FROM buffer WHERE id = ?`)
-		if err != nil {
-			return nil, fmt.Errorf("buffer: prepare delete: %w", err)
+		placeholders := make([]string, len(ids))
+		args := make([]interface{}, len(ids))
+		for i, id := range ids {
+			placeholders[i] = "?"
+			args[i] = id
 		}
-		defer del.Close()
-
-		for _, id := range ids {
-			if _, err := del.Exec(id); err != nil {
-				return nil, fmt.Errorf("buffer: delete event %d: %w", id, err)
-			}
+		if _, err = tx.Exec("DELETE FROM buffer WHERE id IN ("+strings.Join(placeholders, ",")+") ", args...); err != nil {
+			return nil, fmt.Errorf("buffer: delete events: %w", err)
 		}
 	}
 

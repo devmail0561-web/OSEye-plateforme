@@ -4,13 +4,25 @@ package autonomy
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log/slog"
+	"time"
 
 	gen "github.com/oseye/agent/gen"
 	"github.com/oseye/agent/internal/responder"
 )
+
+// decisionPayload is the minimal payload sent to the server for a decision.
+// It deliberately excludes EventData to avoid exfiltrating raw event fields.
+type decisionPayload struct {
+	EventID   string    `json:"event_id"`
+	EventType string    `json:"event_type"`
+	Timestamp time.Time `json:"timestamp"`
+	RuleID    string    `json:"rule_id"`
+	Action    string    `json:"action"`
+}
 
 // DecisionReporter consumes the decision log from the controller and reports
 // autonomous decisions to the server via the existing Reporter.
@@ -46,14 +58,44 @@ func (dr *DecisionReporter) Run(ctx context.Context) {
 	}
 }
 
+// strFromMap extracts a string value from a map[string]interface{} by key,
+// returning an empty string if the key is absent or the value is not a string.
+func strFromMap(m map[string]interface{}, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
 func (dr *DecisionReporter) report(d Decision) {
-	payload, err := json.Marshal(d)
+	// Build a minimal payload — never forward EventData to avoid exfiltration.
+	dp := decisionPayload{
+		EventID:   strFromMap(d.EventData, "event_id"),
+		EventType: strFromMap(d.EventData, "type"),
+		Timestamp: time.Unix(0, d.Timestamp),
+		RuleID:    d.RuleID,
+		Action:    d.Action,
+	}
+
+	payload, err := json.Marshal(dp)
 	if err != nil {
 		slog.Warn("autonomy reporter: marshal failed", "err", err)
 		return
 	}
 
-	commandID := fmt.Sprintf("decision-%s-%d", d.RuleID, d.Timestamp)
+	// Use crypto/rand for an unpredictable command ID.
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		slog.Warn("autonomy reporter: rand.Read failed", "err", err)
+		return
+	}
+	commandID := hex.EncodeToString(b)
+
 	if dr.reporter != nil {
 		dr.reporter.Send(commandID, "autonomous_"+d.Action, string(payload))
 	}

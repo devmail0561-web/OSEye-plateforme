@@ -48,6 +48,11 @@ func (c *EBPFCollector) Start(ctx context.Context, out chan<- collector.RawEvent
 	}
 	c.mu.Lock()
 	c.loader = loader
+	// Recreate stopCh so Start() works correctly after a previous Stop() call.
+	// Capture a local reference used in select statements to avoid data races
+	// on the c.stopCh field after the mutex is released.
+	c.stopCh = make(chan struct{})
+	stopCh := c.stopCh
 	c.mu.Unlock()
 	defer func() {
 		loader.Close()
@@ -64,7 +69,7 @@ func (c *EBPFCollector) Start(ctx context.Context, out chan<- collector.RawEvent
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-c.stopCh:
+		case <-stopCh:
 			return nil
 		case ev, ok := <-events:
 			if !ok {
@@ -93,7 +98,7 @@ func (c *EBPFCollector) Start(ctx context.Context, out chan<- collector.RawEvent
 			}:
 			case <-ctx.Done():
 				return nil
-			case <-c.stopCh:
+			case <-stopCh:
 				return nil
 			}
 		}
@@ -102,12 +107,12 @@ func (c *EBPFCollector) Start(ctx context.Context, out chan<- collector.RawEvent
 
 // Stop signals the collector to stop. Idempotent.
 func (c *EBPFCollector) Stop() error {
+	c.mu.Lock()
 	select {
 	case <-c.stopCh:
 	default:
 		close(c.stopCh)
 	}
-	c.mu.Lock()
 	ldr := c.loader
 	c.mu.Unlock()
 	if ldr != nil {

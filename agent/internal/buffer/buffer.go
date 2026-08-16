@@ -10,6 +10,10 @@ import (
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (no CGO required)
 )
 
+// maxBufferRows is the maximum number of events kept in the SQLite buffer.
+// When exceeded, the oldest entries are evicted to prevent disk exhaustion.
+const maxBufferRows = 100_000
+
 const schema = `
 CREATE TABLE IF NOT EXISTS buffer (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,6 +86,12 @@ func (b *Buffer) Push(events [][]byte) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("buffer: commit tx: %w", err)
 	}
+
+	// Evict oldest rows if the buffer exceeds the cap.
+	b.db.Exec(`DELETE FROM buffer WHERE id <= (
+		SELECT id FROM buffer ORDER BY id DESC LIMIT 1 OFFSET ?
+	)`, maxBufferRows-1)
+
 	return nil
 }
 

@@ -9,10 +9,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
+
+// maxPayloadBytes is the maximum serialized payload size accepted by Save (1 MB).
+const maxPayloadBytes = 1 << 20
 
 const stateSchema = `
 CREATE TABLE IF NOT EXISTS active_actions (
@@ -66,6 +70,12 @@ func (s *StateStore) Save(a ActionState) error {
 	payload, err := json.Marshal(a.Payload)
 	if err != nil {
 		return fmt.Errorf("responder: marshal payload: %w", err)
+	}
+	if len(payload) > maxPayloadBytes {
+		log.Printf("responder: Save: payload too large for command %q: %d bytes (max %d)",
+			a.CommandID, len(payload), maxPayloadBytes)
+		return fmt.Errorf("responder: payload exceeds maximum size (%d > %d bytes)",
+			len(payload), maxPayloadBytes)
 	}
 	_, err = s.db.Exec(
 		`INSERT OR REPLACE INTO active_actions

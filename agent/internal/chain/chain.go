@@ -20,8 +20,9 @@ func New() *Chain {
 }
 
 // Append hashes the current chain state concatenated with payload,
-// advances the chain, and returns the new 32-byte hash.
-// The returned slice is valid until the next call to Append or Reset.
+// advances the chain, and returns the new 32-byte hash as an independent copy.
+// The caller may retain the returned slice indefinitely; it is unaffected by
+// subsequent calls to Append or Reset.
 func (c *Chain) Append(payload []byte) []byte {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -81,7 +81,12 @@ func Enroll(p EnrollParams) error {
 	}
 
 	if p.CACertFingerprint != "" {
-		sum := sha256.Sum256(caPEM)
+		// Hash DER bytes, not PEM bytes, so the fingerprint matches standard tools (openssl x509 -fingerprint).
+		caBlock, _ := pem.Decode(caPEM)
+		if caBlock == nil {
+			return fmt.Errorf("enrollment: failed to decode CA cert PEM for fingerprint check")
+		}
+		sum := sha256.Sum256(caBlock.Bytes)
 		got := fmt.Sprintf("%x", sum)
 		// Normalize expected: remove colons and lowercase
 		want := strings.ToLower(strings.ReplaceAll(p.CACertFingerprint, ":", ""))

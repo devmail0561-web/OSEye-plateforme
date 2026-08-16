@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"os"
 )
 
@@ -17,6 +18,14 @@ type Signer struct {
 
 // New loads an Ed25519 private key from a PEM-encoded PKCS8 file.
 func New(privateKeyPath string) (*Signer, error) {
+	fi, err := os.Stat(privateKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("signer: stat key file: %w", err)
+	}
+	if fi.Mode().Perm()&0o077 != 0 {
+		slog.Warn("signer: private key file has permissive permissions — should be 0600",
+			"path", privateKeyPath, "mode", fi.Mode().Perm())
+	}
 	data, err := os.ReadFile(privateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("signer: read key file: %w", err)

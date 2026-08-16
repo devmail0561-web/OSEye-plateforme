@@ -7,8 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -146,6 +148,12 @@ func (c *ProcfsCollector) scan(ctx context.Context, out chan<- collector.RawEven
 		default:
 		}
 
+		// TOCTOU: the PID read from /proc at ReadDir time may have been
+		// recycled by the kernel before the subsequent per-PID reads below.
+		// Any data collected (name, cmdline, exe, uid…) may therefore belong
+		// to a different process than the one whose PID was listed.  This is
+		// an inherent limitation of /proc polling and cannot be avoided without
+		// a kernel-level connector (e.g. netlink proc events).
 		pid, err := strconv.Atoi(entry.Name())
 		if err != nil || !entry.IsDir() {
 			continue
@@ -262,12 +270,43 @@ func readStatus(base string, ev *procEvent) error {
 	return scanner.Err()
 }
 
+// secretArgRe matches common secret-bearing CLI flags and HTTP headers so
+// their values can be replaced with [REDACTED] before the cmdline is stored.
+var secretArgRe = regexp.MustCompile(`(?i)(--password=|--token=|-p |bearer |authorization: )\S+`)
+
 func readCmdline(base string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(base, "cmdline"))
+	// [MEDIUM] Bound the read to 4096 bytes to prevent a single /proc/pid/cmdline
+	// entry (which can legally reach 2 MB via prctl PR_SET_MM_ARG_END) from
+	// exhausting agent memory.
+	f, err := os.Open(filepath.Join(base, "cmdline"))
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(strings.ReplaceAll(string(data), "\x00", " ")), nil
+	defer f.Close()
+
+	limited := io.LimitReader(f, 4096)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return "", err
+	}
+
+	cmdline := strings.TrimSpace(strings.ReplaceAll(string(data), "\x00", " "))
+
+	// [HIGH] Truncate to 512 bytes before any further processing.
+	if len(cmdline) > 512 {
+		cmdline = cmdline[:512]
+	}
+
+	// [HIGH] Redact values that follow recognised secret-bearing flags/headers.
+	cmdline = secretArgRe.ReplaceAllStringFunc(cmdline, func(m string) string {
+		idx := strings.IndexAny(m, " =:")
+		if idx < 0 {
+			return m
+		}
+		return m[:idx+1] + "[REDACTED]"
+	})
+
+	return cmdline, nil
 }
 
 func (c *ProcfsCollector) Stop() error {

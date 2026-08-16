@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -224,7 +225,10 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("config: EnrollServerURL invalid URL: %w", err)
 		}
 		if u.Scheme != "https" && u.Scheme != "http" {
-			return fmt.Errorf("config: EnrollServerURL scheme must be http or https, got %q", u.Scheme)
+			return fmt.Errorf("config: EnrollServerURL scheme must be https, got %q", u.Scheme)
+		}
+		if u.Scheme == "http" {
+			slog.Warn("EnrollServerURL uses plain HTTP — communications will not be encrypted; set OSEYE_INSECURE=true is implicit", "url", c.EnrollServerURL)
 		}
 		if u.Host == "" {
 			return fmt.Errorf("config: EnrollServerURL missing host")

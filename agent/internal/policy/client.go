@@ -36,6 +36,11 @@ func (c *PolicyClient) Run(ctx context.Context) {
 	// profile P2 is never applied before profile P1 when both arrive in a burst.
 	workCh := make(chan *gen.SurveillanceProfilePB, 8)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("policy worker panic", "err", r)
+			}
+		}()
 		for p := range workCh {
 			if c.onProfile != nil {
 				c.onProfile(p)
@@ -71,6 +76,12 @@ func (c *PolicyClient) runStream(ctx context.Context, workCh chan<- *gen.Surveil
 	if err != nil {
 		return err
 	}
+	// policy integrity delegated to mTLS transport: ReceivePolicy runs over a
+	// mutual-TLS gRPC channel (client cert verified by server, server cert verified
+	// by agent CA pool). No additional application-layer signature is present on
+	// SurveillanceProfilePB; authenticity of the payload is guaranteed by the
+	// authenticated channel itself. Ensure the gRPC ClientConn is constructed with
+	// credentials.NewTLS using the agent key-pair and the CA pool (see agent/cmd).
 	for {
 		profile, err := stream.Recv()
 		if err == io.EOF {

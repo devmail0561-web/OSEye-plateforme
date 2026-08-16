@@ -118,6 +118,14 @@ func (w *Watchdog) readCPUPercent() (float64, error) {
 		return 0, nil
 	}
 
+	// Guard against counter regression (system reboot, overflow): skip this cycle.
+	if kernelNs < w.prevKernelTime || userNs < w.prevUserTime {
+		w.prevKernelTime = kernelNs
+		w.prevUserTime = userNs
+		w.prevWallTime = nowNs
+		return 0, nil
+	}
+
 	dKernel := float64(kernelNs - w.prevKernelTime)
 	dUser := float64(userNs - w.prevUserTime)
 	dWall := float64(nowNs - w.prevWallTime)

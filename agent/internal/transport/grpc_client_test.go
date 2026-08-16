@@ -50,7 +50,9 @@ func TestBatchSignatureCorrectness(t *testing.T) {
 		{HashChain: []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")},
 		{HashChain: []byte("cccccccccccccccccccccccccccccccc")},
 	}
+	// Mirror batchSignature: BLAKE3(head || hash_chain[0] || ... || hash_chain[N-1])
 	h := blake3.New()
+	h.Write(ch.Current()) // chain head must be included first
 	for _, ev := range events {
 		h.Write(ev.GetHashChain())
 	}

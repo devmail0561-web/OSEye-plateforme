@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/oseye/agent/internal/collector"
@@ -17,9 +18,14 @@ type Batcher struct {
 
 // NewBatcher creates a Batcher that flushes when size == maxSize or timeout
 // has elapsed since the first event of the current batch.
+const maxBatchCap = 10000
+
 func NewBatcher(maxSize int, timeout time.Duration) *Batcher {
 	if maxSize <= 0 {
 		maxSize = 1
+	}
+	if maxSize > maxBatchCap {
+		maxSize = maxBatchCap
 	}
 	return &Batcher{
 		maxSize: maxSize,
@@ -52,7 +58,10 @@ func (b *Batcher) Run(ctx context.Context, in <-chan collector.RawEvent, sendFn 
 		// Handoff: pass ownership of the slice to sendFn, allocate a fresh one.
 		toSend := batch
 		batch = make([]collector.RawEvent, 0, b.maxSize)
-		_ = sendFn(toSend)
+		if err := sendFn(toSend); err != nil {
+			slog.Error("batcher: failed to send batch, events lost", "count", len(toSend), "err", err)
+			// TODO: persist to SQLite buffer for retry
+		}
 	}
 
 	stopTimer := func() {

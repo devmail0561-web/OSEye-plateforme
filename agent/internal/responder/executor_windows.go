@@ -31,7 +31,32 @@ func nowNs() int64 { return time.Now().UnixNano() }
 // isAllowedPath returns true for absolute paths outside Windows system roots.
 // Blocks quarantining of system directories to prevent bricking the host.
 func isAllowedPath(p string) bool {
-	if !filepath.IsAbs(p) {
+	clean := filepath.Clean(p)
+	if !filepath.IsAbs(clean) {
+		return false
+	}
+	// Reject any residual ".." component after cleaning (defence-in-depth).
+	if strings.Contains(clean, "..") {
+		return false
+	}
+	// Reject NT namespace device/junction paths (\\?\ and \\.\).
+	if strings.HasPrefix(clean, `\\.`) || strings.HasPrefix(clean, `\\?`) {
+		return false
+	}
+	// Require a known drive-letter prefix: <letter>:\ (e.g. C:\ or D:\).
+	if len(clean) < 3 || clean[1] != ':' || clean[2] != '\\' {
+		return false
+	}
+	driveLetter := strings.ToUpper(string(clean[0]))
+	knownDrives := []string{"C", "D"}
+	driveOK := false
+	for _, d := range knownDrives {
+		if driveLetter == d {
+			driveOK = true
+			break
+		}
+	}
+	if !driveOK {
 		return false
 	}
 	// Block entire Windows system directory trees.
@@ -42,9 +67,9 @@ func isAllowedPath(p string) bool {
 		`C:\Windows\Boot`,
 		`C:\Program Files\Windows Defender`,
 	}
-	pLower := strings.ToLower(filepath.ToSlash(p))
+	cleanLower := strings.ToLower(filepath.ToSlash(clean))
 	for _, f := range forbidden {
-		if strings.HasPrefix(pLower, strings.ToLower(filepath.ToSlash(f))) {
+		if strings.HasPrefix(cleanLower, strings.ToLower(filepath.ToSlash(f))) {
 			return false
 		}
 	}
@@ -81,7 +106,11 @@ func BlockIP(ip string) (string, error) {
 func UnblockIP(ip, handle string) error {
 	ruleName := handle
 	if ruleName == "" {
-		ruleName = ruleNamePrefix + ip
+		parsed := net.ParseIP(strings.TrimSpace(ip))
+		if parsed == nil {
+			return fmt.Errorf("unblock_ip: invalid IP: %s", ip)
+		}
+		ruleName = ruleNamePrefix + parsed.String()
 	}
 	cmd := exec.Command("netsh", "advfirewall", "firewall", "delete", "rule",
 		"name="+ruleName)
@@ -152,10 +181,15 @@ func RestoreFile(quarantinePath, originalPath string) error {
 	// Remove deny ACE before restoring.
 	exec.Command("icacls", quarantinePath, "/remove:d", "Everyone").Run() //nolint:errcheck
 
-	if err := os.Rename(quarantinePath, originalPath); err != nil {
-		return fmt.Errorf("restore: move %q → %q: %w", quarantinePath, originalPath, err)
+	cleanedPath := filepath.Clean(originalPath)
+	if !isAllowedPath(cleanedPath) {
+		return fmt.Errorf("restore: path rejected: %s", originalPath)
 	}
-	slog.Info("file_restored", "path", originalPath)
+
+	if err := os.Rename(quarantinePath, cleanedPath); err != nil {
+		return fmt.Errorf("restore: move %q → %q: %w", quarantinePath, cleanedPath, err)
+	}
+	slog.Info("file_restored", "path", cleanedPath)
 	return nil
 }
 

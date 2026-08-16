@@ -45,6 +45,11 @@ type EBPFEvent struct {
 	DstPort     uint16 `json:"dst_port,omitempty"`
 }
 
+// defaultPerfBufferPages is the per-CPU perf ring-buffer size expressed in
+// pages (page size is typically 4096 bytes, giving 16 KB per CPU by default).
+// Adjust upward on high-event-rate hosts to avoid dropped samples.
+const defaultPerfBufferPages = 4
+
 // EBPFLoader manages the lifecycle of the three eBPF programs and their perf
 // readers. It is created by NewLoader and must be closed with Close().
 type EBPFLoader struct {
@@ -74,7 +79,7 @@ func NewLoader() (*EBPFLoader, error) {
 	}
 	l.links = append(l.links, execveLink)
 
-	execveReader, err := perf.NewReader(l.execveObjs.ExecveEvents, 4096*os.Getpagesize())
+	execveReader, err := perf.NewReader(l.execveObjs.ExecveEvents, defaultPerfBufferPages * os.Getpagesize())
 	if err != nil {
 		l.Close()
 		return nil, fmt.Errorf("ebpf: execve perf reader: %w", err)
@@ -93,7 +98,7 @@ func NewLoader() (*EBPFLoader, error) {
 	}
 	l.links = append(l.links, openatLink)
 
-	openatReader, err := perf.NewReader(l.openatObjs.OpenatEvents, 4096*os.Getpagesize())
+	openatReader, err := perf.NewReader(l.openatObjs.OpenatEvents, defaultPerfBufferPages * os.Getpagesize())
 	if err != nil {
 		l.Close()
 		return nil, fmt.Errorf("ebpf: openat perf reader: %w", err)
@@ -112,7 +117,7 @@ func NewLoader() (*EBPFLoader, error) {
 	}
 	l.links = append(l.links, connectLink)
 
-	connectReader, err := perf.NewReader(l.connectObjs.ConnectEvents, 4096*os.Getpagesize())
+	connectReader, err := perf.NewReader(l.connectObjs.ConnectEvents, defaultPerfBufferPages * os.Getpagesize())
 	if err != nil {
 		l.Close()
 		return nil, fmt.Errorf("ebpf: connect perf reader: %w", err)
@@ -139,11 +144,19 @@ func (l *EBPFLoader) ReadEvents(ctx context.Context) <-chan EBPFEvent {
 		for i, r := range l.readers {
 			idx, rd := i, r
 			g.Go(func() error {
+				// Goroutine that unblocks rd.Read() as soon as the group context
+				// is cancelled. SetDeadline with a past time causes any in-flight
+				// or future Read to return immediately with a deadline error.
+				// This is the cilium/ebpf-idiomatic way to interrupt a blocked
+				// Read without closing the reader (which would race with Close()).
+				go func() {
+					<-gctx.Done()
+					rd.SetDeadline(time.Now().Add(-1))
+				}()
+
 				for {
-					// Unblock rd.Read() when the group context is cancelled.
-					// perf.Reader.SetDeadline is the idiomatic cilium/ebpf way to
-					// interrupt a blocked Read; closing is handled by Close() / the
-					// caller — we must not close rd here to avoid double-close races.
+					// Fast-path: if the context is already done before we call
+					// rd.Read(), bail out without blocking at all.
 					select {
 					case <-gctx.Done():
 						rd.SetDeadline(pastDeadline)

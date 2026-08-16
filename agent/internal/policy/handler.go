@@ -35,6 +35,17 @@ func (h *ProfileHandler) Apply(profile *gen.SurveillanceProfilePB) {
 	if cfg != nil {
 		if raw, ok := cfg["throttle"]; ok {
 			if f, ok := toFloat(raw); ok {
+				// Clamp throttle to [0.01, 1.0] — SetThrottle(0) would disable all
+				// monitoring, which a compromised server could exploit to blind the agent.
+				const minThrottle = 0.01
+				if f < minThrottle {
+					slog.Warn("profile: throttle below minimum, clamping",
+						"requested", f, "min", minThrottle, "name", profile.GetName())
+					f = minThrottle
+				}
+				if f > 1.0 {
+					f = 1.0
+				}
 				h.mgr.SetThrottle(f)
 				slog.Info("profile throttle applied", "name", profile.GetName(), "version", profile.GetVersion(), "throttle", f)
 			}

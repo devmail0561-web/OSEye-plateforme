@@ -141,7 +141,11 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 		n, err := unix.Read(int(c.fd.Load()), buf)
 		if err != nil {
 			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
-				time.Sleep(50 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(50 * time.Millisecond):
+				}
 				continue
 			}
 			c.logger.Error("fanotify read error", slog.String("error", err.Error()))
@@ -166,12 +170,15 @@ func (c *FanotifyCollector) readLoop(ctx context.Context, out chan<- collector.R
 			if meta.Event_len == 0 {
 				break
 			}
+			if meta.Event_len < fanotifyMetadataSize {
+				break
+			}
 			if meta.Vers != unix.FANOTIFY_METADATA_VERSION {
 				break
 			}
 
 			path, _ := c.getPathFromFd(meta.Fd)
-			if meta.Fd > 0 {
+			if meta.Fd >= 0 {
 				unix.Close(int(meta.Fd))
 			}
 

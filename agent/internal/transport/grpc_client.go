@@ -102,10 +102,12 @@ func (c *GRPCClient) SendBatch(ctx context.Context, events []*gen.UniversalEvent
 		}
 
 		// Full-jitter backoff — avoids thundering herd on simultaneous restarts.
+		t := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return ctx.Err()
-		case <-time.After(delay):
+		case <-t.C:
 		}
 		delay = backoff.Next(delay, backoffMax)
 	}
@@ -157,12 +159,20 @@ func (c *GRPCClient) Close() error {
 	return nil
 }
 
-// batchSignature computes BLAKE3(hash_chain[0] || ... || hash_chain[N-1])
-// over the hash_chain field of each event, then signs that digest with Ed25519.
+// batchSignature computes BLAKE3(head || hash_chain[0] || ... || hash_chain[N-1])
+// over the current chain head and the hash_chain field of each event, then signs
+// that digest with Ed25519. Including the chain head binds the batch to the
+// current chain state, preventing replay of old batches.
 func batchSignature(ch *chain.Chain, s Signer, events []*gen.UniversalEventPB) ([]byte, error) {
 	h := blake3.New()
+	head := ch.Current()
+	if _, err := h.Write(head); err != nil {
+		return nil, fmt.Errorf("hash chain head: %w", err)
+	}
 	for _, ev := range events {
-		_, _ = h.Write(ev.GetHashChain())
+		if _, err := h.Write(ev.GetHashChain()); err != nil {
+			return nil, fmt.Errorf("hash event chain: %w", err)
+		}
 	}
 	var digest [32]byte
 	h.Sum(digest[:0])

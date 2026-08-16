@@ -159,9 +159,10 @@ func (c *NetlinkCollector) emit(ctx context.Context, out chan<- collector.RawEve
 		return
 	}
 
+	now := time.Now()
 	payload := map[string]interface{}{
 		"source":       "netlink",
-		"timestamp_ns": time.Now().UnixNano(),
+		"timestamp_ns": now.UnixNano(),
 	}
 	for k, v := range data {
 		payload[k] = v
@@ -172,7 +173,7 @@ func (c *NetlinkCollector) emit(ctx context.Context, out chan<- collector.RawEve
 	case out <- collector.RawEvent{
 		Source:    c.name,
 		OS:        "linux",
-		Timestamp: time.Now().UnixNano(),
+		Timestamp: now.UnixNano(),
 		Raw:       raw,
 	}:
 		c.eventCount.Add(1)

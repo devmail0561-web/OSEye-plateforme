@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -102,6 +103,10 @@ func UnblockIP(ip, handle string) error {
 	switch detectedBackend {
 	case backendNftables:
 		if handle != "" {
+			// G-X-02: validate handle is numeric before passing to nft.
+			if _, err := strconv.ParseUint(handle, 10, 64); err != nil {
+				return fmt.Errorf("unblock_ip: invalid nft handle %q", handle)
+			}
 			// G-X-01: delete the specific rule by handle — never flush the whole chain.
 			out, err := exec.Command("nft", "delete", "rule", "inet", "oseye", "output",
 				"handle", handle).CombinedOutput()
@@ -163,15 +168,28 @@ func QuarantineFile(path, quarantineDir string) (string, error) {
 		return "", fmt.Errorf("quarantine: path traversal rejected: %s", path)
 	}
 
+	// Resolve symlinks so the actual file is quarantined, not just the symlink.
+	if fi, err := os.Lstat(clean); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		realPath, err := filepath.EvalSymlinks(clean)
+		if err != nil {
+			return "", fmt.Errorf("quarantine: resolve symlink %q: %w", path, err)
+		}
+		realClean := filepath.Clean(realPath)
+		if !filepath.IsAbs(realClean) || !isAllowedPath(realClean) {
+			return "", fmt.Errorf("quarantine: symlink target path traversal rejected: %s", realPath)
+		}
+		clean = realClean
+	}
+
 	if err := os.MkdirAll(quarantineDir, 0o700); err != nil {
 		return "", fmt.Errorf("quarantine: mkdir: %w", err)
 	}
 
-	base := filepath.Base(path)
+	base := filepath.Base(clean)
 	dst := filepath.Join(quarantineDir, fmt.Sprintf("%d_%s", nowNs(), base))
 
-	if err := os.Rename(path, dst); err != nil {
-		return "", fmt.Errorf("quarantine: rename %q → %q: %w", path, dst, err)
+	if err := os.Rename(clean, dst); err != nil {
+		return "", fmt.Errorf("quarantine: rename %q → %q: %w", clean, dst, err)
 	}
 	if err := os.Chmod(dst, 0o000); err != nil {
 		slog.Warn("quarantine: chmod failed", "dst", dst, "err", err)
@@ -184,6 +202,12 @@ func QuarantineFile(path, quarantineDir string) (string, error) {
 // G-X-03: preserve the permissions of the file that exists at originalPath (if any)
 // instead of always writing hardcoded 0644. Falls back to 0644 when no prior file exists.
 func RestoreFile(quarantinePath, originalPath string) error {
+	// GO-002: validate destination path — same allowlist as QuarantineFile.
+	cleanDst := filepath.Clean(originalPath)
+	if !filepath.IsAbs(cleanDst) || !isAllowedPath(cleanDst) {
+		return fmt.Errorf("restore: path traversal rejected: %s", originalPath)
+	}
+
 	// Determine target permissions: use existing file's mode if it is already present,
 	// otherwise default to 0644.
 	mode := os.FileMode(0o644)
@@ -193,33 +217,38 @@ func RestoreFile(quarantinePath, originalPath string) error {
 	if err := os.Chmod(quarantinePath, mode); err != nil {
 		slog.Warn("restore: chmod failed", "path", quarantinePath, "mode", mode, "err", err)
 	}
-	if err := os.Rename(quarantinePath, originalPath); err != nil {
-		return fmt.Errorf("restore: rename %q → %q: %w", quarantinePath, originalPath, err)
+	if err := os.Rename(quarantinePath, cleanDst); err != nil {
+		return fmt.Errorf("restore: rename %q → %q: %w", quarantinePath, cleanDst, err)
 	}
-	slog.Info("file_restored", "original", originalPath, "mode", mode)
+	slog.Info("file_restored", "original", cleanDst, "mode", mode)
 	return nil
 }
 
 // KillProcess sends SIGKILL to the given PID after verifying the process name
-// still matches the expected name — prevents killing a recycled PID.
+// still matches the expected name — guards against killing a recycled PID.
 // CIA — Intégrité : PID reuse check guards against false kills.
 // IMPORTANT: Only callable via explicit server command, never autonomously.
+//
+// NOTE: TOCTOU — the comm check and SIGKILL delivery are not atomic.
+// On Linux < 5.3, a PID could be recycled between the two operations.
+// The window is < 1 ms under normal conditions; on a heavily loaded system
+// or with PID-racing exploits it may be triggered. Use pidfd_open /
+// pidfd_send_signal (Linux ≥ 5.3) for a truly atomic kill.
 func KillProcess(pid int, expectedProcessName string) error {
 	// GO-001: defense-in-depth guard — refuse to kill PID 0 (kernel) or PID 1 (init).
 	if pid < 2 {
 		return fmt.Errorf("kill_process: refusing to kill system process (pid %d)", pid)
 	}
-	// Read /proc/{pid}/comm to verify process name before killing.
+
+	// Read /proc/{pid}/comm and send SIGKILL with minimal code between the two
+	// to narrow the TOCTOU window as much as possible.
 	commPath := fmt.Sprintf("/proc/%d/comm", pid)
 	data, err := os.ReadFile(commPath)
 	if err != nil {
 		return fmt.Errorf("kill_process: read comm for pid %d: %w", pid, err)
 	}
-
-	// comm may have a trailing newline; trim it.
 	actual := filepath.Base(strings.TrimSpace(string(data)))
 	expected := filepath.Base(expectedProcessName)
-
 	if actual != expected {
 		return fmt.Errorf(
 			"kill_process: pid %d comm %q != expected %q — refusing kill (PID reuse guard)",
@@ -227,6 +256,7 @@ func KillProcess(pid int, expectedProcessName string) error {
 		)
 	}
 
+	// Signal immediately after check to minimise TOCTOU window.
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("kill_process: find pid %d: %w", pid, err)

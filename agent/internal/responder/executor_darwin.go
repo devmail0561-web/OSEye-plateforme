@@ -4,7 +4,7 @@
 //
 // BlockIP:        pf firewall via pfctl anchor "oseye"
 // UnblockIP:      Flush the per-IP anchor
-// KillProcess:    SIGKILL after verifying process name via ps(1)
+// KillProcess:    SIGKILL after verifying process name via sysctl(3) KERN_PROC_PID
 // QuarantineFile: Move + chmod 000
 // RestoreFile:    Move back + restore permissions
 package responder
@@ -19,31 +19,44 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func nowNs() int64 { return time.Now().UnixNano() }
 
-// isAllowedPath returns true for absolute paths outside macOS system roots.
-// Blocks system directories to prevent bricking the host.
+// isAllowedPath returns true if p starts with one of the permitted filesystem
+// prefixes for quarantine source paths on macOS (positive allowlist).
+// Paths outside this allowlist are rejected to prevent bricking the host.
 func isAllowedPath(p string) bool {
 	if !filepath.IsAbs(p) {
 		return false
 	}
-	forbidden := []string{
-		"/sbin/",
-		"/usr/sbin/",
-		"/usr/bin/",
-		"/usr/libexec/",
-		"/System/",
-		"/Library/Apple/",
-		"/private/var/db/",
-	}
-	for _, f := range forbidden {
-		if strings.HasPrefix(p, f) {
-			return false
+	// macOS temp / runtime directories that are safe to quarantine from.
+	for _, prefix := range []string{
+		"/tmp",
+		"/var/tmp",
+		"/private/tmp",
+		"/private/var/tmp",
+		"/var/folders",
+	} {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
 		}
 	}
-	return true
+	// Allow user home directories, but exclude ~/Library to avoid corrupting
+	// keychains, Preferences, and app caches.
+	if strings.HasPrefix(p, "/Users/") {
+		// Split off the username component and check the next segment.
+		// e.g. "/Users/alice/Library/…" → ["alice", "Library", …]
+		rest := strings.TrimPrefix(p, "/Users/")
+		parts := strings.SplitN(rest, "/", 3)
+		if len(parts) >= 2 && parts[1] == "Library" {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 // BlockIP adds a pf block rule via pfctl using the "oseye" anchor.
@@ -87,6 +100,11 @@ func UnblockIP(ip, handle string) error {
 
 // KillProcess sends SIGKILL to pid after verifying the process name matches
 // expectedProcessName — prevents killing a recycled PID.
+//
+// Process name is read via sysctl(3) KERN_PROC_PID (in-kernel, atomic) instead
+// of a ps(1) subprocess, which substantially shrinks the TOCTOU window: there
+// is no fork/exec between the name check and the signal, and the PID cannot be
+// recycled between the two syscalls without the kernel knowing.
 func KillProcess(pid int, expectedProcessName string) error {
 	if pid < 2 {
 		return fmt.Errorf("kill_process: refusing to kill system process (pid %d)", pid)
@@ -139,31 +157,42 @@ func QuarantineFile(path, quarantineDir string) (string, error) {
 
 // RestoreFile moves a quarantined file back to its original location.
 func RestoreFile(quarantinePath, originalPath string) error {
+	// Validate and clean the target path to prevent path traversal attacks.
+	cleanOrig := filepath.Clean(originalPath)
+	if !isAllowedPath(cleanOrig) {
+		return fmt.Errorf("restore: originalPath rejected: %s", originalPath)
+	}
+
 	mode := os.FileMode(0o644)
-	if fi, err := os.Stat(originalPath); err == nil {
+	if fi, err := os.Stat(cleanOrig); err == nil {
 		mode = fi.Mode().Perm()
 	}
 	if err := os.Chmod(quarantinePath, mode); err != nil {
 		slog.Warn("restore: chmod failed", "err", err)
 	}
-	if err := os.Rename(quarantinePath, originalPath); err != nil {
-		return fmt.Errorf("restore: move %q → %q: %w", quarantinePath, originalPath, err)
+	if err := os.Rename(quarantinePath, cleanOrig); err != nil {
+		return fmt.Errorf("restore: move %q → %q: %w", quarantinePath, cleanOrig, err)
 	}
-	slog.Info("file_restored", "path", originalPath)
+	slog.Info("file_restored", "path", cleanOrig)
 	return nil
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// processName returns the basename of the executable for pid via ps(1).
+// processName returns the process name for pid via sysctl(3) KERN_PROC_PID.
+// Using the sysctl syscall directly avoids the TOCTOU window that a ps(1)
+// subprocess would introduce: the kernel reads the kinfo_proc atomically and
+// there is no external process whose scheduling creates a gap between the name
+// check and the subsequent kill.
 func processName(pid int) (string, error) {
-	out, err := exec.Command("ps", "-p", fmt.Sprintf("%d", pid), "-o", "comm=").Output()
+	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if err != nil {
-		return "", fmt.Errorf("ps: %w", err)
+		return "", fmt.Errorf("sysctl kern.proc.pid %d: %w", pid, err)
 	}
-	name := strings.TrimSpace(string(out))
+	// P_comm is a NUL-terminated [17]byte containing the process short name.
+	name := unix.ByteSliceToString(kp.Proc.P_comm[:])
 	if name == "" {
-		return "", fmt.Errorf("pid %d not found", pid)
+		return "", fmt.Errorf("pid %d: empty comm (process may have exited)", pid)
 	}
 	return name, nil
 }

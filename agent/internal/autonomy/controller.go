@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -101,6 +102,12 @@ func NewController(
 // ProcessEvent evaluates a single event against all local rules and takes action if warranted.
 // This is called for every event from the collector pipeline.
 func (c *Controller) ProcessEvent(event map[string]interface{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("controller panic", "err", r)
+		}
+	}()
+
 	if c.killSwitch != nil && c.killSwitch.IsDisabled() {
 		return
 	}
@@ -139,7 +146,12 @@ func (c *Controller) ProcessEvent(event map[string]interface{}) {
 			continue
 		}
 
-		// Re-check kill switch before executing (close the TOCTOU window).
+		// Re-check kill switch before executing (narrow the TOCTOU window).
+		// NOTE: this check and executeResponse are not atomic — a concurrent
+		// killswitch activation in the < 1 µs window between them would result
+		// in one extra response action. This is an inherent limitation without
+		// holding a lock across executeResponse (which would deadlock on any
+		// blocking syscall inside it).
 		if c.killSwitch != nil && c.killSwitch.IsDisabled() {
 			decision.Action = "blocked_by_killswitch"
 			c.enqueueDecision(decision)
@@ -272,6 +284,11 @@ func (c *Controller) execKillProcess(det localrules.Detection) error {
 		return fmt.Errorf("kill_process: refusing system pid %d", pid)
 	}
 
+	pidStr := strconv.Itoa(pid)
+	if !c.dedup.Allow("KILL_PROCESS", pidStr) {
+		return nil
+	}
+
 	commandID := fmt.Sprintf("auto-%s-%d", det.Rule.ID, time.Now().UnixNano())
 
 	if err := responder.KillProcess(pid, processName); err != nil {
@@ -347,8 +364,18 @@ func (c *Controller) trackAction(det localrules.Detection) {
 			"actions", c.actionCount, "targets", len(c.actionTargets))
 		c.actionCount = 0
 		c.actionTargets = make(map[string]bool)
+		// Mark rolledBack under the lock so checkCascade sees it immediately,
+		// before the goroutine gets scheduled (fixes the race on rolledBack).
+		c.rolledBack = true
 		// Rollback outside the hot path — do not hold mu during store/engine ops.
-		go c.doRollback()
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("autonomy: doRollback panic", "err", r)
+				}
+			}()
+			c.doRollback()
+		}()
 	}
 }
 
@@ -373,9 +400,6 @@ func (c *Controller) doRollback() {
 		return
 	}
 	c.engine.Reload()
-	c.mu.Lock()
-	c.rolledBack = true
-	c.mu.Unlock()
 }
 
 func (c *Controller) resetRollbackWindow() {
