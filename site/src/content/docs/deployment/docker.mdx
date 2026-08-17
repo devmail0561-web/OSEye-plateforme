@@ -33,43 +33,22 @@ Le nginx de l'UI proxifie automatiquement `/api` vers le serveur — pas de CORS
 
 ## Mode production
 
-### Prérequis
+### 3 commandes
 
 ```bash
-# 1. Générer les secrets
-mkdir -p /etc/oseye/secrets && chmod 700 /etc/oseye/secrets
-openssl rand -hex 16  > /etc/oseye/secrets/secret_key.txt
-openssl rand -hex 32  > /etc/oseye/secrets/hmac_key.txt
-openssl rand -base64 24 > /etc/oseye/secrets/admin_password.txt
-openssl rand -base64 24 > /etc/oseye/secrets/analyst_password.txt
-openssl rand -base64 24 > /etc/oseye/secrets/db_password.txt
-openssl rand -base64 24 > /etc/oseye/secrets/redis_password.txt
-chmod 600 /etc/oseye/secrets/*.txt
+# 1. Générer PKI (CA, certs serveur, JWT keys, clé enrollment)
+docker run --rm -v /etc/oseye:/etc/oseye \
+  oseye-server:latest oseye-server init
 
-# 2. Initialiser la PKI (CA, certificats serveur, JWT keys, enrollment key)
-docker run --rm \
-  -v /etc/oseye:/etc/oseye \
-  oseye-server:latest \
-  oseye-server init
-```
+# 2. Wizard interactif — génère /etc/oseye/server.env + secrets.env
+docker run --rm -it -v /etc/oseye:/etc/oseye \
+  oseye-server:latest oseye-server setup
 
-### Configurer le domaine
-
-Éditer `infra/docker/docker-compose.prod.yml` :
-```yaml
-OSEYE_API_CORS_ORIGINS: '["https://oseye.example.com"]'
-```
-
-Éditer `infra/docker/nginx.prod.conf` :
-```nginx
-server_name oseye.example.com;
-```
-
-### Lancer la stack
-
-```bash
+# 3. Lancer (lit server.env + secrets.env automatiquement)
 docker compose -f infra/docker/docker-compose.prod.yml up -d
 ```
+
+Le wizard demande hostname, ports, DB, Redis, mots de passe et génère tout. Aucune variable à passer manuellement.
 
 ### Architecture prod
 
