@@ -1,26 +1,23 @@
 name: oseye-dev
 
-services:
+# Environnement de développement local — HTTP uniquement, secrets en clair.
+# Prérequis : avoir buildé les images localement (make docker-build)
+#
+# Lancement :
+#   docker compose -f infra/docker/docker-compose.dev.yml up -d
+#
+# L'UI est accessible sur http://localhost:5174
+# L'API est proxifiée par le nginx de l'UI — pas de CORS, pas de SSL.
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --save "" --appendonly no
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+services:
 
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: oseye
       POSTGRES_USER: oseye
       POSTGRES_PASSWORD: oseye_dev
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -29,29 +26,57 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - oseye-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - oseye-net
 
   oseye-server:
-    build:
-      context: ../../server
-      dockerfile: Dockerfile
+    image: oseye-server:0.2.0-alpha.1
+    restart: unless-stopped
     environment:
-      OSEYE_DB_BACKEND: sqlite
-      OSEYE_DB_URL: sqlite+aiosqlite:///./oseye_dev.db
+      OSEYE_DB_BACKEND: postgresql
+      OSEYE_DB_URL: postgresql+asyncpg://oseye:oseye_dev@postgres:5432/oseye
+      OSEYE_BUS_BACKEND: redis
       OSEYE_REDIS_URL: redis://redis:6379/0
+      OSEYE_API_HOST: 0.0.0.0
       OSEYE_API_PORT: "8000"
+      OSEYE_API_CORS_ORIGINS: '["http://localhost:5174","http://localhost:5173"]'
       OSEYE_GRPC_PORT: "50051"
-      OSEYE_LOG_LEVEL: DEBUG
-      OSEYE_TLS_CERT_FILE: /certs/server.crt
-      OSEYE_TLS_KEY_FILE: /certs/server.key
-      OSEYE_TLS_CA_CERT_FILE: /certs/ca.crt
-      OSEYE_JWT_PRIVATE_KEY_PATH: /certs/jwt_private.pem
-      OSEYE_JWT_PUBLIC_KEY_PATH: /certs/jwt_public.pem
+      OSEYE_GRPC_INSECURE_DEV: "true"
+      OSEYE_SECRET_KEY: dev-secret-key-min-32-bytes-local
+      OSEYE_CHECKPOINT_HMAC_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      OSEYE_ADMIN_PASSWORD: admin123
+      OSEYE_ANALYST_PASSWORD: analyst123
+      OSEYE_JWT_PRIVATE_KEY_PATH: /etc/oseye/certs/jwt_private.pem
+      OSEYE_JWT_PUBLIC_KEY_PATH: /etc/oseye/certs/jwt_public.pem
+      OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      OSEYE_ED25519_PUBLIC_KEY: /etc/oseye/certs/enrollment_ed25519.pub
+      OSEYE_ENROLLMENT_CA_CERT_FILE: /etc/oseye/certs/ca.crt
+      OSEYE_ENROLLMENT_CA_KEY_FILE: /etc/oseye/certs/ca.key
+      OSEYE_GRPC_TLS_CERT: /etc/oseye/certs/server.crt
+      OSEYE_GRPC_TLS_KEY: /etc/oseye/certs/server.key
+      OSEYE_PLUGINS_DIR: /tmp/oseye-plugins
+      OSEYE_DATA_DIR: /tmp/oseye-data
+      OSEYE_LOG_LEVEL: debug
     ports:
       - "8000:8000"
       - "50051:50051"
     volumes:
-      - ../../infra/certs:/certs:ro
+      - ../../infra/certs:/etc/oseye/certs:ro
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -59,41 +84,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 20s
+    networks:
+      - oseye-net
 
-  oseye-agent:
-    build:
-      context: ../../agent
-      dockerfile: Dockerfile
-    privileged: true   # required for eBPF
-    network_mode: host  # required for network event collection
-    environment:
-      OSEYE_GRPC_ADDR: localhost:50051
-      OSEYE_TLS_CERT: /certs/agent-dev.crt
-      OSEYE_TLS_KEY: /certs/agent-dev.key
-      OSEYE_TLS_CA: /certs/ca.crt
-      OSEYE_BUFFER_PATH: /var/lib/oseye/buffer.db
-      OSEYE_AGENT_ID: agent-dev-00000000
-      OSEYE_LOG_LEVEL: DEBUG
-    volumes:
-      - ../../infra/certs:/certs:ro
-      - agent_buffer:/var/lib/oseye
+  oseye-ui:
+    image: oseye-ui:0.2.0-alpha.1
+    restart: unless-stopped
+    ports:
+      - "5174:5173"
+    # Le nginx de l'UI proxifie /api → oseye-server:8000 (réseau Docker interne).
+    # VITE_API_URL n'est pas nécessaire — les requêtes sont relatives (/api/...).
     depends_on:
       oseye-server:
         condition: service_healthy
-
-  oseye-ui:
-    build:
-      context: ../../ui
-      dockerfile: Dockerfile
-    ports:
-      - "5173:5173"
-    environment:
-      VITE_API_URL: http://localhost:8000
-      VITE_WS_URL: ws://localhost:8000
-    depends_on:
-      - oseye-server
+    networks:
+      - oseye-net
 
 volumes:
   postgres_data:
-  agent_buffer:
+
+networks:
+  oseye-net:
+    driver: bridge

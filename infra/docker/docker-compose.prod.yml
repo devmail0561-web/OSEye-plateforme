@@ -1,38 +1,29 @@
 name: oseye-prod
 
-# Production deployment.
+# Déploiement production — HTTPS, Docker secrets, réseaux isolés.
 #
-# Prerequisites (run once on the host before starting):
-#   docker run --rm -v /etc/oseye:/etc/oseye ghcr.io/oseye/oseye/oseye-server:latest oseye-server init
-#   docker run --rm -it -v /etc/oseye:/etc/oseye ghcr.io/oseye/oseye/oseye-server:latest oseye-server setup
+# Prérequis (une seule fois sur l'hôte) :
+#   1. Générer les secrets :
+#        mkdir -p /etc/oseye/secrets
+#        openssl rand -hex 16 > /etc/oseye/secrets/secret_key.txt
+#        openssl rand -hex 32 > /etc/oseye/secrets/hmac_key.txt
+#        openssl rand -base64 24 > /etc/oseye/secrets/admin_password.txt
+#        openssl rand -base64 24 > /etc/oseye/secrets/analyst_password.txt
+#        openssl rand -base64 24 > /etc/oseye/secrets/db_password.txt
 #
-# Start:  docker compose -f infra/docker/docker-compose.prod.yml up -d
-# Stop:   docker compose -f infra/docker/docker-compose.prod.yml down
+#   2. Initialiser les certificats et tokens d'enrollment :
+#        docker run --rm -v /etc/oseye:/etc/oseye \
+#          oseye-server:0.2.0-alpha.1 oseye-server init
 #
-# Config files written by 'oseye-server setup':
-#   /etc/oseye/server.env    (mode 640)
-#   /etc/oseye/secrets.env   (mode 600)
-#   /etc/oseye/certs/        (populated by 'oseye-server init')
-#   /etc/oseye/enrollment_tokens/  (populated by 'oseye-server init')
+#   3. (Optionnel) Personnaliser /etc/oseye/server.env
+#
+# Lancement :
+#   docker compose -f infra/docker/docker-compose.prod.yml up -d
+#
+# L'UI est accessible sur https://<VOTRE_DOMAINE>
+# Le gRPC est sur <VOTRE_DOMAINE>:50051 (mTLS)
 
 services:
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: >
-      redis-server
-        --save 60 1
-        --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - oseye-backend
 
   postgres:
     image: postgres:16-alpine
@@ -54,26 +45,70 @@ services:
     networks:
       - oseye-backend
 
-  oseye-server:
-    build:
-      context: ../../server
-      dockerfile: Dockerfile
+  redis:
+    image: redis:7-alpine
     restart: unless-stopped
-    env_file:
-      - /etc/oseye/server.env
-      - /etc/oseye/secrets.env
+    command: >
+      redis-server
+        --save 60 1
+        --appendonly yes
+        --requirepass-file /run/secrets/redis_password
+    secrets:
+      - redis_password
     volumes:
-      # Certs read-only — CA key accessible for enrollment signing
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "$(cat /run/secrets/redis_password)", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oseye-backend
+
+  oseye-server:
+    image: oseye-server:0.2.0-alpha.1
+    restart: unless-stopped
+    environment:
+      OSEYE_DB_BACKEND: postgresql
+      OSEYE_BUS_BACKEND: redis
+      OSEYE_API_HOST: 0.0.0.0
+      OSEYE_API_PORT: "8000"
+      # CORS : lister les origines autorisées (domaine réel en prod)
+      OSEYE_API_CORS_ORIGINS: '["https://oseye.example.com"]'
+      OSEYE_GRPC_PORT: "50051"
+      OSEYE_GRPC_INSECURE_DEV: "false"
+      OSEYE_GRPC_TLS_CERT: /etc/oseye/certs/server.crt
+      OSEYE_GRPC_TLS_KEY: /etc/oseye/certs/server.key
+      OSEYE_JWT_PRIVATE_KEY_PATH: /etc/oseye/certs/jwt_private.pem
+      OSEYE_JWT_PUBLIC_KEY_PATH: /etc/oseye/certs/jwt_public.pem
+      OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      OSEYE_ED25519_PUBLIC_KEY: /etc/oseye/certs/enrollment_ed25519.pub
+      OSEYE_ENROLLMENT_CA_CERT_FILE: /etc/oseye/certs/ca.crt
+      OSEYE_ENROLLMENT_CA_KEY_FILE: /etc/oseye/certs/ca.key
+      OSEYE_PLUGINS_DIR: /var/lib/oseye/plugins
+      OSEYE_DATA_DIR: /var/lib/oseye/data
+      OSEYE_LOG_LEVEL: info
+    secrets:
+      - db_password
+      - redis_password
+      - secret_key
+      - hmac_key
+      - admin_password
+      - analyst_password
+    # Les secrets sont montés dans /run/secrets/ — le serveur les lit via
+    # les variables OSEYE_*_FILE (ex: OSEYE_SECRET_KEY_FILE=/run/secrets/secret_key)
+    env_file:
+      - /etc/oseye/server.env   # optionnel — remplace les variables ci-dessus
+    volumes:
       - /etc/oseye/certs:/etc/oseye/certs:ro
-      # Enrollment tokens read-write (tokens created by init-server.sh, consumed by enrollment endpoint)
       - /etc/oseye/enrollment_tokens:/etc/oseye/enrollment_tokens
+      - oseye_data:/var/lib/oseye
     ports:
-      - "8000:8000"
-      - "50051:50051"
+      - "50051:50051"   # gRPC mTLS — exposé pour les agents
     depends_on:
-      redis:
-        condition: service_healthy
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -85,35 +120,53 @@ services:
       - oseye-backend
       - oseye-frontend
 
-  # All background workers run inside oseye-server (lifespan context manager).
-  # A separate oseye-workers service is intentionally omitted to avoid
-  # double-execution. See server/oseye/main.py _build_lifespan().
-
   oseye-ui:
-    build:
-      context: ../../ui
-      dockerfile: Dockerfile
+    image: oseye-ui:0.2.0-alpha.1
     restart: unless-stopped
-    ports:
-      - "443:5173"
+    # Port interne uniquement — nginx gère l'accès externe via HTTPS
     depends_on:
       oseye-server:
         condition: service_healthy
     networks:
       - oseye-frontend
 
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"     # redirige vers 443
+      - "443:443"   # HTTPS — UI + API
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/oseye/certs:/etc/nginx/certs:ro
+    depends_on:
+      - oseye-ui
+      - oseye-server
+    networks:
+      - oseye-frontend
+
 volumes:
   postgres_data:
   redis_data:
+  oseye_data:
 
 secrets:
   db_password:
-    # Single-line file containing the database password (no trailing newline).
-    # Must match OSEYE_DB_PASSWORD in /etc/oseye/secrets.env.
-    file: /etc/oseye/db_password.txt
+    file: /etc/oseye/secrets/db_password.txt
+  redis_password:
+    file: /etc/oseye/secrets/redis_password.txt
+  secret_key:
+    file: /etc/oseye/secrets/secret_key.txt
+  hmac_key:
+    file: /etc/oseye/secrets/hmac_key.txt
+  admin_password:
+    file: /etc/oseye/secrets/admin_password.txt
+  analyst_password:
+    file: /etc/oseye/secrets/analyst_password.txt
 
 networks:
   oseye-backend:
     driver: bridge
+    internal: true    # postgres + redis non accessibles depuis l'extérieur
   oseye-frontend:
     driver: bridge
