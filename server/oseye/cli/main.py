@@ -14,6 +14,9 @@ Usage:
   oseye-server stop      [--timeout N]
   oseye-server restart   [--timeout N]
   oseye-server status
+  oseye-server enrollment token create  [--valid-hours N]
+  oseye-server enrollment token list
+  oseye-server enrollment token revoke  <TOKEN_ID>
   oseye-server user create <username> --role admin|analyst [--password PW] [--force]
   oseye-server user passwd <username> [--password PW]
   oseye-server user delete <username>
@@ -32,6 +35,7 @@ Commands:
   status      Show server status and API health
   validate    Validate the current configuration and report missing files
   update      Check for and install the latest binary release
+  enrollment  Manage enrollment tokens (token create/list/revoke)
   user        Manage local users (create, passwd, delete, list)
   uninstall   Remove server and/or agent from the system (requires root)
   version     Show version
@@ -64,6 +68,9 @@ def main(argv: list[str] | None = None) -> None:
         run(rest)
     elif cmd == "status":
         from .cmd_status import run
+        run(rest)
+    elif cmd == "enrollment":
+        from .cmd_enrollment import run
         run(rest)
     elif cmd == "user":
         from .cmd_user import run
