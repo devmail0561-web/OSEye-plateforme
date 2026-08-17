@@ -85,7 +85,11 @@ _is_production = _OSEYE_ENV == "production"
 
 def _load_users() -> dict[str, dict[str, Any]]:
     """Load users from file, fall back to env vars for backward compatibility."""
-    if _USERS_FILE.exists():
+    try:
+        exists = _USERS_FILE.exists()
+    except PermissionError:
+        exists = False
+    if exists:
         try:
             data = _json.loads(_USERS_FILE.read_text())
             if data:

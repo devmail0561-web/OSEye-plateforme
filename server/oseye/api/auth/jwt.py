@@ -215,7 +215,11 @@ class JWTHandler:
         open the gate for revoked tokens. Set OSEYE_INSECURE=true to bypass (recovery
         only — never use in production).
         """
-        if not self._blocklist_file.exists():
+        try:
+            exists = self._blocklist_file.exists()
+        except PermissionError:
+            return {}
+        if not exists:
             return {}
         try:
             raw: dict[str, str] = json.loads(self._blocklist_file.read_text())

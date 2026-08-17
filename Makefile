@@ -28,7 +28,7 @@ export VENV_PYTHON := $(PYTHON)
 # Variables de contrôle
 PYTEST_OPTS ?=
 PYTEST_WORKERS ?= auto
-OSEYE_SECRET_KEY ?= dev-secret-key-local-testing-only
+OSEYE_SECRET_KEY ?= dev-secret-key-local-testing-only-x32
 
 # Chemins dev (hors /etc/oseye qui requiert root)
 DEV_CERTS_DIR   := $(CURDIR)/infra/certs
