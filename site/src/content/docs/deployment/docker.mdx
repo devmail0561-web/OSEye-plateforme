@@ -1,0 +1,131 @@
+---
+title: Déploiement Docker
+description: Déployer OSEye avec Docker Compose — mode développement et production.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+OSEye propose deux configurations Docker Compose : **développement** (mono-machine, HTTP) et **production** (HTTPS, secrets Docker, réseaux isolés).
+
+---
+
+## Mode développement
+
+Idéal pour tester OSEye localement. Une seule commande, HTTP uniquement, identifiants en clair.
+
+```bash
+docker compose -f infra/docker/docker-compose.dev.yml up -d
+```
+
+| Service | URL |
+|---------|-----|
+| UI | http://localhost:5174 |
+| API | http://localhost:5174/api/v1/ (via proxy nginx UI) |
+| gRPC | localhost:50051 (sans TLS) |
+
+**Identifiants par défaut :** `admin / admin123`
+
+<Aside type="note">
+Le nginx de l'UI proxifie automatiquement `/api` vers le serveur — pas de CORS, pas de certificat à accepter.
+</Aside>
+
+---
+
+## Mode production
+
+### Prérequis
+
+```bash
+# 1. Générer les secrets
+mkdir -p /etc/oseye/secrets && chmod 700 /etc/oseye/secrets
+openssl rand -hex 16  > /etc/oseye/secrets/secret_key.txt
+openssl rand -hex 32  > /etc/oseye/secrets/hmac_key.txt
+openssl rand -base64 24 > /etc/oseye/secrets/admin_password.txt
+openssl rand -base64 24 > /etc/oseye/secrets/analyst_password.txt
+openssl rand -base64 24 > /etc/oseye/secrets/db_password.txt
+openssl rand -base64 24 > /etc/oseye/secrets/redis_password.txt
+chmod 600 /etc/oseye/secrets/*.txt
+
+# 2. Initialiser la PKI (CA, certificats serveur, JWT keys, enrollment key)
+docker run --rm \
+  -v /etc/oseye:/etc/oseye \
+  oseye-server:latest \
+  oseye-server init
+```
+
+### Configurer le domaine
+
+Éditer `infra/docker/docker-compose.prod.yml` :
+```yaml
+OSEYE_API_CORS_ORIGINS: '["https://oseye.example.com"]'
+```
+
+Éditer `infra/docker/nginx.prod.conf` :
+```nginx
+server_name oseye.example.com;
+```
+
+### Lancer la stack
+
+```bash
+docker compose -f infra/docker/docker-compose.prod.yml up -d
+```
+
+### Architecture prod
+
+```
+Browser
+  └─► nginx :443 (SSL)
+        ├── /api/*  → oseye-server:8000
+        ├── /ws/*   → oseye-server:8000 (WebSocket)
+        └── /*      → oseye-ui:5173
+
+oseye-server ──► postgres:5432  (réseau oseye-backend, isolé)
+             ──► redis:6379     (réseau oseye-backend, isolé)
+oseye-server:50051 ──► Agents (gRPC mTLS, exposé sur l'hôte)
+```
+
+---
+
+## Pièges courants
+
+### CORS bloqué dans le navigateur
+
+Si l'UI est sur un port différent de l'API, configurer `OSEYE_API_CORS_ORIGINS` :
+
+```yaml
+OSEYE_API_CORS_ORIGINS: '["http://localhost:5174", "https://mon-domaine.com"]'
+```
+
+Ou utiliser le proxy nginx intégré à l'UI (mode dev) pour éviter le problème entièrement.
+
+### Events non reçus — "send batch failed"
+
+Si l'agent connecte (streams policy/commands ouverts) mais n'envoie pas d'events, vérifier :
+
+```bash
+docker logs oseye-server | grep batch_ingested
+```
+
+Si absent, le répertoire `/etc/oseye/agent_keys` est manquant ou vide. Voir [Troubleshooting](/OSEye-plateforme/reference/troubleshooting/).
+
+### Certificat auto-signé bloqué par le navigateur
+
+Pour les tests locaux avec HTTPS, visiter d'abord `https://localhost:443` dans le navigateur et accepter l'exception de sécurité. Ou utiliser le mode dev (HTTP uniquement).
+
+---
+
+## Variables d'environnement essentielles
+
+| Variable | Requis | Description |
+|----------|--------|-------------|
+| `OSEYE_DB_URL` | Oui | URL PostgreSQL (asyncpg) |
+| `OSEYE_REDIS_URL` | Oui | URL Redis |
+| `OSEYE_SECRET_KEY` | Oui | 32+ caractères |
+| `OSEYE_CHECKPOINT_HMAC_KEY` | Oui | 64 hex chars |
+| `OSEYE_ADMIN_PASSWORD` | Oui | Mot de passe UI admin |
+| `OSEYE_API_CORS_ORIGINS` | Oui | JSON array des origines autorisées |
+| `OSEYE_GRPC_TLS_CERT` | Prod | Certificat serveur gRPC |
+| `OSEYE_GRPC_TLS_KEY` | Prod | Clé privée gRPC |
+
+Voir la [référence complète](/OSEye-plateforme/reference/config-server/).

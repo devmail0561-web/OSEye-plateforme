@@ -42,7 +42,7 @@ ui/dist/
 ui/.env.local
 ui/coverage/
 
-# Site docs
+# Site docs (sources trackés, artefacts ignorés)
 site/node_modules/
 site/dist/
 site/.astro/
@@ -80,5 +80,3 @@ docs/internal/
 tools/audit_state.json
 tools/audit_reports/
 
-# Site Astro — local seulement
-site/

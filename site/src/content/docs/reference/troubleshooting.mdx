@@ -1,0 +1,185 @@
+---
+title: Troubleshooting
+description: Résoudre les problèmes courants de déploiement OSEye.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+---
+
+## Agent
+
+### Service systemd ne démarre pas
+
+**Erreur :**
+```
+oseye-agent.service: Failed to load environment files: No such file or directory
+```
+
+**Cause :** Le fichier `/etc/oseye/agent.env` n'existe pas. L'enrollment n'a pas été lancé.
+
+**Solution :**
+```bash
+sudo oseye-config enroll \
+  --server <HOST>:50051 \
+  --token <TOKEN>
+```
+
+L'enrollment crée `/etc/oseye/agent.env` et `/etc/oseye/certs/` automatiquement.
+
+---
+
+### Enrollment échoue — "server gave HTTP response to HTTPS client"
+
+**Cause :** `oseye-config enroll` force HTTPS mais le serveur tourne en HTTP.
+
+**Solution :** En production, activer TLS sur le serveur. En dev, utiliser `OSEYE_GRPC_INSECURE_DEV=true` et `--server localhost:50051` (sans HTTPS).
+
+---
+
+### Enrollment échoue — "x509: certificate relies on legacy Common Name"
+
+**Cause :** Le certificat serveur n'a pas de Subject Alternative Names (SANs).
+
+**Solution :** Régénérer le certificat avec SANs :
+```bash
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -out server.crt \
+  -extfile <(echo "subjectAltName=DNS:localhost,DNS:oseye-server,IP:127.0.0.1")
+```
+
+---
+
+### Permissions refusées sur les certificats après enrollment
+
+**Erreur :**
+```
+open /etc/oseye/certs/agent.key: permission denied
+```
+
+**Cause :** Les certificats ne sont pas accessibles par l'utilisateur `oseye`.
+
+<Aside type="note">
+Corrigé automatiquement depuis **v0.2.0-alpha.1** — `oseye-config enroll` change l'ownership vers `oseye:oseye` après création.
+</Aside>
+
+Pour les versions antérieures :
+```bash
+sudo chown -R oseye:oseye /etc/oseye/certs/
+```
+
+---
+
+### Events non reçus — "send batch failed"
+
+**Erreurs agent :**
+```
+send batch failed — events buffered | err: max retries exceeded: 15 attempts
+send batch failed — events buffered | err: context deadline exceeded
+```
+
+**Erreurs serveur :**
+```
+agent_key_not_registered cn=<agent>
+```
+Aucun log `batch_ingested`.
+
+**Cause :** `require_agent_keys=True` actif sans clés chargées → `context.abort()` sur chaque appel IngestEvents.
+
+<Aside type="note">
+Corrigé depuis **v0.2.0-alpha.1** — `require_agent_keys` n'est activé que si des fichiers `.pub` sont présents dans `agent_keys_dir`.
+</Aside>
+
+**Vérification :**
+```bash
+docker logs oseye-server | grep batch_ingested
+# Doit afficher : batch_ingested accepted=N cn=<agent> rejected=0
+```
+
+---
+
+### gRPC streams échouent — AttributeError
+
+**Erreur :**
+```
+commands stream error | err: rpc error: code = Unknown desc =
+Unexpected <class 'AttributeError'>: '_SyncServicerContext' object has no attribute 'cancelled'
+```
+
+**Cause :** `_SyncServicerContext` de grpcio n'expose ni `is_active()` ni `cancelled()`.
+
+<Aside type="note">
+Corrigé depuis **v0.2.0-alpha.1** — utilise `threading.Event` + `context.add_callback()`.
+</Aside>
+
+---
+
+## UI / Authentification
+
+### "Identifiants invalides" alors que les credentials sont corrects
+
+**Symptôme :** Le login échoue avec "Identifiants invalides" alors que `admin/admin123` est correct. La console navigateur (F12) affiche :
+```
+Blocage d'une requête multiorigine (Cross-Origin Request) [...] Raison : échec de la requête CORS. Code d'état : (null).
+```
+
+**Cause :** Le navigateur bloque les requêtes XHR vers `https://localhost:443` car le certificat auto-signé n'a pas été accepté. Les requêtes XHR ne déclenchent pas d'interstitiel — elles échouent silencieusement.
+
+**Solution A (mode dev) :** Utiliser le proxy nginx intégré à l'UI :
+```bash
+# L'UI sur http://localhost:5174 proxifie /api → oseye-server:8000 en interne
+# Aucun SSL, aucun CORS
+```
+
+**Solution B (prod) :** Accepter le certificat dans le navigateur :
+1. Ouvrir `https://localhost:443` dans un onglet
+2. Cliquer "Avancé" → "Continuer vers localhost"
+3. Retourner sur l'UI et se connecter
+
+**Solution C (prod)** : Utiliser un vrai certificat (Let's Encrypt) — le navigateur le valide automatiquement.
+
+---
+
+### UI se connecte mais API retourne 401
+
+**Cause :** Le token JWT a expiré ou `OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES` est trop court.
+
+**Solution :** Augmenter la durée du token ou se reconnecter :
+```yaml
+OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+```
+
+---
+
+## Serveur
+
+### Serveur refuse de démarrer — "SECRET_KEY too short"
+
+```bash
+OSEYE_SECRET_KEY=$(openssl rand -hex 16)          # 32 chars
+OSEYE_CHECKPOINT_HMAC_KEY=$(openssl rand -hex 32)  # 64 chars hex
+```
+
+### Serveur refuse de démarrer — PermissionError sur /var/run/oseye
+
+**Cause :** `OSEYE_PLUGIN_IPC_SOCKET` n'est pas défini — le serveur tente de créer `/var/run/oseye/` qui nécessite des droits root.
+
+**Solution :**
+```bash
+-e OSEYE_PLUGIN_IPC_SOCKET=/tmp/oseye-plugin.sock
+```
+
+---
+
+## Checklist de déploiement
+
+```
+□ Secrets générés (secret_key, hmac_key, admin_password, db_password)
+□ PKI initialisée (oseye-server init)
+□ Certificat serveur avec SANs
+□ OSEYE_API_CORS_ORIGINS inclut l'URL de l'UI
+□ OSEYE_PLUGIN_IPC_SOCKET pointe vers /tmp/
+□ docker compose up -d → tous les services healthy
+□ curl /api/v1/health → {"status": "ok"}
+□ Agent enrollé et batch_ingested dans les logs
+□ Agent visible dans UI → Agents
+```

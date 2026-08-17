@@ -1,0 +1,161 @@
+---
+title: Déploiement mono-nœud
+description: Déployer le serveur OSEye et ses agents sur une seule machine en production.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Adapté aux petits environnements (jusqu'à ~50 agents). Tout tourne sur un seul serveur Linux.
+
+## Architecture
+
+```
+Internet
+  └─► nginx :443 (HTTPS + redirections HTTP→HTTPS)
+        ├── /api/*  → oseye-server:8000
+        ├── /ws/*   → oseye-server:8000
+        └── /*      → oseye-ui:5173
+
+oseye-server ──► postgres  (réseau interne Docker)
+             ──► redis     (réseau interne Docker)
+             :50051 ──► Agents mTLS (exposé à l'extérieur)
+```
+
+---
+
+## Installation
+
+<Steps>
+
+1. **Générer les secrets**
+
+   ```bash
+   mkdir -p /etc/oseye/secrets && chmod 700 /etc/oseye/secrets
+
+   openssl rand -hex 16  > /etc/oseye/secrets/secret_key.txt
+   openssl rand -hex 32  > /etc/oseye/secrets/hmac_key.txt
+   openssl rand -base64 24 > /etc/oseye/secrets/admin_password.txt
+   openssl rand -base64 24 > /etc/oseye/secrets/analyst_password.txt
+   openssl rand -base64 24 > /etc/oseye/secrets/db_password.txt
+   openssl rand -base64 24 > /etc/oseye/secrets/redis_password.txt
+   chmod 600 /etc/oseye/secrets/*.txt
+   ```
+
+2. **Initialiser la PKI**
+
+   Génère la CA racine, les certificats serveur (avec SANs), les JWT keys et la clé d'enrollment Ed25519 :
+
+   ```bash
+   docker run --rm \
+     -v /etc/oseye:/etc/oseye \
+     oseye-server:latest \
+     oseye-server init
+   ```
+
+   <Aside type="caution">
+   Protéger `/etc/oseye/certs/ca.key` — elle signe tous les certificats agents. Ne jamais l'exposer.
+   </Aside>
+
+3. **Configurer le domaine**
+
+   Éditer `infra/docker/docker-compose.prod.yml` :
+   ```yaml
+   OSEYE_API_CORS_ORIGINS: '["https://oseye.example.com"]'
+   ```
+
+   Éditer `infra/docker/nginx.prod.conf` :
+   ```nginx
+   server_name oseye.example.com;
+   ssl_certificate     /etc/nginx/certs/server.crt;
+   ssl_certificate_key /etc/nginx/certs/server.key;
+   ```
+
+   Pour Let's Encrypt :
+   ```bash
+   certbot certonly --standalone -d oseye.example.com
+   cp /etc/letsencrypt/live/oseye.example.com/fullchain.pem /etc/oseye/certs/server.crt
+   cp /etc/letsencrypt/live/oseye.example.com/privkey.pem   /etc/oseye/certs/server.key
+   ```
+
+4. **Lancer la stack**
+
+   ```bash
+   docker compose -f infra/docker/docker-compose.prod.yml up -d
+   ```
+
+5. **Vérifier**
+
+   ```bash
+   docker compose -f infra/docker/docker-compose.prod.yml ps
+   curl https://oseye.example.com/api/v1/health
+   # → {"status": "ok"}
+   ```
+
+6. **Créer un token d'enrollment**
+
+   ```bash
+   docker exec oseye-server oseye-server enrollment token create
+   # → TOKEN: <token>  (expire dans 24h)
+   ```
+
+7. **Installer et enroller un agent**
+
+   Sur chaque machine à surveiller :
+
+   ```bash
+   # Installer le package
+   sudo dpkg -i oseye-agent_amd64.deb      # Debian/Ubuntu
+   sudo rpm -i oseye-agent_amd64.rpm       # RHEL/Rocky
+
+   # Enroller
+   sudo oseye-config enroll \
+     --server oseye.example.com:50051 \
+     --token <TOKEN>
+
+   sudo systemctl enable --now oseye-agent
+   ```
+
+</Steps>
+
+---
+
+## Vérification post-installation
+
+```bash
+# Santé serveur
+curl https://oseye.example.com/api/v1/health
+
+# Statut agent
+sudo systemctl status oseye-agent
+sudo journalctl -u oseye-agent -f
+
+# Events reçus
+docker logs oseye-server | grep batch_ingested
+```
+
+L'agent doit apparaître dans **UI → Agents** avec le statut **Connected**.
+
+---
+
+## Mise à jour
+
+```bash
+# Mettre à jour les images
+docker pull oseye-server:X.Y.Z
+docker pull oseye-ui:X.Y.Z
+
+# Redémarrer avec la nouvelle version
+docker compose -f infra/docker/docker-compose.prod.yml up -d oseye-server oseye-ui
+```
+
+Les volumes PostgreSQL et les certificats sont persistants — aucune perte de données.
+
+---
+
+## Pièges courants
+
+Voir le [guide de troubleshooting](/OSEye-plateforme/reference/troubleshooting/) pour les erreurs fréquentes :
+- CORS bloqué dans le navigateur
+- Certificat auto-signé non accepté
+- Events non reçus (`require_agent_keys` sans clés chargées)
+- gRPC streams échouant avec `AttributeError`
