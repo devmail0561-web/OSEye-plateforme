@@ -87,7 +87,7 @@ async def create_grpc_server(
     # via run_coroutine_threadsafe instead of the isolated asyncio.run() fallback.
     loop = asyncio.get_event_loop()
     servicer = AgentServiceServicer(
-        bus=bus, validator=validator, loop=loop, require_agent_keys=True
+        bus=bus, validator=validator, loop=loop, require_agent_keys=False
     )
 
     server = grpc.aio.server(

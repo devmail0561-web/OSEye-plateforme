@@ -352,13 +352,23 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # gRPC server — mTLS enforced (raises if certs missing and not dev mode)
         grpc_server, grpc_servicer = await create_grpc_server(settings, bus)
 
-        # Load Ed25519 public keys for agent batch-signature verification
+        # Load Ed25519 public keys for agent batch-signature verification.
+        # require_agent_keys is only enabled when at least one key file is found —
+        # if the directory is missing or empty, the server accepts events without
+        # signature verification (mTLS still enforced).
         _keys_dir = Path(settings.agent_keys_dir)
         if _keys_dir.is_dir():
+            _loaded = 0
             for pub_file in sorted(_keys_dir.glob("*.pub")):
                 cn = pub_file.stem
                 grpc_servicer.register_agent_key(cn, pub_file.read_bytes())
                 _logger.info("agent_key_loaded", cn=cn)
+                _loaded += 1
+            if _loaded > 0:
+                grpc_servicer._require_agent_keys = True  # noqa: SLF001
+                _logger.info("agent_keys_enforcement_enabled", count=_loaded)
+            else:
+                _logger.warning("agent_keys_dir_empty", path=str(_keys_dir))
         else:
             _logger.warning("agent_keys_dir_missing", path=str(_keys_dir))
 
