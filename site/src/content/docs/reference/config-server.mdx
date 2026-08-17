@@ -12,20 +12,34 @@ The `oseye-server` CLI generates `/etc/oseye/server.env` and `/etc/oseye/secrets
   `/etc/oseye/secrets.env` must be mode **600** and owned by root. It contains passwords, API keys, and (for PostgreSQL) the database URL.
 </Aside>
 
-## Setup
+## Commandes CLI
 
 ```bash
-# Create directories + generate PKI (non-interactive, CI-safe)
+# Initialiser la PKI
 sudo oseye-server init
 
-# Interactive wizard — writes server.env and secrets.env
+# Wizard interactif — génère server.env + secrets.env
 sudo oseye-server setup
 
-# Validate configuration before starting
+# Cycle de vie
+sudo oseye-server start
+sudo oseye-server stop    [--timeout 30]
+sudo oseye-server restart [--timeout 30]
+oseye-server status
+
+# Valider la configuration
 sudo oseye-server validate
 
-# Start
-sudo oseye-server start
+# Utilisateurs (stockés dans /etc/oseye/users.json)
+sudo oseye-server user create <username> --role admin|analyst
+sudo oseye-server user passwd <username>
+sudo oseye-server user delete <username>
+oseye-server user list
+
+# Tokens d'enrollment (connexion directe à la DB)
+sudo oseye-server enrollment token create [--valid-hours 24]
+oseye-server enrollment token list
+sudo oseye-server enrollment token revoke <TOKEN_ID>
 ```
 
 ---

@@ -103,7 +103,17 @@ sudo systemctl enable --now oseye-agent
 Pour créer un nouveau token si l'ancien a expiré :
 
 ```bash
+# Serveur natif (systemd)
+sudo oseye-server enrollment token create --valid-hours 24
+
+# Serveur Docker
 docker exec oseye-server oseye-server enrollment token create
+
+# Lister les tokens actifs
+oseye-server enrollment token list
+
+# Révoquer un token compromis
+sudo oseye-server enrollment token revoke <TOKEN_ID>
 ```
 
 L'agent doit apparaître dans **UI → Agents** avec le statut **Connected**.

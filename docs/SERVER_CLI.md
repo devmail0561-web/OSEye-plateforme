@@ -29,13 +29,23 @@ oseye-server version
 ## 🔧 Commandes disponibles
 
 ```
-oseye-server init          Initialiser PKI et répertoires système
-oseye-server setup         Assistant interactif de configuration
-oseye-server start         Démarrer le serveur (API + gRPC + workers)
-oseye-server validate      Valider la configuration actuelle
-oseye-server update        Mettre à jour vers la dernière version
-oseye-server uninstall     Désinstaller serveur et/ou agents
-oseye-server version       Afficher la version
+oseye-server init                              Initialiser PKI et répertoires système
+oseye-server setup                             Assistant interactif de configuration
+oseye-server start                             Démarrer le serveur (API + gRPC + workers)
+oseye-server stop      [--timeout N]           Arrêter le serveur (gracieux)
+oseye-server restart   [--timeout N]           Redémarrer le serveur
+oseye-server status                            État du serveur + health API
+oseye-server user create <user> --role <role>  Créer un utilisateur
+oseye-server user passwd <user>                Changer le mot de passe
+oseye-server user delete <user>                Supprimer un utilisateur
+oseye-server user list                         Lister les utilisateurs
+oseye-server enrollment token create           Créer un token d'enrollment
+oseye-server enrollment token list             Lister les tokens actifs
+oseye-server enrollment token revoke <ID>      Révoquer un token
+oseye-server validate                          Valider la configuration actuelle
+oseye-server update                            Mettre à jour vers la dernière version
+oseye-server uninstall                         Désinstaller serveur et/ou agents
+oseye-server version                           Afficher la version
 ```
 
 ---
@@ -459,6 +469,133 @@ CMD ["uvicorn", "oseye.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - Écriture : `/var/lib/oseye/` (ML checkpoints, plugins)
 
 Les commandes `init` et `setup` nécessitent root (écriture dans `/etc`).
+
+---
+
+## `oseye-server stop` / `restart` / `status`
+
+### stop
+
+Arrêt gracieux du serveur (SIGTERM).
+
+```bash
+oseye-server stop [--timeout 30]
+```
+
+- Sous **systemd** : délègue à `systemctl stop oseye-server`
+- En **container Docker** : envoie SIGTERM à PID 1 (Docker restart policy gère le redémarrage)
+
+### restart
+
+```bash
+oseye-server restart [--timeout 30]
+```
+
+### status
+
+Affiche l'état systemd + vérifie la santé de l'API locale.
+
+```bash
+oseye-server status
+
+# Exemple de sortie :
+# ● oseye-server.service - OSEye Server
+#    Active: active (running)
+# API health : ok  (status=ok)
+```
+
+---
+
+## `oseye-server user` — Gestion des utilisateurs
+
+Les utilisateurs sont stockés dans `/etc/oseye/users.json` (bcrypt, mode 640).
+
+**Un redémarrage du serveur est nécessaire après toute modification.**
+
+### Rôles disponibles
+
+| Rôle | Accès |
+|---|---|
+| `admin` | Lecture + écriture + gestion (admin + analyst) |
+| `analyst` | Lecture seule |
+
+### Commandes
+
+```bash
+# Créer un utilisateur (mot de passe demandé interactivement)
+sudo oseye-server user create alice --role analyst
+
+# Créer avec mot de passe en argument (scripts CI)
+sudo oseye-server user create alice --role analyst --password "MonMotDePasse!"
+
+# Modifier le mot de passe
+sudo oseye-server user passwd alice
+
+# Lister les utilisateurs
+oseye-server user list
+
+# Supprimer
+sudo oseye-server user delete alice
+```
+
+### Contraintes mot de passe
+
+- **Minimum :** 8 caractères
+- **Maximum :** 72 bytes (limite bcrypt)
+- La limite est affichée à chaque saisie interactive
+
+### Fallback env vars
+
+Si `/etc/oseye/users.json` n'existe pas, le serveur utilise :
+```bash
+OSEYE_ADMIN_PASSWORD=...
+OSEYE_ANALYST_PASSWORD=...
+```
+
+---
+
+## `oseye-server enrollment token` — Tokens d'enrollment
+
+Gère les tokens permettant aux agents de s'enroller auprès du serveur.  
+**Le serveur n'a pas besoin de tourner.** La CLI se connecte directement à la DB.
+
+Lit `OSEYE_DB_URL` depuis : variable d'environnement → `/etc/oseye/secrets.env` → `/etc/oseye/server.env`.
+
+### Créer un token
+
+```bash
+# Valide 24h (défaut)
+sudo oseye-server enrollment token create
+
+# Valide 48h
+sudo oseye-server enrollment token create --valid-hours 48
+
+# Sortie :
+# Enrollment token created:
+#   Token   : 4d223dfc3b2347cf...  ← donner ceci à l'agent
+#   ID      : abc-123-...
+#   Expires : 2026-08-18 17:00 UTC (24h)
+#
+# To enroll an agent:
+#   oseye-config enroll --server <HOST>:50051 --token 4d223dfc3b2347cf...
+```
+
+### Lister les tokens actifs
+
+```bash
+oseye-server enrollment token list
+
+# ID                                      Created by    Expires
+# ------------------------------------------------------------------------
+# abc-123-...                             cli           2026-08-18 17:00 UTC
+```
+
+### Révoquer un token
+
+```bash
+sudo oseye-server enrollment token revoke abc-123-...
+# ✓ Token abc-123-... revoked.
+```
 
 ---
 
