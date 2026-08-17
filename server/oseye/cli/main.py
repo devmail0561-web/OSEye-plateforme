@@ -11,6 +11,9 @@ Usage:
   oseye-server init      [--certs-dir PATH] [--token-dir PATH] [--hostname H] [--ip IP] [--force]
   oseye-server setup
   oseye-server start     [--validate-only]
+  oseye-server stop      [--timeout N]
+  oseye-server restart   [--timeout N]
+  oseye-server status
   oseye-server validate
   oseye-server update      [--check-only] [--yes] [--pre]
   oseye-server uninstall   [--server] [--agent] [--purge] [--yes] [--dry-run]
@@ -20,6 +23,9 @@ Commands:
   init        Create system directories and generate PKI (non-interactive, safe to run in CI)
   setup       Interactive configuration wizard — writes server.env and secrets.env
   start       Start the OSEye server (API + gRPC + workers)
+  stop        Gracefully stop the server (SIGTERM / systemctl stop)
+  restart     Stop then start the server (systemctl restart)
+  status      Show server status and API health
   validate    Validate the current configuration and report missing files
   update      Check for and install the latest binary release
   uninstall   Remove server and/or agent from the system (requires root)
@@ -44,6 +50,15 @@ def main(argv: list[str] | None = None) -> None:
         run(rest)
     elif cmd == "start":
         from .cmd_start import run
+        run(rest)
+    elif cmd == "stop":
+        from .cmd_stop import run
+        run(rest)
+    elif cmd == "restart":
+        from .cmd_restart import run
+        run(rest)
+    elif cmd == "status":
+        from .cmd_status import run
         run(rest)
     elif cmd == "validate":
         from .cmd_validate import run
