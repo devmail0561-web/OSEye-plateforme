@@ -1,0 +1,223 @@
+---
+title: Platform Support
+description: Platform coverage, collector technologies, response actions, and roadmap for each supported OS.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+OSEye is designed around a **platform-agnostic core**: the same rule engine, ML engine, decision engine, and dashboard run identically regardless of what OS the agents are on. Only the collectors and response actions are platform-native.
+
+## Support Matrix
+
+| Platform | Agent Status | Collectors | Response Actions |
+|----------|-------------|-----------|-----------------|
+| **Linux 5.10+** | Production | 9 (eBPF, auditd, fanotify…) | nftables, SIGKILL, move+chmod |
+| **Windows 10/11, Server 2019+** | In development | ETW, Sysmon, WMI, WFP, Event Log, Registry | WFP, TerminateProcess, ACL deny |
+| **macOS 13+ (Apple Silicon + Intel)** | In development | Endpoint Security, FSEvents, OpenBSM, NetExt, TCC | pf, SIGKILL, quarantine xattr |
+| **Android 12+** | Planned | Kernel audit, binder, logcat, SELinux, netd | inotify-based quarantine, SIGKILL |
+| **iOS 16+ (supervised)** | Planned | Network Extension, entitlements, MDM, CoreAudit | MDM-mediated only |
+| **FreeBSD 14+** | Planned | audit(4), ktrace, kqueue, pf, dtrace, capsicum | pfctl, SIGKILL, move+chmod 000 |
+
+## Linux (Production)
+
+Linux is the primary platform. All 9 collectors are active. eBPF requires kernel 5.10+; fanotify and inotify work on older kernels as fallbacks.
+
+### Collectors
+
+| Collector | Kernel Requirement | Events |
+|-----------|-------------------|--------|
+| eBPF | 5.10+ | syscalls, network, process exec, socket |
+| auditd | 3.x+ | audit rules, privilege changes |
+| fanotify | 2.6.36+ | file open/read/write/exec |
+| inotify | 2.6.13+ | file create/delete/modify/rename |
+| procfs | Any | process list, CPU/RAM per PID |
+| netlink | 2.6+ | network interface events, routing |
+| journald | systemd | structured log events |
+| udev | Any | device connect/disconnect |
+| syslog | Any | BSD syslog UDP listener |
+
+### Packaging
+
+| Format | Path |
+|--------|------|
+| .deb | `oseye-agent_amd64.deb`, `oseye-agent_arm64.deb` |
+| .rpm | `oseye-agent_amd64.rpm`, `oseye-agent_arm64.rpm` |
+| Docker | `ghcr.io/devmail0561-web/oseye-agent:latest` |
+| systemd | `oseye-agent.service`, env from `/etc/oseye/agent.env` |
+
+## Windows (In Development — target Q4 2026)
+
+<Aside type="caution" title="Not yet available">
+  Windows agent builds are not yet released. This section describes the planned implementation.
+</Aside>
+
+### Collectors
+
+| Collector | Technology | Events |
+|-----------|-----------|--------|
+| ETW | Event Tracing for Windows | process, network, file, registry syscall-level |
+| Sysmon | Sysinternals Sysmon (optional) | enhanced process/network correlation |
+| WMI | Windows Management Instrumentation | process creation, service install, scheduled tasks |
+| WFP | Windows Filtering Platform | network traffic inspection |
+| Security Event Log | Windows Event Log (channel: Security) | logon, privilege use, object access |
+| Registry audit | Registry change notifications | Run keys, services, HKLM persistence paths |
+
+### Response Actions
+
+| Action | Mechanism |
+|--------|-----------|
+| Block IP | WFP callout driver — blocks at kernel layer |
+| Kill process | `TerminateProcess()` + child process tree walk |
+| Quarantine file | Move to `%ProgramData%\OSEye\quarantine\` + ACL deny-all |
+
+### Distribution
+
+Planned: `.msi` installer with optional Sysmon co-install, NSSM-based service, Group Policy templates for fleet deployment.
+
+## macOS (In Development — target Q4 2026)
+
+<Aside type="caution" title="Not yet available">
+  macOS agent builds are not yet released. This section describes the planned implementation.
+</Aside>
+
+### Collectors
+
+| Collector | Technology | Notes |
+|-----------|-----------|-------|
+| Endpoint Security | `ESClient` (Apple private framework) | process exec, file events, network — requires System Extension |
+| FSEvents | `FSEventStreamCreate` | file system change notifications |
+| OpenBSM | `/dev/auditpipe` | BSD audit trail — process, file, network |
+| Network Extension | NEFilterDataProvider | packet-level network visibility |
+| TCC audit | TCC database diff | privacy permission grants (camera, mic, location…) |
+| XPC monitoring | `NSXPCConnection` introspection | inter-process communication |
+
+### Response Actions
+
+| Action | Mechanism |
+|--------|-----------|
+| Block IP | pfctl — adds rule to pf anchor `com.oseye` |
+| Kill process | `SIGKILL` via `kill(2)` |
+| Quarantine file | Move to `~/Library/Application Support/OSEye/quarantine/` + `com.apple.quarantine` xattr |
+
+### Distribution
+
+Planned: `.pkg` installer with a System Extension, notarised and stapled by Apple, MDM-deployable via `com.oseye.agent` configuration profile.
+
+SIP (System Integrity Protection) is fully respected — no kernel patches, no SIP disabling required.
+
+## Android (Planned — 2027)
+
+<Aside type="note" title="Architecture note">
+  Android support requires either root access or MDM enrollment (Android Enterprise, Samsung Knox, Jamf). Unprivileged sideloading is not sufficient for kernel-level telemetry.
+</Aside>
+
+### Planned Collectors
+
+| Collector | Requires |
+|-----------|---------|
+| Kernel audit (`kauditd`) | Root or audit group access |
+| inotify (file system) | Root or Android Enterprise work profile |
+| Binder IPC monitoring | Root |
+| logcat (structured logs) | `READ_LOGS` permission (MDM-granted) |
+| SELinux audit | Root |
+| netd (network daemon) | Root or VPN-mode Network Extension |
+
+### Response Actions
+
+Kill process (`SIGKILL`), quarantine file (move to isolated directory), network block via VPN-mode isolation.
+
+## iOS / iPadOS (Planned — 2027)
+
+<Aside type="note" title="Architecture note">
+  iOS does not permit kernel-level access. OSEye on iOS operates entirely in user space via MDM-approved APIs. This means lower telemetry depth compared to other platforms — network and entitlement visibility are the primary use cases.
+</Aside>
+
+### Planned Collectors
+
+| Collector | Mechanism |
+|-----------|----------|
+| Network traffic | NEFilterDataProvider (Network Extension) |
+| Entitlements audit | MDM-reported app inventory diff |
+| MDM telemetry | Declarative Device Management (DDM) |
+| CoreAudit | BSM audit trail (MDM-supervised only) |
+
+### Response Actions
+
+Response is **MDM-mediated**: OSEye issues MDM commands (wipe app data, revoke cert, enable Lost Mode). Direct process kill or firewall rules are not available in the iOS sandbox.
+
+## FreeBSD / OpenBSD (Planned — 2027)
+
+### Planned Collectors
+
+| Collector | Technology |
+|-----------|-----------|
+| BSM audit | `/dev/auditpipe` — same API as macOS OpenBSM |
+| ktrace | kernel process tracing |
+| kqueue | file and socket event notifications |
+| pf logs | packet filter log interface |
+| DTrace | dynamic tracing (FreeBSD only) |
+| capsicum | capability-mode violation monitoring |
+
+### Response Actions
+
+pfctl (block IP), SIGKILL (kill process), file quarantine (move + chmod 000).
+
+## Cross-Platform Design Principles
+
+### What stays the same across all platforms
+
+- gRPC/mTLS transport (TLS 1.3 only, Ed25519 certificates)
+- BLAKE3 hash chain + Ed25519 batch signature
+- SQLite offline buffer (identical schema)
+- Detection rules (YAML format — platform-aware `event_type` conditions)
+- ML engine (server-side, platform-agnostic)
+- Decision engine and risk matrix
+- Response rollback and BLAKE3 audit journal
+- Plugin SDK (Python, IPC transport abstracted per OS)
+- Dashboard and REST API
+
+### What is platform-native
+
+- Collector implementations (eBPF vs ETW vs Endpoint Security…)
+- Response action mechanisms (nftables vs WFP vs pfctl…)
+- Service manager (systemd vs SCM vs launchd…)
+- Config file paths (`/etc/oseye/` vs `%ProgramData%\OSEye\` vs `/Library/Application Support/OSEye/`)
+- Packaging (deb/rpm vs msi vs pkg)
+- Plugin IPC transport (Unix socket vs named pipe)
+
+### Platform-aware detection rules
+
+Rules specify an optional `platform` constraint. Rules without it match all platforms:
+
+```yaml
+id: RULE-011
+name: suspicious_lsass_access
+description: Process accessing LSASS memory (credential dumping)
+severity: critical
+platform: windows          # only evaluated on Windows agents
+
+mitre:
+  tactic: credential-access
+  technique: T1003.001
+
+conditions:
+  event_type: process_open
+  target_process: lsass.exe
+  access_mask:
+    any_of: [0x10, 0x20, 0x40]  # PROCESS_VM_READ, PROCESS_VM_WRITE, PROCESS_DUP_HANDLE
+```
+
+```yaml
+id: RULE-001
+name: suspicious_shadow_read
+description: Non-root process reading /etc/shadow
+severity: high
+platform: linux            # only evaluated on Linux agents
+
+conditions:
+  event_type: file_access
+  path: /etc/shadow
+  action: read
+  uid:
+    not: 0
+```

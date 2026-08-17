@@ -1,0 +1,65 @@
+---
+title: Overview
+description: OSEye — open-source EDR/SIEM. Linux today; Windows, macOS, Android, iOS and FreeBSD on the roadmap.
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+OSEye is an open-source EDR/SIEM built around a platform-agnostic detection core.
+A static binary agent instruments each host at the kernel level and streams events to a central Python server that runs rule-based and ML detection, then triggers autonomous responses.
+
+**Current status:** Linux is fully supported in production. Windows and macOS agents are in active development (target: Q4 2026). Android, iOS, and FreeBSD are on the roadmap for 2027.
+
+## Platform Coverage
+
+| Platform | Status | Telemetry |
+|----------|--------|-----------|
+| Linux 5.10+ | **Production** | eBPF, auditd, fanotify, inotify, procfs, netlink, journald, udev, syslog |
+| Windows 10/11, Server 2019+ | In development | ETW, Sysmon, WMI, WFP, Security Event Log, Registry audit |
+| macOS 13+ | In development | Endpoint Security, FSEvents, OpenBSM, Network Extension, TCC |
+| Android 12+ | Planned | Kernel audit, inotify, binder, logcat, SELinux audit |
+| iOS 16+ | Planned | Network Extension, entitlements, MDM, CoreAudit |
+| FreeBSD 14+ | Planned | audit(4), ktrace, kqueue, pf, dtrace, capsicum |
+
+See [Platform Support](/OSEye-plateforme/reference/platforms/) for full details, constraints, and collector coverage per OS.
+
+## Core Capabilities
+
+<CardGrid>
+  <Card title="Kernel-level telemetry" icon="list-format">
+    Platform-native collectors — eBPF on Linux, ETW on Windows, Endpoint Security on macOS. One agent binary per platform, same detection pipeline everywhere.
+  </Card>
+  <Card title="35+ MITRE ATT&CK rules" icon="warning">
+    YAML rules hot-reloaded at runtime. Platform-aware conditions — Linux rules target eBPF event types, Windows rules target ETW channels. Same format, portable logic.
+  </Card>
+  <Card title="ML Anomaly Detection" icon="random">
+    Online HalfSpaceTrees (River) per entity, automatic baseline, MITRE classifier — no pre-labelled training data needed. Platform-agnostic, runs on the server.
+  </Card>
+  <Card title="Autonomous Response" icon="rocket">
+    Kill process, block IP, quarantine file — platform-native response actions. Linux uses nftables and syscall; Windows uses WFP/TerminateProcess; macOS uses pf/EndpointSecurity. Admin rollback via dashboard.
+  </Card>
+  <Card title="Threat Intelligence" icon="magnifier">
+    AbuseIPDB, VirusTotal, MISP with circuit breaker per provider. Platform-independent — runs on the server, enriches any event source.
+  </Card>
+  <Card title="Plugin SDK" icon="puzzle">
+    Python extensions (Analyzer, Exporter, Collector) sandboxed over IPC with Ed25519 signature. Deploy custom detectors or forward events to SIEM, SOAR, Slack.
+  </Card>
+</CardGrid>
+
+## Architecture
+
+```
+[Agent — static binary, per platform]   ──gRPC/mTLS──►   [Server — Python / FastAPI]
+
+  Linux:   eBPF · auditd · fanotify                        Rule Engine  (YAML, cross-platform)
+           inotify · procfs · netlink                       ML Engine    (HalfSpaceTrees · River)
+           journald · udev · syslog                         TI Engine    (AbuseIPDB / VT / MISP)
+                                                            Decision Engine → Response
+  Windows: ETW · Sysmon · WMI (dev)                        PostgreSQL · Redis
+  macOS:   Endpoint Security (dev)                          WebSocket → React Dashboard
+
+  All platforms: SQLite offline buffer · gRPC/mTLS transport
+                 Responder (kill / block / quarantine, platform-native)
+```
+
+Continue to [Installation](/OSEye-plateforme/getting-started/installation/) to deploy your first node.

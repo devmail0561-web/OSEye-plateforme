@@ -1,0 +1,165 @@
+---
+title: Installation
+description: Install OSEye agent and server.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Platform Support">
+  The current agent build targets **Linux (kernel 5.10+)**. Windows and macOS agents are in development (target: Q4 2026). See [Platform Support](/OSEye-plateforme/reference/platforms/) for the full roadmap.
+</Aside>
+
+## Agent Installation
+
+<Tabs>
+  <TabItem label="Debian/Ubuntu">
+    ```bash
+    # Download the .deb package
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.deb
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.deb.asc
+
+    # Verify GPG signature
+    gpg --verify oseye-agent_amd64.deb.asc oseye-agent_amd64.deb
+
+    # Install
+    sudo dpkg -i oseye-agent_amd64.deb
+    ```
+  </TabItem>
+  <TabItem label="RHEL/Fedora">
+    ```bash
+    # Download the .rpm package
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.rpm
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.rpm.asc
+
+    # Verify GPG signature
+    gpg --verify oseye-agent_amd64.rpm.asc oseye-agent_amd64.rpm
+
+    # Install
+    sudo rpm -i oseye-agent_amd64.rpm
+    ```
+  </TabItem>
+  <TabItem label="Docker">
+    ```bash
+    docker pull ghcr.io/devmail0561-web/oseye-agent:latest
+
+    # Verify cosign signature
+    cosign verify ghcr.io/devmail0561-web/oseye-agent:latest
+
+    docker run -d --name oseye-agent \
+      --privileged \
+      -v /etc/oseye:/etc/oseye:ro \
+      -v /var/lib/oseye:/var/lib/oseye \
+      ghcr.io/devmail0561-web/oseye-agent:latest
+    ```
+  </TabItem>
+  <TabItem label="From Source">
+    ```bash
+    git clone https://github.com/devmail0561-web/OSEye-plateforme.git
+    cd oseye
+
+    # Build agent binaries
+    make dist/oseye-agent dist/oseye-config
+
+    # Install manually
+    sudo cp dist/oseye-agent /usr/bin/
+    sudo cp dist/oseye-config /usr/bin/
+    sudo cp packaging/systemd/oseye-agent.service /usr/lib/systemd/system/
+    sudo systemctl daemon-reload
+    ```
+  </TabItem>
+</Tabs>
+
+## Verify Installation
+
+```bash
+# Check version
+oseye-agent --version
+
+# Validate configuration
+sudo oseye-config validate
+```
+
+## Verify Package Integrity
+
+Every release includes a `SHA256SUMS` file:
+
+```bash
+curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+## Server Installation
+
+<Tabs>
+  <TabItem label="Docker Compose (Recommended)">
+    ```bash
+    # Pull the server image
+    docker pull ghcr.io/devmail0561-web/oseye-server:latest
+
+    # Prepare host volume ownership (server runs as non-root user 'oseye')
+    sudo groupadd -r oseye 2>/dev/null || true
+    sudo chown root:oseye /etc/oseye && sudo chmod 750 /etc/oseye
+
+    # Create system directories + generate PKI (one-time)
+    docker run --rm \
+      -v /etc/oseye:/etc/oseye \
+      ghcr.io/devmail0561-web/oseye-server:latest \
+      oseye-server init
+
+    # Interactive setup wizard — configures DB, Redis, credentials, TLS, etc.
+    docker run --rm -it \
+      -v /etc/oseye:/etc/oseye \
+      ghcr.io/devmail0561-web/oseye-server:latest \
+      oseye-server setup
+
+    # Start all services (server + PostgreSQL + Redis + UI)
+    docker compose -f infra/docker/docker-compose.prod.yml up -d
+
+    # Verify
+    curl https://localhost:8000/api/v1/health
+    ```
+  </TabItem>
+  <TabItem label="Debian/Ubuntu (.deb)">
+    ```bash
+    # Download and install the server package
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_amd64.deb
+    sudo dpkg -i oseye-server_amd64.deb
+
+    # Create system directories + generate PKI
+    sudo oseye-server init
+
+    # Interactive setup wizard
+    sudo oseye-server setup
+
+    # Validate and start
+    sudo oseye-server validate
+    sudo systemctl enable --now oseye-server
+    ```
+  </TabItem>
+  <TabItem label="RHEL/Fedora (.rpm)">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_amd64.rpm
+    sudo rpm -i oseye-server_amd64.rpm
+
+    sudo oseye-server init
+    sudo oseye-server setup
+    sudo oseye-server validate
+    sudo systemctl enable --now oseye-server
+    ```
+  </TabItem>
+</Tabs>
+
+## System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| Agent CPU | 1 core | 2 cores |
+| Agent RAM | 128 MB | 256 MB |
+| Agent Disk | 500 MB | 2 GB (buffer) |
+| Server CPU | 2 cores | 4 cores |
+| Server RAM | 2 GB | 8 GB |
+| Server Disk | 10 GB | 100 GB (events) |
+| OS (agent) | Linux 5.10+ | Linux 6.x |
+| OS (Windows, macOS) | — | In development — see [Platform Support](/OSEye-plateforme/reference/platforms/) |
+| Go | 1.23+ (build only) | — |
+| Python | 3.12+ (server) | — |

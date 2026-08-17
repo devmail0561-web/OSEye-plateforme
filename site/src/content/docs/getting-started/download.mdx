@@ -1,0 +1,159 @@
+---
+title: Download
+description: Download OSEye agent and server binaries for Linux.
+---
+
+import { Tabs, TabItem, Aside, Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Linux only">
+  OSEye currently runs on **Linux (kernel 5.10+, x86-64)**. Windows and macOS support is planned for Q4 2026 — see [Platform Support](/OSEye-plateforme/reference/platforms/).
+</Aside>
+
+<CardGrid>
+  <Card title="OSEye Agent" icon="laptop">
+    Collecteur d'événements eBPF — s'installe sur chaque hôte surveillé.
+  </Card>
+  <Card title="OSEye Server" icon="server">
+    Moteur d'analyse, API REST, UI web — s'installe sur un seul nœud dédié.
+  </Card>
+</CardGrid>
+
+## Agent
+
+<Tabs>
+  <TabItem label="Debian / Ubuntu (.deb)">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.deb
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.deb.asc
+    gpg --verify oseye-agent_amd64.deb.asc oseye-agent_amd64.deb
+    sudo dpkg -i oseye-agent_amd64.deb
+    ```
+  </TabItem>
+  <TabItem label="RHEL / Fedora (.rpm)">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.rpm
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_amd64.rpm.asc
+    gpg --verify oseye-agent_amd64.rpm.asc oseye-agent_amd64.rpm
+    sudo rpm -i oseye-agent_amd64.rpm
+    ```
+  </TabItem>
+  <TabItem label="Binaire tar.gz">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_linux_amd64.tar.gz
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-agent_linux_amd64.tar.gz.asc
+    gpg --verify oseye-agent_linux_amd64.tar.gz.asc oseye-agent_linux_amd64.tar.gz
+    tar -xzf oseye-agent_linux_amd64.tar.gz
+    sudo install -m 755 oseye-agent /usr/local/bin/
+    sudo install -m 755 oseye-config /usr/local/bin/
+    ```
+  </TabItem>
+  <TabItem label="Docker / GHCR">
+    ```bash
+    docker pull ghcr.io/devmail0561-web/oseye-agent:latest
+
+    # Vérification cosign
+    cosign verify ghcr.io/devmail0561-web/oseye-agent:latest
+
+    docker run -d --name oseye-agent \
+      --privileged \
+      -v /etc/oseye:/etc/oseye:ro \
+      -v /var/lib/oseye:/var/lib/oseye \
+      ghcr.io/devmail0561-web/oseye-agent:latest
+    ```
+  </TabItem>
+</Tabs>
+
+## Serveur
+
+<Aside type="caution" title="Nœud dédié recommandé">
+  Le serveur nécessite PostgreSQL, Redis et au minimum 2 Go de RAM. Ne pas installer sur un hôte surveillé par un agent OSEye.
+</Aside>
+
+<Tabs>
+  <TabItem label="Debian / Ubuntu (.deb)">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_amd64.deb
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_amd64.deb.asc
+    gpg --verify oseye-server_amd64.deb.asc oseye-server_amd64.deb
+    sudo dpkg -i oseye-server_amd64.deb
+    sudo oseye-server init    # génère le PKI et les répertoires système
+    sudo oseye-server setup   # assistant interactif (DB, Redis, TLS, credentials)
+    sudo systemctl enable --now oseye-server
+    ```
+  </TabItem>
+  <TabItem label="RHEL / Fedora (.rpm)">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_amd64.rpm
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_amd64.rpm.asc
+    gpg --verify oseye-server_amd64.rpm.asc oseye-server_amd64.rpm
+    sudo rpm -i oseye-server_amd64.rpm
+    sudo oseye-server init
+    sudo oseye-server setup
+    sudo systemctl enable --now oseye-server
+    ```
+  </TabItem>
+  <TabItem label="Binaire tar.gz">
+    ```bash
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_linux_amd64.tar.gz
+    curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-server_linux_amd64.tar.gz.asc
+    gpg --verify oseye-server_linux_amd64.tar.gz.asc oseye-server_linux_amd64.tar.gz
+    tar -xzf oseye-server_linux_amd64.tar.gz
+    sudo install -m 755 oseye-server /usr/local/bin/
+    sudo oseye-server init
+    sudo oseye-server setup
+    ```
+  </TabItem>
+  <TabItem label="Docker Compose">
+    ```bash
+    # Image
+    docker pull ghcr.io/devmail0561-web/oseye-server:latest
+
+    # Initialisation PKI (one-time)
+    docker run --rm \
+      -v /etc/oseye:/etc/oseye \
+      ghcr.io/devmail0561-web/oseye-server:latest \
+      oseye-server init
+
+    # Assistant setup
+    docker run --rm -it \
+      -v /etc/oseye:/etc/oseye \
+      ghcr.io/devmail0561-web/oseye-server:latest \
+      oseye-server setup
+
+    # Lancement stack complète (server + PostgreSQL + Redis + UI)
+    docker compose -f infra/docker/docker-compose.prod.yml up -d
+    curl https://localhost:8000/api/v1/health
+    ```
+  </TabItem>
+</Tabs>
+
+## Vérification d'intégrité (SHA-256)
+
+Chaque release publie un fichier `SHA256SUMS` signé GPG. Pour vérifier tous les artefacts d'un coup :
+
+```bash
+curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/SHA256SUMS
+curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/SHA256SUMS.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+## Versions antérieures
+
+Toutes les releases sont disponibles sur la page GitHub Releases :
+
+[Voir toutes les versions →](https://github.com/devmail0561-web/OSEye-plateforme/releases)
+
+## Prérequis système
+
+| Composant | Minimum | Recommandé |
+|-----------|---------|------------|
+| OS | Linux 5.10+, x86-64 | Linux 6.x, x86-64 |
+| Agent CPU | 1 cœur | 2 cœurs |
+| Agent RAM | 128 Mo | 256 Mo |
+| Agent Disk | 500 Mo | 2 Go (buffer) |
+| Server CPU | 2 cœurs | 4 cœurs |
+| Server RAM | 2 Go | 8 Go |
+| Server Disk | 10 Go | 100 Go (événements) |
+
+Après le téléchargement, suivre [Installation](/OSEye-plateforme/getting-started/installation/) pour la configuration complète.

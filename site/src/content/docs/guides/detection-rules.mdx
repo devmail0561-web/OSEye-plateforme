@@ -1,0 +1,135 @@
+---
+title: Detection Rules
+description: Write and manage YAML detection rules with MITRE ATT&CK mapping.
+---
+
+## Overview
+
+OSEye's rule engine processes normalized events against YAML rules. Rules support pattern matching, timeframe correlation, severity levels, and MITRE ATT&CK technique mapping.
+
+## Rule Structure
+
+```yaml
+# rules/suspicious_shadow_read.yaml
+id: RULE-001
+name: suspicious_shadow_read
+description: Non-root process reading /etc/shadow
+severity: high
+enabled: true
+platform: linux          # optional — omit to match all platforms
+
+mitre:
+  tactic: credential-access
+  technique: T1003.008
+
+conditions:
+  event_type: file_access
+  path: /etc/shadow
+  action: read
+  uid:
+    not: 0
+
+response:
+  type: alert
+  notify: true
+```
+
+The `platform` field restricts evaluation to agents on a specific OS. Valid values: `linux`, `windows`, `macos`, `android`, `ios`, `freebsd`. Omitting the field means the rule runs on all platforms — use this for cross-platform `event_type` conditions (e.g. `network_connect`, `process_exec`).
+
+See [Platform Support](/OSEye-plateforme/reference/platforms/#platform-aware-detection-rules) for platform-specific rule examples.
+
+## Conditions
+
+### Simple Match
+
+```yaml
+conditions:
+  event_type: process_exec
+  binary: /usr/bin/nmap
+```
+
+### Pattern Matching
+
+```yaml
+conditions:
+  event_type: process_exec
+  binary:
+    regex: "^/tmp/.*"
+  cmdline:
+    contains: "-p 22"
+```
+
+### Negation
+
+```yaml
+conditions:
+  event_type: network_connect
+  dst_port: 443
+  process:
+    not_in: ["/usr/bin/curl", "/usr/bin/wget", "/usr/bin/firefox"]
+```
+
+### Timeframe Correlation
+
+```yaml
+# Alert if 5+ failed SSH logins from same IP in 60 seconds
+id: RULE-010
+name: ssh_brute_force
+conditions:
+  event_type: auth_failure
+  service: sshd
+
+correlation:
+  group_by: src_ip
+  threshold: 5
+  timeframe: 60s
+```
+
+## Response Types
+
+| Type | Action |
+|------|--------|
+| `alert` | Create alert in dashboard |
+| `block_ip` | Block source IP via nftables |
+| `quarantine_file` | Move file to quarantine |
+| `kill_process` | Terminate the process |
+| `notify` | Send notification only |
+
+## Hot Reload
+
+Rules are reloaded automatically when files change. No server restart needed.
+
+```bash
+# Add a new rule
+cp my-rule.yaml /etc/oseye/rules/
+
+# The rule engine picks it up within 5 seconds
+```
+
+## Testing Rules
+
+```bash
+# Dry-run a rule against a sample event
+curl -X POST http://localhost:8000/api/v1/rules/test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rule_id": "RULE-001",
+    "event": {
+      "event_type": "file_access",
+      "path": "/etc/shadow",
+      "action": "read",
+      "uid": 1000
+    }
+  }'
+```
+
+## Built-in Rules
+
+OSEye ships with 35+ rules covering:
+
+- Credential access (shadow file, keyring, SSH keys)
+- Privilege escalation (setuid, sudo abuse, capability changes)
+- Persistence (crontab, systemd service creation, .bashrc modification)
+- Defense evasion (log deletion, timestomping, process injection)
+- Lateral movement (SSH brute force, port scanning)
+- Exfiltration (large DNS queries, unusual outbound traffic)

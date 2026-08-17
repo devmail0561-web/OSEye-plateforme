@@ -1,0 +1,120 @@
+---
+title: Agent Enrollment
+description: Automatically provision agents with TLS certificates on first boot.
+---
+
+## Overview
+
+OSEye supports automatic agent enrollment: on first boot, the agent contacts the enrollment server, presents a one-time token via HTTP header, and receives its mTLS certificates. No manual certificate distribution needed.
+
+## How It Works
+
+```
+┌─────────┐  1. GET /api/v1/enroll/ca   ┌──────────┐
+│  Agent  │ ────(X-Enrollment-Token)───► │  Server  │
+│(no cert)│ ◄───────────────────────────  │  (CA)    │
+│         │     CA cert PEM              │          │
+│         │                              │          │
+│         │  2. POST /api/v1/enroll/sign │          │
+│         │ ────(token + CSR + hostname)─►│          │
+│         │ ◄───────────────────────────  │          │
+│         │     Signed agent cert PEM    │          │
+└─────────┘                             └──────────┘
+     │
+     │ 3. Writes certs to /etc/oseye/certs/
+     │ 4. Starts gRPC with mTLS
+     ▼
+  [Normal operation]
+```
+
+## Setup
+
+### 1. Generate Enrollment Token (Server)
+
+`oseye-server init` and `oseye-server setup` each generate a one-time token and display it at the end. To generate an additional token at any time:
+
+```bash
+# On the server
+sudo oseye-server init   # also creates PKI if not already done
+```
+
+The token is stored as a file in `/etc/oseye/enrollment_tokens/`. The filename IS the token (64-char hex string).
+
+```bash
+# List active tokens
+sudo ls /etc/oseye/enrollment_tokens/
+```
+
+### 2. Enroll the Agent
+
+Run on the agent host — fetches the CA cert (TOFU), generates a key pair, gets the cert signed, and writes `/etc/oseye/agent.env`:
+
+```bash
+sudo oseye-config enroll \
+  --server oseye-server.example.com:8000 \
+  --token <64-char-hex-token>
+
+# Optional overrides
+#   --grpc-port  50051                   gRPC port (default: 50051)
+#   --agent-id   <uuid>                  override auto-generated UUID
+#   --certs-dir  /etc/oseye/certs        certificate directory
+#   --env-file   /etc/oseye/agent.env    agent config file
+```
+
+The command:
+1. Fetches CA cert via HTTPS (TOFU — InsecureSkipVerify for this one request only)
+2. Generates RSA-2048 key pair natively (Go `crypto/rsa`)
+3. Creates PKCS#10 CSR (CN = hostname)
+4. POSTs to `/api/v1/enroll/sign` — server validates token, signs, and **consumes** the token
+5. Writes certs and `agent.env` atomically (mode 0600)
+6. Enables and starts `oseye-agent` via systemd if available
+
+### 3. Verify
+
+```bash
+sudo oseye-config check-files    # all certs/keys should show OK
+sudo oseye-config validate       # full configuration validation
+sudo oseye-config show           # display effective configuration
+```
+
+## Bulk Enrollment
+
+For automated deployments (Ansible, Terraform):
+
+```bash
+# In your provisioning playbook / cloud-init
+sudo oseye-config enroll \
+  --server $OSEYE_SERVER \
+  --token $ENROLLMENT_TOKEN \
+  --agent-id $(cat /etc/machine-id)
+```
+
+## Token Management
+
+Tokens are managed as files on the server filesystem:
+
+```bash
+# Create a new token manually (on the server)
+TOKEN=$(openssl rand -hex 32)
+echo "$(date +%s)" | sudo tee /etc/oseye/enrollment_tokens/$TOKEN > /dev/null
+sudo chmod 600 /etc/oseye/enrollment_tokens/$TOKEN
+echo "Token: $TOKEN"
+
+# List active tokens
+sudo ls /etc/oseye/enrollment_tokens/
+
+# Revoke a token (delete the file)
+sudo rm /etc/oseye/enrollment_tokens/<token-value>
+```
+
+## Security Notes
+
+- Tokens are transmitted in the `X-Enrollment-Token` HTTP header (never in URL paths)
+- Tokens are one-time use — consumed atomically on successful signing (TOCTOU-safe with lock)
+- Tokens expire after 24 hours
+- Rate limited: 5 enrollment requests per minute per IP
+- Token format is strictly validated (64 lowercase hex chars only — path traversal safe)
+- The enrollment endpoint enforces HTTPS (`OSEYE_INSECURE=true` disables this for dev only)
+- After enrollment, the token env var is cleared from agent config
+- Revoked agents (via `DELETE /api/v1/agents/{cn}`) cannot re-enroll without a new token
+- No API endpoint lists or returns active enrollment tokens — tokens are only accessible on the server filesystem

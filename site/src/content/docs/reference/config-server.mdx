@@ -1,0 +1,183 @@
+---
+title: Server Configuration Reference
+description: All environment variables for the OSEye server (prefix OSEYE_).
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+All settings are read from environment variables with the prefix `OSEYE_`.
+The `oseye-server` CLI generates `/etc/oseye/server.env` and `/etc/oseye/secrets.env` automatically.
+
+<Aside type="caution" title="Secrets file">
+  `/etc/oseye/secrets.env` must be mode **600** and owned by root. It contains passwords, API keys, and (for PostgreSQL) the database URL.
+</Aside>
+
+## Setup
+
+```bash
+# Create directories + generate PKI (non-interactive, CI-safe)
+sudo oseye-server init
+
+# Interactive wizard — writes server.env and secrets.env
+sudo oseye-server setup
+
+# Validate configuration before starting
+sudo oseye-server validate
+
+# Start
+sudo oseye-server start
+```
+
+---
+
+## API Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_API_PORT` | `8000` | REST API listen port |
+| `OSEYE_API_HOST` | `0.0.0.0` | REST API bind address |
+| `OSEYE_API_CORS_ORIGINS` | `["http://localhost:5173"]` | JSON array of allowed CORS origins |
+
+## gRPC Server
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_GRPC_PORT` | `50051` | Agent gRPC listen port |
+| `OSEYE_GRPC_MAX_WORKERS` | `10` | gRPC thread pool size |
+| `OSEYE_GRPC_INSECURE_DEV` | `false` | Allow plain-text gRPC — **never `true` in production** |
+
+## Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_DB_BACKEND` | `sqlite` | `sqlite` \| `postgresql` \| `clickhouse` |
+| `OSEYE_DB_URL` | `sqlite+aiosqlite:///./oseye_dev.db` | SQLAlchemy async URL. For PostgreSQL, store in `secrets.env` (contains password). |
+| `OSEYE_DB_POOL_SIZE` | `10` | Connection pool size |
+| `OSEYE_DB_MAX_OVERFLOW` | `20` | Max overflow connections |
+
+## Redis (Event Bus)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
+
+## TLS / PKI
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_TLS_CERT_FILE` | `/etc/oseye/certs/server.crt` | Server TLS certificate |
+| `OSEYE_TLS_KEY_FILE` | `/etc/oseye/certs/server.key` | Server TLS private key |
+| `OSEYE_TLS_CA_CERT_FILE` | `/etc/oseye/certs/ca.crt` | CA certificate (agent mTLS verification) |
+| `OSEYE_TLS_CA_KEY_FILE` | `/etc/oseye/certs/ca.key` | CA private key (enrollment signing) |
+| `OSEYE_TLS_CA_KEY_PASSWORD` | _(empty)_ | Passphrase for the CA key. Set in `secrets.env`. |
+
+## Authentication (JWT RS256)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_JWT_PRIVATE_KEY_PATH` | `/etc/oseye/certs/jwt_private.pem` | RSA-4096 private key for token signing |
+| `OSEYE_JWT_PUBLIC_KEY_PATH` | `/etc/oseye/certs/jwt_public.pem` | RSA-4096 public key for token verification |
+| `OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Access token lifetime (minutes) |
+| `OSEYE_JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime (days) |
+
+## Secrets (secrets.env only)
+
+| Variable | Description |
+|----------|-------------|
+| `OSEYE_SECRET_KEY` | **Required.** HMAC secret for API key signing (hex, 32+ bytes) |
+| `OSEYE_ADMIN_PASSWORD` | **Required.** Admin account password (12+ chars) |
+| `OSEYE_ANALYST_PASSWORD` | **Required.** Analyst account password (12+ chars) |
+| `OSEYE_DB_PASSWORD` | Database password (PostgreSQL only) |
+
+## Enrollment
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_ENROLLMENT_TOKEN_DEFAULT_TTL_HOURS` | `24` | Token validity in hours (1–8760) |
+| `OSEYE_AGENT_KEYS_DIR` | `/etc/oseye/agent_keys` | Directory of Ed25519 public keys for agent batch verification (`{cn}.pub`) |
+
+## Observability
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_LOG_LEVEL` | `INFO` | Structlog level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `OSEYE_SERVICE_NAME` | `oseye-server` | Service name in traces and logs |
+| `OSEYE_OTEL_ENDPOINT` | _(disabled)_ | OTLP gRPC endpoint, e.g. `localhost:4317` |
+
+## Workers
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_BATCH_FLUSH_INTERVAL_MS` | `500` | Max interval between event batch flushes |
+| `OSEYE_BATCH_MAX_SIZE` | `500` | Max events per batch |
+
+## Threat Intelligence
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_ABUSEIPDB_API_KEY` | _(disabled)_ | AbuseIPDB API key |
+| `OSEYE_VIRUSTOTAL_API_KEY` | _(disabled)_ | VirusTotal API key |
+| `OSEYE_MISP_URL` | _(disabled)_ | MISP instance URL |
+| `OSEYE_MISP_API_KEY` | _(disabled)_ | MISP API key |
+| `OSEYE_TI_CACHE_TTL_SECONDS` | `3600` | TI result cache TTL |
+| `OSEYE_TI_LOOKUP_TIMEOUT_SECONDS` | `5.0` | Per-provider HTTP timeout |
+| `OSEYE_TI_BREAKER_FAIL_MAX` | `5` | Failures before circuit opens |
+| `OSEYE_TI_BREAKER_RESET_TIMEOUT` | `60.0` | Circuit reset window (seconds) |
+
+## Correlation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_CORRELATION_WINDOW_SECONDS` | `300` | Event correlation time window |
+| `OSEYE_CORRELATION_MIN_SEVERITY` | `medium` | Minimum severity to correlate |
+
+## Decision Engine
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_DECISION_HUMAN_TIMEOUT_SECS` | `3600` | Timeout waiting for human approval |
+| `OSEYE_DECISION_HUMAN_POLL_INTERVAL` | `30` | Human decision poll interval (seconds) |
+| `OSEYE_DECISION_POLICY_VERSION` | `v1.0` | Active policy version |
+| `OSEYE_DECISION_WEIGHT_RULE` | `0.4` | Rule score weight (must sum to 1.0 with other weights) |
+| `OSEYE_DECISION_WEIGHT_ML` | `0.3` | ML score weight |
+| `OSEYE_DECISION_WEIGHT_TI` | `0.2` | Threat intelligence score weight |
+| `OSEYE_DECISION_WEIGHT_DEPTH` | `0.1` | Correlation depth weight |
+
+<Aside type="note" title="Weights constraint">
+  `OSEYE_DECISION_WEIGHT_RULE + _ML + _TI + _DEPTH` must equal **1.0** (±0.001). The server refuses to start if the sum is invalid.
+</Aside>
+
+## ML Engine
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_ML_CHECKPOINT_PATH` | `/var/lib/oseye/ml_checkpoint.pkl` | Model persistence path |
+| `OSEYE_ML_CHECKPOINT_INTERVAL_S` | `300.0` | Checkpoint save interval (seconds). `0` disables. |
+
+## Plugins
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_PLUGINS_DIR` | `/etc/oseye/plugins` | Plugin `.py` files directory (mode 750) |
+| `OSEYE_PLUGIN_IPC_SOCKET` | `/var/run/oseye/plugin.sock` | Unix socket for plugin IPC |
+| `OSEYE_PLUGIN_KEYS_DIR` | `/etc/oseye/plugin_keys` | Ed25519 public keys for plugin signature verification |
+| `OSEYE_PLUGIN_REQUIRE_SIGNATURE` | `true` | Reject unsigned plugins in production |
+
+## Surveillance & Agent Autonomy
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_DEFAULT_SURVEILLANCE_PROFILE` | `workstation` | Profile pushed to agents on connect |
+| `OSEYE_AGENT_DEFAULT_AUTONOMY` | `critical_only` | Fallback autonomy level |
+| `OSEYE_RULE_SIGNING_KEY_PATH` | _(unsigned)_ | Ed25519 private key for signing rule sets pushed to agents |
+
+### Surveillance profiles
+
+| Profile | Description |
+|---------|-------------|
+| `workstation` | Standard desktop monitoring |
+| `server` | Production server (full collectors) |
+| `investigation` | Deep monitoring — all events, no throttle |
+| `minimal` | Reduced collection for low-resource systems |
+| `compliance` | Focused on audit/compliance events |
+| `stealth` | Minimal footprint, reduced logging |

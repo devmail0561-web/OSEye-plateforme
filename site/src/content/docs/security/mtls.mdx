@@ -1,0 +1,115 @@
+---
+title: mTLS Communication
+description: Mutual TLS authentication between agents and server.
+---
+
+## Overview
+
+All agent-server communication uses mutual TLS (mTLS) with TLS 1.3 exclusively. Both the agent and server present certificates signed by the same CA.
+
+## Certificate Chain
+
+```
+┌─────────────────────────┐
+│   OSEye CA (Root)       │
+│   ca.crt / ca.key       │
+└───────────┬─────────────┘
+            │ signs
+    ┌───────┼───────┐
+    ▼               ▼
+┌────────┐    ┌────────┐
+│ Server │    │ Agent  │
+│ .crt   │    │ .crt   │
+│ .key   │    │ .key   │
+└────────┘    └────────┘
+```
+
+## Configuration
+
+### Agent
+
+```bash
+sudo oseye-config set OSEYE_TLS_CERT=/etc/oseye/certs/agent.crt
+sudo oseye-config set OSEYE_TLS_KEY=/etc/oseye/certs/agent.key
+sudo oseye-config set OSEYE_TLS_CA=/etc/oseye/certs/ca.crt
+```
+
+### Server
+
+```bash
+OSEYE_TLS_CERT_FILE=/etc/oseye/certs/server.crt
+OSEYE_TLS_KEY_FILE=/etc/oseye/certs/server.key
+OSEYE_TLS_CA_CERT_FILE=/etc/oseye/certs/ca.crt
+```
+
+## TLS Requirements
+
+| Parameter | Value |
+|-----------|-------|
+| Protocol | TLS 1.3 only |
+| Key type | ECDSA P-256 or Ed25519 (recommended) |
+| Cipher suites | TLS 1.3 default (AEAD only) |
+| Cert validity | 1 year (recommended) |
+| CA validity | 10 years |
+
+## Certificate Generation
+
+### Production (recommended)
+
+Use the `oseye-server init` command — it generates the full PKI with correct permissions and SANs:
+
+```bash
+sudo oseye-server init
+```
+
+This creates under `/etc/oseye/certs/` (mode 700):
+- `ca.crt` + `ca.key` (mode 600) — CA root, 4096-bit RSA, 10 years
+- `server.crt` + `server.key` (mode 600) — Server cert, 4096-bit RSA, 825 days, SAN = hostname + IP
+- `jwt_private.pem` (mode 600) + `jwt_public.pem` — JWT RS256 key pair, 4096-bit
+
+All private keys are created with `umask 077` to prevent any read window before the mode is set.
+
+### Development
+
+```bash
+./scripts/generate_certs.sh
+```
+
+Creates dev certs under `infra/certs/` for local use.
+
+### Manual generation
+
+```bash
+# CA (4096-bit RSA, 10 years)
+(umask 077; openssl genrsa -out ca.key 4096)
+openssl req -new -x509 -key ca.key -out ca.crt -days 3650 -subj "/CN=OSEye-CA/O=OSEye/C=FR"
+
+# Server (SAN required for mTLS)
+(umask 077; openssl genrsa -out server.key 4096)
+openssl req -new -key server.key -out server.csr -subj "/CN=$(hostname -f)/O=OSEye/C=FR"
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out server.crt -days 825 \
+  -extfile <(printf "subjectAltName=DNS:%s,DNS:localhost,IP:%s,IP:127.0.0.1" "$(hostname -f)" "$(hostname -I | awk '{print $1}')")
+
+# Agent (enrolled via oseye-config enroll — signed by the same CA)
+(umask 077; openssl genrsa -out agent.key 4096)
+openssl req -new -key agent.key -out agent.csr -subj "/CN=agent-hostname/O=OSEye/C=FR"
+openssl x509 -req -in agent.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out agent.crt -days 365
+```
+
+## Agent Revocation
+
+Revoke an agent by deleting its registration:
+
+```bash
+curl -X DELETE https://server:8000/api/v1/agents/{cn} \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+The server maintains a revocation list. Revoked agents cannot reconnect even with valid certificates.
+
+## Startup Behavior
+
+- If TLS certificates are missing, the agent refuses to start (unless `OSEYE_GRPC_INSECURE_DEV=true` for development)
+- If the CA certificate doesn't match, the connection is rejected
+- Certificate expiry is logged as a warning 30 days before

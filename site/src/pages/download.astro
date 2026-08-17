@@ -1,0 +1,549 @@
+---
+import { ViewTransitions } from 'astro:transitions';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const GH   = 'https://github.com/devmail0561-web/OSEye-plateforme';
+const API  = 'https://api.github.com/repos/devmail0561-web/OSEye-plateforme/releases';
+
+// Fetch releases at build time
+let releases = [];
+try {
+  const res = await fetch(API, {
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'OSEye-site-build',
+    },
+  });
+  if (res.ok) releases = await res.json();
+} catch {}
+
+const latest   = releases[0] ?? null;
+const previous = releases.slice(1);
+const version  = latest?.tag_name ?? null;
+const relDate  = latest
+  ? new Date(latest.published_at).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })
+  : null;
+
+const fmtDate = (iso) =>
+  new Date(iso).toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' });
+
+// Resolve assets for a release: match by pattern, return { name, url, ascUrl } or null
+const PATTERNS = {
+  'agent-deb':    /oseye-agent.*amd64\.deb$/,
+  'agent-rpm':    /oseye-agent.*amd64\.rpm$/,
+  'agent-tar':    /oseye-agent.*linux.*amd64\.tar\.gz$/,
+  'server-deb':   /oseye-server.*amd64\.deb$/,
+  'server-rpm':   /oseye-server.*amd64\.rpm$/,
+  'server-tar':   /oseye-server.*linux.*amd64\.tar\.gz$/,
+};
+
+const resolveAssets = (releaseAssets) => {
+  const find = (re) => releaseAssets.find(a => re.test(a.name));
+  const slot = (key) => {
+    const a = find(PATTERNS[key]);
+    if (!a) return null;
+    const asc = releaseAssets.find(x => x.name === a.name + '.asc');
+    return { name: a.name, url: a.browser_download_url, ascUrl: asc?.browser_download_url ?? null };
+  };
+  return {
+    'agent-deb': slot('agent-deb'),
+    'agent-rpm': slot('agent-rpm'),
+    'agent-tar': slot('agent-tar'),
+    'server-deb': slot('server-deb'),
+    'server-rpm': slot('server-rpm'),
+    'server-tar': slot('server-tar'),
+  };
+};
+
+const latestAssets = latest ? resolveAssets(latest.assets) : null;
+
+const AGENT_SLOTS  = [
+  { key: 'agent-deb',  label: 'Debian / Ubuntu', ext: '.deb'    },
+  { key: 'agent-rpm',  label: 'RHEL / Fedora',   ext: '.rpm'    },
+  { key: 'agent-tar',  label: 'Tarball',          ext: '.tar.gz' },
+];
+const SERVER_SLOTS = [
+  { key: 'server-deb', label: 'Debian / Ubuntu', ext: '.deb'    },
+  { key: 'server-rpm', label: 'RHEL / Fedora',   ext: '.rpm'    },
+  { key: 'server-tar', label: 'Tarball',          ext: '.tar.gz' },
+];
+
+// Same helper for previous releases rows
+const prevDlLinks = (rel) => {
+  const a = resolveAssets(rel.assets);
+  return {
+    agent:  ['agent-deb','agent-rpm','agent-tar'].map(k => a[k]).filter(Boolean),
+    server: ['server-deb','server-rpm','server-tar'].map(k => a[k]).filter(Boolean),
+  };
+};
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Download — OSEye</title>
+  <meta name="description" content="Download OSEye agent and server binaries for Linux." />
+  <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+  <ViewTransitions />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #07090e;
+      --surface:  #0d1117;
+      --surface2: #111820;
+      --border:   #1e2836;
+      --border2:  #263040;
+      --cyan:     #00d4ff;
+      --green:    #4ade80;
+      --amber:    #f59e0b;
+      --text:     #e6edf3;
+      --muted:    #7d8590;
+      --faint:    #3a4555;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 16px; line-height: 1.6; overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem; height: 60px;
+      background: rgba(7,9,14,.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.15rem; }
+    .nav-logo svg { width: 28px; height: 28px; color: var(--cyan); }
+    .nav-links { display: flex; align-items: center; gap: 1.6rem; }
+    .nav-links a { color: var(--muted); font-size: .9rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--cyan); }
+    .nav-cta {
+      background: var(--cyan); color: #000;
+      font-size: .85rem; font-weight: 600;
+      padding: .45rem 1.1rem; border-radius: 6px; transition: opacity .2s;
+    }
+    .nav-cta:hover { opacity: .85; }
+
+    /* PAGE */
+    .page { max-width: 960px; margin: 0 auto; padding: 7rem 2rem 5rem; }
+
+    /* HEADER */
+    .page-header { text-align: center; margin-bottom: 3rem; }
+    .version-chip {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: rgba(0,212,255,.08); border: 1px solid rgba(0,212,255,.2);
+      color: var(--cyan); font-size: .78rem; font-weight: 700;
+      letter-spacing: .06em; padding: .28rem .85rem; border-radius: 20px;
+      margin-bottom: 1.1rem; font-family: 'SF Mono','Fira Code',monospace;
+    }
+    .version-chip .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green); box-shadow: 0 0 6px var(--green);
+    }
+    .no-release-chip {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);
+      color: var(--amber); font-size: .78rem; font-weight: 700;
+      letter-spacing: .06em; padding: .28rem .85rem; border-radius: 20px;
+      margin-bottom: 1.1rem;
+    }
+    h1 {
+      font-size: clamp(2rem, 4vw, 3rem); font-weight: 800;
+      letter-spacing: -.03em; line-height: 1.1; margin-bottom: .5rem;
+    }
+    h1 .accent { color: var(--cyan); }
+    .page-meta { font-size: .85rem; color: var(--muted); }
+    .page-meta a { color: var(--cyan); }
+    .page-sub { font-size: .95rem; color: var(--muted); margin-top: .6rem; }
+
+    /* SECTION HEADER */
+    .dl-section { margin-bottom: 2.5rem; }
+    .dl-section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.2rem; }
+    .dl-icon {
+      width: 42px; height: 42px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .dl-icon-agent  { background: rgba(0,212,255,.1); color: var(--cyan); }
+    .dl-icon-server { background: rgba(74,222,128,.1); color: var(--green); }
+    .dl-title { font-size: 1.2rem; font-weight: 700; letter-spacing: -.02em; }
+    .dl-desc  { font-size: .85rem; color: var(--muted); margin-top: .1rem; }
+
+    /* CARDS */
+    .dl-cards {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 1px;
+      background: var(--border); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    @media (max-width: 640px) { .dl-cards { grid-template-columns: 1fr; } }
+    .dl-card {
+      background: var(--surface); padding: 1.4rem;
+      display: flex; flex-direction: column; gap: .75rem;
+    }
+    .dl-card-label {
+      font-size: .68rem; font-weight: 700; color: var(--muted);
+      letter-spacing: .08em; text-transform: uppercase;
+    }
+    .dl-card-name {
+      font-family: 'SF Mono','Fira Code',monospace; font-size: .76rem;
+      color: var(--text); background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: .35rem .65rem; word-break: break-all;
+    }
+    .dl-card-actions { display: flex; gap: .55rem; flex-wrap: wrap; }
+    .btn-dl {
+      display: inline-flex; align-items: center; gap: .4rem;
+      padding: .42rem .9rem; border-radius: 7px;
+      font-size: .8rem; font-weight: 600; transition: all .15s;
+    }
+    .btn-dl svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .btn-dl-primary { background: var(--cyan); color: #000; }
+    .btn-dl-primary:hover { background: #26dbff; }
+    .btn-dl-ghost {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border2);
+    }
+    .btn-dl-ghost:hover { color: var(--text); border-color: var(--faint); }
+    .btn-dl-soon { font-size: .78rem; color: var(--faint); font-style: italic; }
+    .dl-card-name--empty { color: var(--faint); }
+
+    /* DIVIDER */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+    /* INTEGRITY */
+    .integrity-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 1.4rem; margin-bottom: 2.5rem;
+      display: flex; gap: 1rem; align-items: flex-start;
+    }
+    .integrity-icon {
+      width: 34px; height: 34px; flex-shrink: 0;
+      background: rgba(245,158,11,.1); color: var(--amber);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    }
+    .integrity-content h3 { font-size: .92rem; font-weight: 700; margin-bottom: .25rem; }
+    .integrity-content p  { font-size: .83rem; color: var(--muted); line-height: 1.6; }
+    .integrity-content code {
+      font-family: monospace; font-size: .8rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: .1rem .4rem; color: var(--text);
+    }
+
+    /* REQUIREMENTS */
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; margin-bottom: 2.5rem;
+    }
+    .req-table { width: 100%; border-collapse: collapse; }
+    .req-table th, .req-table td {
+      padding: .65rem 1rem; text-align: left;
+      border-bottom: 1px solid var(--border); font-size: .86rem;
+    }
+    .req-table th {
+      color: var(--muted); font-weight: 600; font-size: .76rem;
+      text-transform: uppercase; letter-spacing: .06em; background: var(--surface);
+    }
+    .req-table tr:last-child td { border-bottom: none; }
+    .req-table td:first-child { color: var(--text); font-weight: 500; }
+
+    /* PREVIOUS VERSIONS */
+    .prev-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .prev-header h2 { font-size: 1.1rem; font-weight: 700; }
+    .btn-gh {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border2); padding: .4rem .9rem;
+      border-radius: 7px; font-size: .82rem; font-weight: 600;
+      white-space: nowrap; transition: all .15s;
+    }
+    .btn-gh:hover { color: var(--text); border-color: var(--faint); background: rgba(255,255,255,.04); }
+    .prev-table { width: 100%; border-collapse: collapse; }
+    .prev-table th, .prev-table td {
+      padding: .7rem 1rem; text-align: left;
+      border-bottom: 1px solid var(--border); font-size: .85rem;
+    }
+    .prev-table th {
+      color: var(--muted); font-weight: 600; font-size: .74rem;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .prev-table tr:last-child td { border-bottom: none; }
+    .prev-table tr:hover td { background: rgba(255,255,255,.02); }
+    .tag-badge {
+      font-family: 'SF Mono','Fira Code',monospace;
+      font-size: .8rem; font-weight: 700; color: var(--cyan);
+    }
+    .rel-date { color: var(--muted); font-size: .82rem; }
+    .dl-links { display: flex; gap: .4rem; flex-wrap: wrap; }
+    .dl-link {
+      font-size: .75rem; font-weight: 600; padding: .2rem .55rem;
+      border-radius: 5px; border: 1px solid var(--border2); color: var(--muted);
+      transition: all .12s; white-space: nowrap;
+    }
+    .dl-link:hover { color: var(--text); border-color: var(--faint); }
+    .empty-state {
+      padding: 2rem 1rem; text-align: center; color: var(--muted); font-size: .88rem;
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border); padding: 2rem 4rem;
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 1280px; margin: 0 auto;
+    }
+    .footer-logo { font-weight: 700; font-size: .95rem; color: var(--muted); }
+    .footer-links { display: flex; gap: 1.4rem; }
+    .footer-links a { font-size: .83rem; color: var(--muted); transition: color .2s; }
+    .footer-links a:hover { color: var(--text); }
+    .footer-right { font-size: .78rem; color: var(--faint); }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href={`${base}/`} class="nav-logo">
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="3"/>
+      <circle cx="32" cy="32" r="12" fill="currentColor" opacity="0.15"/>
+      <circle cx="32" cy="32" r="5" fill="currentColor"/>
+      <path d="M32 4 L32 12 M32 52 L32 60 M4 32 L12 32 M52 32 L60 32" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M12 12 L18 18 M46 46 L52 52 M52 12 L46 18 M18 46 L12 52" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+    </svg>
+    OSEye
+  </a>
+  <div class="nav-links">
+    <a href={`${base}/getting-started/installation/`}>Docs</a>
+    <a href={`${base}/reference/architecture/`}>Architecture</a>
+    <a href={`${base}/download/`} class="active">Download</a>
+    <a href="https://github.com/devmail0561-web/OSEye-plateforme">GitHub</a>
+    <a href={`${base}/getting-started/installation/`} class="nav-cta">Get Started</a>
+  </div>
+</nav>
+
+<!-- PAGE -->
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="page-header">
+    {version ? (
+      <div class="version-chip">
+        <span class="dot"></span>
+        Dernière version : {version}
+      </div>
+    ) : (
+      <div class="no-release-chip">Aucune release publiée pour l'instant</div>
+    )}
+    <h1>Download <span class="accent">OSEye</span></h1>
+    {relDate && <p class="page-meta">Publiée le {relDate} · <a href={`${GH}/releases/latest`}>Notes de release</a></p>}
+    <p class="page-sub">Binaires signés GPG · Linux x86-64 · Windows &amp; macOS prévu Q4 2026</p>
+  </div>
+
+  <!-- AGENT -->
+  <div class="dl-section">
+    <div class="dl-section-header">
+      <div class="dl-icon dl-icon-agent">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <div>
+        <div class="dl-title">Agent {version && <span style="color:var(--muted);font-weight:400;font-size:.85rem">{version}</span>}</div>
+        <div class="dl-desc">Collecteur eBPF — installe sur chaque hôte surveillé</div>
+      </div>
+    </div>
+    <div class="dl-cards">
+      {AGENT_SLOTS.map(({ key, label, ext }) => {
+        const asset = latestAssets?.[key];
+        return (
+          <div class="dl-card">
+            <div class="dl-card-label">{label}</div>
+            {asset
+              ? <div class="dl-card-name">{asset.name}</div>
+              : <div class="dl-card-name dl-card-name--empty">—</div>
+            }
+            <div class="dl-card-actions">
+              {asset
+                ? <>
+                    <a href={asset.url} download class="btn-dl btn-dl-primary">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      {ext}
+                    </a>
+                    {asset.ascUrl && (
+                      <a href={asset.ascUrl} download class="btn-dl btn-dl-ghost">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        .asc
+                      </a>
+                    )}
+                  </>
+                : <span class="btn-dl-soon">Pas encore disponible</span>
+              }
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- SERVER -->
+  <div class="dl-section">
+    <div class="dl-section-header">
+      <div class="dl-icon dl-icon-server">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div>
+        <div class="dl-title">Serveur {version && <span style="color:var(--muted);font-weight:400;font-size:.85rem">{version}</span>}</div>
+        <div class="dl-desc">Moteur d'analyse, API REST et UI — nœud dédié Linux uniquement</div>
+      </div>
+    </div>
+    <div class="dl-cards">
+      {SERVER_SLOTS.map(({ key, label, ext }) => {
+        const asset = latestAssets?.[key];
+        return (
+          <div class="dl-card">
+            <div class="dl-card-label">{label}</div>
+            {asset
+              ? <div class="dl-card-name">{asset.name}</div>
+              : <div class="dl-card-name dl-card-name--empty">—</div>
+            }
+            <div class="dl-card-actions">
+              {asset
+                ? <>
+                    <a href={asset.url} download class="btn-dl btn-dl-primary">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      {ext}
+                    </a>
+                    {asset.ascUrl && (
+                      <a href={asset.ascUrl} download class="btn-dl btn-dl-ghost">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        .asc
+                      </a>
+                    )}
+                  </>
+                : <span class="btn-dl-soon">Pas encore disponible</span>
+              }
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- INTEGRITY -->
+  <div class="integrity-box">
+    <div class="integrity-icon">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    </div>
+    <div class="integrity-content">
+      <h3>Vérification d'intégrité</h3>
+      <p>
+        Chaque release publie <code>SHA256SUMS</code> + <code>SHA256SUMS.asc</code>.<br/>
+        <code>gpg --verify SHA256SUMS.asc SHA256SUMS &amp;&amp; sha256sum -c SHA256SUMS --ignore-missing</code>
+      </p>
+    </div>
+  </div>
+
+  <!-- REQUIREMENTS -->
+  <div class="table-wrap">
+    <table class="req-table">
+      <thead><tr><th>Composant</th><th>Minimum</th><th>Recommandé</th></tr></thead>
+      <tbody>
+        <tr><td>OS</td><td>Linux 5.10+, x86-64</td><td>Linux 6.x, x86-64</td></tr>
+        <tr><td>Agent CPU</td><td>1 cœur</td><td>2 cœurs</td></tr>
+        <tr><td>Agent RAM</td><td>128 Mo</td><td>256 Mo</td></tr>
+        <tr><td>Agent Disque</td><td>500 Mo</td><td>2 Go (buffer)</td></tr>
+        <tr><td>Serveur CPU</td><td>2 cœurs</td><td>4 cœurs</td></tr>
+        <tr><td>Serveur RAM</td><td>2 Go</td><td>8 Go</td></tr>
+        <tr><td>Serveur Disque</td><td>10 Go</td><td>100 Go (events)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- PREVIOUS VERSIONS -->
+  <div class="prev-header">
+    <h2>Versions précédentes</h2>
+    <a href={`${GH}/releases`} class="btn-gh">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      Toutes les releases
+    </a>
+  </div>
+
+  <div class="table-wrap" style="margin-bottom:3rem">
+    {previous.length > 0 ? (
+      <table class="prev-table">
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Date</th>
+            <th>Agent</th>
+            <th>Serveur</th>
+          </tr>
+        </thead>
+        <tbody>
+          {previous.map((rel) => {
+            const links = prevDlLinks(rel);
+            return (
+              <tr>
+                <td>
+                  <a href={rel.html_url} class="tag-badge">{rel.tag_name}</a>
+                  {rel.prerelease && <span style="margin-left:.4rem;font-size:.7rem;color:var(--amber);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);padding:.1rem .4rem;border-radius:4px">pre</span>}
+                </td>
+                <td class="rel-date">{fmtDate(rel.published_at)}</td>
+                <td>
+                  <div class="dl-links">
+                    {links.agent.map(a => (
+                      <a href={a.url} download class="dl-link">{a.name.replace(/^oseye-agent[^.]*/, '')}</a>
+                    ))}
+                    {links.agent.length === 0 && <span style="color:var(--faint);font-size:.78rem">—</span>}
+                  </div>
+                </td>
+                <td>
+                  <div class="dl-links">
+                    {links.server.map(a => (
+                      <a href={a.url} download class="dl-link">{a.name.replace(/^oseye-server[^.]*/, '')}</a>
+                    ))}
+                    {links.server.length === 0 && <span style="color:var(--faint);font-size:.78rem">—</span>}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    ) : (
+      <div class="empty-state">
+        {releases.length === 0
+          ? 'Aucune release publiée pour l\'instant.'
+          : 'Il n\'y a pas encore de versions précédentes.'}
+      </div>
+    )}
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">OSEye</div>
+  <div class="footer-links">
+    <a href={`${base}/getting-started/installation/`}>Documentation</a>
+    <a href={`${base}/download/`}>Download</a>
+    <a href="https://github.com/devmail0561-web/OSEye-plateforme">GitHub</a>
+    <a href="https://github.com/devmail0561-web/OSEye-plateforme/issues">Issues</a>
+  </div>
+  <div class="footer-right">Apache-2.0 · Open Source</div>
+</footer>
+
+</body>
+</html>

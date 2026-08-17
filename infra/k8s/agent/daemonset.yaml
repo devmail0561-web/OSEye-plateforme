@@ -101,7 +101,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: oseye-agent
-          image: ghcr.io/oseye/oseye-agent:v0.1.0-alpha.1
+          image: ghcr.io/devmail0561-web/oseye-agent:v0.1.0-alpha.1
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
