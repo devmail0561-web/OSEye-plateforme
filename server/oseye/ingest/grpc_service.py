@@ -341,6 +341,10 @@ class AgentServiceServicer:
         topic = f"policy:push:{cn}"
         _logger.info("policy_stream_opened", agent_id=cn, topic=topic)
 
+        # _SyncServicerContext has no is_active()/cancelled() — use add_callback + Event.
+        _cancelled = threading.Event()
+        context.add_callback(_cancelled.set)
+
         # [HIGH-3] Use a stdlib queue.Queue to bridge the asyncio bus subscriber
         # (running on self._loop) to this synchronous gRPC generator thread.
         # Avoids creating a new event loop per iteration via asyncio.run().
@@ -351,7 +355,7 @@ class AgentServiceServicer:
                 sub = await self._bus.subscribe(topic)
                 async for msg in sub:
                     msg_queue.put(msg)
-                    if context.cancelled():
+                    if _cancelled.is_set():
                         break
             except Exception as exc:  # noqa: BLE001
                 _logger.error("policy_stream_error", error=str(exc))
@@ -368,7 +372,7 @@ class AgentServiceServicer:
             return
 
         try:
-            while not context.cancelled():
+            while not _cancelled.is_set():
                 try:
                     raw = msg_queue.get(timeout=1.0)
                 except _queue.Empty:
@@ -411,6 +415,10 @@ class AgentServiceServicer:
         topic = f"commands:{cn}"
         _logger.info("commands_stream_opened", agent_id=cn, topic=topic)
 
+        # _SyncServicerContext has no is_active()/cancelled() — use add_callback + Event.
+        _cancelled = threading.Event()
+        context.add_callback(_cancelled.set)
+
         # [HIGH-3] Same queue bridge pattern as ReceivePolicy — no asyncio.run() per iteration.
         cmd_queue: _queue.Queue[bytes | None] = _queue.Queue()
 
@@ -419,7 +427,7 @@ class AgentServiceServicer:
                 sub = await self._bus.subscribe(topic)
                 async for msg in sub:
                     cmd_queue.put(msg)
-                    if context.cancelled():
+                    if _cancelled.is_set():
                         break
             except Exception as exc:  # noqa: BLE001
                 _logger.error("commands_stream_error", error=str(exc))
@@ -436,7 +444,7 @@ class AgentServiceServicer:
             return
 
         try:
-            while not context.cancelled():
+            while not _cancelled.is_set():
                 try:
                     raw = cmd_queue.get(timeout=1.0)
                 except _queue.Empty:
