@@ -30,8 +30,16 @@ export const useAlertStore = create<AlertStoreState>((set, get) => ({
   },
 
   fetchStats: async () => {
-    const data = await alertsApi.stats()
-    set({ stats: data, openCount: data.open })
+    try {
+      const data = await alertsApi.stats()
+      // Vérifier que data est bien un objet AlertStats valide
+      if (data && typeof data.open === 'number' && data.by_severity) {
+        set({ stats: data, openCount: data.open })
+      }
+    } catch (err) {
+      // Ignorer les erreurs (non authentifié, réseau, etc.)
+      console.warn('fetchStats failed:', err)
+    }
   },
 
   appendAlert: (alert) => {

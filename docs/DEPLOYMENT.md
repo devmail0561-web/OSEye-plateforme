@@ -532,6 +532,39 @@ while not context.cancelled():
 
 **Ce bug est corrigé dans la version actuelle.**
 
+### ❌ UI : "Identifiants invalides" alors que les credentials sont corrects
+
+**Problème :** L'UI tourne sur un port différent de l'API (ex: UI sur `5174`, API sur `443`). Le navigateur bloque la requête CORS car l'origine `http://localhost:5174` n'est pas dans la liste `OSEYE_API_CORS_ORIGINS` du serveur.
+
+**Symptôme dans la console navigateur (F12) :**
+```
+Blocage d'une requête multiorigine (Cross-Origin Request) :
+la politique « Same Origin » ne permet pas de consulter la ressource distante
+sur https://localhost/api/v1/auth/token. Raison : échec de la requête CORS.
+```
+
+**Solution :** Démarrer le serveur avec l'origine de l'UI dans `OSEYE_API_CORS_ORIGINS` :
+```bash
+-e 'OSEYE_API_CORS_ORIGINS=["http://localhost:5174","https://oseye.example.com"]'
+```
+
+### ❌ UI : `VITE_API_URL` non pris en compte
+
+**Problème :** L'image Docker UI est buildée sans passer la variable `VITE_API_URL` comme `ARG` au build. Vite intègre les variables d'environnement au moment du build (pas au runtime), donc `VITE_API_URL` passé en `-e` sur `docker run` est ignoré.
+
+**Solution :** Passer `--build-arg` au moment du build :
+```bash
+docker build -t oseye-ui:0.2.0-alpha.1 \
+  --build-arg VITE_API_URL=https://localhost:443 \
+  -f ui/Dockerfile ui/
+```
+
+Le `Dockerfile` de l'UI expose bien ce paramètre depuis `v0.2.0-alpha.1` :
+```dockerfile
+ARG VITE_API_URL=https://localhost:443
+ENV VITE_API_URL=$VITE_API_URL
+```
+
 ---
 
 ## Monitoring et maintenance

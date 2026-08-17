@@ -33,7 +33,7 @@ export default function Dashboard() {
     return () => clearInterval(id)
   }, [fetchStats])
 
-  const severityData = stats
+  const severityData = stats?.by_severity
     ? Object.entries(stats.by_severity).map(([name, value]) => ({ name, value }))
     : []
 
