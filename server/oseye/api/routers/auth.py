@@ -73,67 +73,58 @@ def _hash(pw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# In-process user store — configurable via environment variables.
-# Override OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD in production.
+# User store — loaded from /etc/oseye/users.json if present (managed by
+# `oseye-server user create/passwd/delete`), otherwise falls back to
+# OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD environment variables.
 # ---------------------------------------------------------------------------
 
-# L-02: treat an empty env var the same as "not set" and log an explicit warning
-# so that a misconfigured container (OSEYE_ADMIN_PASSWORD=) doesn't silently
-# activate the weak dev default without any trace in the logs.
-_ADMIN_PW_ENV = os.getenv("OSEYE_ADMIN_PASSWORD")
-if _ADMIN_PW_ENV == "":
-    logger.warning(
-        "OSEYE_ADMIN_PASSWORD is set but empty — "
-        "falling back to dev default 'admin123'"
-    )
-_ADMIN_PW_RAW: str = _ADMIN_PW_ENV if _ADMIN_PW_ENV else "admin123"
+import json as _json
+from pathlib import Path as _Path
 
-_ANALYST_PW_ENV = os.getenv("OSEYE_ANALYST_PASSWORD")
-if _ANALYST_PW_ENV == "":
-    logger.warning(
-        "OSEYE_ANALYST_PASSWORD is set but empty — "
-        "falling back to dev default 'analyst123'"
-    )
-_ANALYST_PW_RAW: str = _ANALYST_PW_ENV if _ANALYST_PW_ENV else "analyst123"
-
-# C-1: in production, weak/missing passwords are a fatal misconfiguration.
+_USERS_FILE = _Path(os.getenv("OSEYE_USERS_FILE", "/etc/oseye/users.json"))
 _OSEYE_ENV = os.getenv("OSEYE_ENV", "development").lower()
 _is_production = _OSEYE_ENV == "production"
 
-if _ADMIN_PW_RAW in _WEAK_DEFAULTS:
-    if _is_production:
-        raise RuntimeError(
-            "FATAL: OSEYE_ADMIN_PASSWORD is not set or uses the dev default 'admin123'. "
-            "Set a strong password via the OSEYE_ADMIN_PASSWORD environment variable before "
-            "running in production (OSEYE_ENV=production)."
-        )
-    logger.critical(
-        "OSEYE_ADMIN_PASSWORD is missing or uses a weak dev default — "
-        "set a strong password before deploying to production"
-    )
-if _ANALYST_PW_RAW in _WEAK_DEFAULTS:
-    if _is_production:
-        raise RuntimeError(
-            "FATAL: OSEYE_ANALYST_PASSWORD is not set or uses the dev default 'analyst123'. "
-            "Set a strong password via the OSEYE_ANALYST_PASSWORD environment variable before "
-            "running in production (OSEYE_ENV=production)."
-        )
-    logger.critical(
-        "OSEYE_ANALYST_PASSWORD is missing or uses a weak dev default — "
-        "set a strong password before deploying to production"
-    )
+def _load_users() -> dict[str, dict[str, Any]]:
+    """Load users from file, fall back to env vars for backward compatibility."""
+    if _USERS_FILE.exists():
+        try:
+            data = _json.loads(_USERS_FILE.read_text())
+            if data:
+                logger.info("auth: loaded %d user(s) from %s", len(data), _USERS_FILE)
+                return data
+        except Exception as exc:
+            logger.error("auth: failed to read %s: %s — falling back to env vars", _USERS_FILE, exc)
 
-# Pre-hashed at startup; also accept the dev default "password" for tests.
-_USERS: dict[str, dict[str, Any]] = {
-    "admin": {
-        "hashed_password": _hash(_ADMIN_PW_RAW),
-        "roles": ["admin", "analyst"],
-    },
-    "analyst": {
-        "hashed_password": _hash(_ANALYST_PW_RAW),
-        "roles": ["analyst"],
-    },
-}
+    # Fallback: env vars (backward compat and dev mode)
+    # L-02: treat empty env var as "not set"
+    admin_pw_env = os.getenv("OSEYE_ADMIN_PASSWORD")
+    if admin_pw_env == "":
+        logger.warning("OSEYE_ADMIN_PASSWORD is set but empty — falling back to dev default")
+    admin_pw = admin_pw_env if admin_pw_env else "admin123"
+
+    analyst_pw_env = os.getenv("OSEYE_ANALYST_PASSWORD")
+    if analyst_pw_env == "":
+        logger.warning("OSEYE_ANALYST_PASSWORD is set but empty — falling back to dev default")
+    analyst_pw = analyst_pw_env if analyst_pw_env else "analyst123"
+
+    # C-1: in production, weak/missing passwords are fatal
+    for pw, name in [(admin_pw, "OSEYE_ADMIN_PASSWORD"), (analyst_pw, "OSEYE_ANALYST_PASSWORD")]:
+        if pw in _WEAK_DEFAULTS:
+            if _is_production:
+                raise RuntimeError(
+                    f"FATAL: {name} is not set or uses a weak dev default. "
+                    "Set a strong password or run 'oseye-server user create' before "
+                    "running in production (OSEYE_ENV=production)."
+                )
+            logger.critical("%s is missing or uses a weak dev default", name)
+
+    return {
+        "admin":   {"hashed_password": _hash(admin_pw),   "roles": ["admin", "analyst"]},
+        "analyst": {"hashed_password": _hash(analyst_pw), "roles": ["analyst"]},
+    }
+
+_USERS: dict[str, dict[str, Any]] = _load_users()
 
 
 def _authenticate(username: str, password: str) -> dict[str, Any] | None:
