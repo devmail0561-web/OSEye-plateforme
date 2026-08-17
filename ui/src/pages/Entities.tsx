@@ -108,7 +108,7 @@ export default function Entities() {
                   {e.alert_count}
                 </td>
                 <td className="px-3 py-2 text-gray-500 dark:text-gray-400 text-xs">
-                  {e.last_seen ? <RelativeTime ts={e.last_seen} /> : '—'}
+                  {e.last_seen ? <RelativeTime iso={e.last_seen} /> : '—'}
                 </td>
               </tr>
             ))}

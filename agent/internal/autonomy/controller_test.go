@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/hostprofile"
-	"github.com/oseye/agent/internal/localrules"
-	"github.com/oseye/agent/internal/responder"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/hostprofile"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/localrules"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
 )
 
 func setupController(t *testing.T, rules []localrules.Rule, autonomyLevel string) (*Controller, *localrules.Store) {

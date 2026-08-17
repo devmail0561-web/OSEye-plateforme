@@ -58,13 +58,13 @@ Elle collecte les événements système en temps réel (eBPF, auditd, procfs, r�
                                       [SQLite / PostgreSQL / ClickHouse]
 ```
 
-Voir la [documentation complète](https://oseye.github.io/oseye/) ou [`docs/internal/ARCHITECTURE.md`](docs/internal/ARCHITECTURE.md) pour les détails techniques.
+Voir la [documentation complète](https://devmail0561-web.github.io/OSEye-plateforme/) pour les détails techniques.
 
 ## Démarrage rapide
 
 ```bash
 # Prérequis : Go 1.23+, Python 3.12+, make
-git clone https://github.com/your-org/oseye.git
+git clone https://github.com/devmail0561-web/OSEye-plateforme.git
 cd oseye
 
 # Générer certificats dev + stubs Protobuf
@@ -164,12 +164,15 @@ Toutes les valeurs sont validées strictement au démarrage (ports numériques, 
 
 | Document | Description |
 |----------|-------------|
-| [Site officiel](https://oseye.github.io/oseye/) | Documentation complète — installation, configuration, déploiement |
+| [Site officiel](https://devmail0561-web.github.io/OSEye-plateforme/) | Documentation complète — installation, configuration, déploiement |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | **Guide de déploiement production** — Docker, PKI, secrets, scaling |
+| [`docs/AGENT_CLI.md`](docs/AGENT_CLI.md) | **Guide CLI agent** — `oseye-agent` vs `oseye-config`, enrollment, configuration |
+| [`docs/SERVER_CLI.md`](docs/SERVER_CLI.md) | **Guide CLI serveur** — init, setup, validation, variables d'environnement |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | **Dépannage** — 7 problèmes courants avec solutions |
 | [`docs/DESCRIPTION.md`](docs/DESCRIPTION.md) | Description fonctionnelle du projet |
 | [`SECURITY.md`](SECURITY.md) | Politique de sécurité — signalement, mécanismes CIA |
 | [`CHANGELOG.md`](CHANGELOG.md) | Historique des versions |
 | [`sdk/README.md`](sdk/README.md) | Documentation du Plugin SDK |
-| [`docs/internal/`](docs/internal/) | Documentation développeur (architecture, plans, progression) |
 
 ## Licence
 

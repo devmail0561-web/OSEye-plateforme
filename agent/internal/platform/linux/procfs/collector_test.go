@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/platform/linux/procfs"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/linux/procfs"
 )
 
 func TestProcfsCollector_EmitsEvents(t *testing.T) {

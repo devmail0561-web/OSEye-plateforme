@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/collector"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 func TestDispatchUnknownCommand(t *testing.T) {

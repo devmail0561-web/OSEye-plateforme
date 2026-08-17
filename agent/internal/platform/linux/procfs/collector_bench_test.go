@@ -8,7 +8,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 // BenchmarkScan_Initial measures the cost of the first scan (full snapshot of all

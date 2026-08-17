@@ -16,11 +16,11 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/buffer"
-	"github.com/oseye/agent/internal/chain"
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/transport"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/buffer"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/chain"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/transport"
 )
 
 const bufSize = 1 << 20 // 1 MB in-memory connection

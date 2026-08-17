@@ -14,7 +14,7 @@
 ### Processus de divulgation responsable
 
 1. **Envoyer un rapport privé** via GitHub Security Advisories :  
-   `https://github.com/your-org/oseye/security/advisories/new`  
+   `https://github.com/devmail0561-web/OSEye-plateforme/security/advisories/new`  
    ou par email à : `security@oseye.io` (clé PGP disponible sur la page GitHub)
 
 2. **Inclure dans le rapport :**
@@ -53,10 +53,9 @@
 
 ## Architecture de sécurité
 
-Les mécanismes de sécurité implémentés dans OSEye sont décrits dans :  
-[`docs/ARCHITECTURE.md` — Section 5 : Architecture de sécurité](docs/ARCHITECTURE.md)
+Les mécanismes de sécurité implémentés dans OSEye incluent :
 
-Points clés :
+**Points clés :**
 - **Container non-root** — `USER oseye` dans le Dockerfile ; le volume `/etc/oseye` doit être accessible au groupe `oseye` (`chown root:oseye /etc/oseye && chmod 750 /etc/oseye` sur l'hôte)
 - **PKI interne** — mTLS strict entre agent et server (refus démarrage si certs absents)
 - **CA key passphrase** — `OSEYE_TLS_CA_KEY_PASSWORD` active le chiffrement AES de la clé CA sur disque

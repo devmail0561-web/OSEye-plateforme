@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oseye/agent/internal/hostprofile"
-	"github.com/oseye/agent/internal/localrules"
-	"github.com/oseye/agent/internal/responder"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/hostprofile"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/localrules"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
 )
 
 // Controller is the autonomous decision engine. It evaluates every event

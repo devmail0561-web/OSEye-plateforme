@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/backoff"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
 )
 
 // Reporter streams ActionReport messages to the server via the ReportActions RPC.

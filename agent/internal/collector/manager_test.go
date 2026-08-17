@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 // mockCollector emits a fixed number of events then blocks until stopped.

@@ -310,10 +310,15 @@ package-agent: $(DIST_DIR)/oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-config-$(PL
 	ln -sf oseye-config-$(PLATFORM) $(DIST_DIR)/oseye-config
 	VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
 	  --config packaging/nfpm-agent.yaml \
+	  --packager deb \
+	  --target $(DIST_DIR)
+	VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+	  --config packaging/nfpm-agent.yaml \
+	  --packager rpm \
 	  --target $(DIST_DIR)
 	rm -f $(DIST_DIR)/oseye-agent $(DIST_DIR)/oseye-config
 	@echo "==> Packages:"
-	@ls -lh $(DIST_DIR)/oseye-agent_* 2>/dev/null || true
+	@ls -lh $(DIST_DIR)/oseye-agent_* $(DIST_DIR)/oseye-agent-*.rpm 2>/dev/null || true
 
 # Generate SHA256SUMS for all dist artifacts
 checksums:
@@ -323,9 +328,9 @@ checksums:
 # Build production Docker images for the server stack
 package-server:
 	@echo "==> Build image oseye-server:$(VERSION)"
-	docker build -t oseye-server:$(VERSION) server/
+	DOCKER_HOST=unix://$(HOME)/.docker/desktop/docker.sock docker build -t oseye-server:$(VERSION) server/
 	@echo "==> Build image oseye-ui:$(VERSION)"
-	docker build -t oseye-ui:$(VERSION) ui/
+	DOCKER_HOST=unix://$(HOME)/.docker/desktop/docker.sock docker build -t oseye-ui:$(VERSION) ui/
 	@echo "==> Images prêtes. Compose de prod: infra/docker/docker-compose.prod.yml"
 
 package-all: package-agent package-server

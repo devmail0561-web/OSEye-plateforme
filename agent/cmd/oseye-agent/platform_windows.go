@@ -2,4 +2,4 @@
 
 package main
 
-import _ "github.com/oseye/agent/internal/platform/windows" // register WindowsDriver via init()
+import _ "github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows" // register WindowsDriver via init()

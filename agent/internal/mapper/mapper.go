@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/collector"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 // EventMapper translates a collector.RawEvent into a fully-populated

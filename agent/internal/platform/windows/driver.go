@@ -5,15 +5,15 @@ package windows
 import (
 	"log/slog"
 
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/platform"
-	"github.com/oseye/agent/internal/platform/windows/eventlog"
-	"github.com/oseye/agent/internal/platform/windows/etw"
-	"github.com/oseye/agent/internal/platform/windows/fswatch"
-	"github.com/oseye/agent/internal/platform/windows/registry"
-	"github.com/oseye/agent/internal/platform/windows/toolhelp32"
-	"github.com/oseye/agent/internal/platform/windows/winnetstat"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows/eventlog"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows/etw"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows/fswatch"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows/registry"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows/toolhelp32"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/windows/winnetstat"
 )
 
 // WindowsDriver is the PlatformDriver implementation for Windows.

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 func TestSyslogCollector_Creation(t *testing.T) {

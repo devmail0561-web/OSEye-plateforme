@@ -1,7 +1,7 @@
 """Authentication router — /api/v1/auth/token, /api/v1/auth/refresh.
 
 SEC-PREV-002: /auth/token is rate-limited to 5 requests/minute per IP.
-SEC-AUTH-001: Passwords are verified with bcrypt via passlib.
+SEC-AUTH-001: Passwords are verified with bcrypt.
 """
 
 from __future__ import annotations
@@ -12,17 +12,15 @@ import time
 from collections import OrderedDict
 from typing import Any
 
+import bcrypt
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from passlib.context import CryptContext
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # F2 / SEC-003: detect weak or missing credentials at startup
 _WEAK_DEFAULTS: frozenset[str] = frozenset({"admin123", "analyst123"})
@@ -69,7 +67,9 @@ def _hash(pw: str) -> str:
     # bcrypt silently truncates at 72 bytes; enforce explicitly to avoid
     # silent auth failures when passwords differ only after byte 72.
     encoded = pw.encode("utf-8")[:72]
-    return str(_pwd_ctx.hash(encoded))
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(encoded, salt)
+    return hashed.decode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -139,15 +139,20 @@ _USERS: dict[str, dict[str, Any]] = {
 def _authenticate(username: str, password: str) -> dict[str, Any] | None:
     """Return the user record if credentials are valid, else None.
 
-    H-03: when the username is not found, call dummy_verify() to consume the
+    H-03: when the username is not found, call dummy verify to consume the
     same time as a real bcrypt check and prevent timing-based username enumeration.
     """
     user = _USERS.get(username)
+    pw_bytes = password.encode("utf-8")[:72]
+
     if user is None:
         # H-03: uniform response time — prevents username enumeration via timing.
-        _pwd_ctx.dummy_verify()
+        # Use a dummy hash to maintain constant time
+        bcrypt.checkpw(pw_bytes, bcrypt.gensalt())
         return None
-    if not _pwd_ctx.verify(password, user["hashed_password"]):
+
+    stored_hash = user["hashed_password"].encode("utf-8")
+    if not bcrypt.checkpw(pw_bytes, stored_hash):
         return None
     return user
 

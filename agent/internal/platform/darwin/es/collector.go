@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 // esAvailable is set to true at init() if the EndpointSecurity framework

@@ -61,6 +61,7 @@ export default function ApiKeys() {
         name:       created.name,
         roles:      created.roles,
         created_by: '',
+        created_at: new Date().toISOString(),
         expires_at: body.expires_at ?? null,
         revoked:    false,
       }])

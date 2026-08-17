@@ -6,12 +6,17 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml .
-RUN uv pip install --system --no-cache -e .
+# Install SDK first (server depends on it)
+COPY sdk/ /tmp/sdk/
+RUN uv pip install --system --no-cache /tmp/sdk && rm -rf /tmp/sdk
 
-COPY oseye/ oseye/
-COPY workers/ workers/
-COPY gen/ gen/
+# Install server
+COPY server/pyproject.toml .
+COPY server/oseye/ oseye/
+COPY server/workers/ workers/
+COPY server/gen/ gen/
+
+RUN uv pip install --system --no-cache -e .
 
 # Non-root service user. The /etc/oseye volume files written by
 # 'oseye-server init/setup' must be owned or group-accessible by this user.

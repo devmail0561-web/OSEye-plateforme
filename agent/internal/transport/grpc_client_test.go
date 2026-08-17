@@ -14,10 +14,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/chain"
-	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/signer"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/chain"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/signer"
 )
 
 // ── batch signature tests ──────────────────────────────────────────────────

@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/collector"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 // ProfileHandler applies SurveillanceProfile updates to the collector manager.

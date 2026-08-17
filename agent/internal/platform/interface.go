@@ -1,8 +1,8 @@
 package platform
 
 import (
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
 )
 
 // PlatformDriver is the OS-specific entry point.

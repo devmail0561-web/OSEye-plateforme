@@ -80,6 +80,5 @@ docs/internal/
 tools/audit_state.json
 tools/audit_reports/
 
-# Site Astro + docs — local seulement
+# Site Astro — local seulement
 site/
-docs/

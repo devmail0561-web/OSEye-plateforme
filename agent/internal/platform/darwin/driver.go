@@ -5,14 +5,14 @@ package darwin
 import (
 	"log/slog"
 
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/platform"
-	"github.com/oseye/agent/internal/platform/darwin/darwinnet"
-	"github.com/oseye/agent/internal/platform/darwin/es"
-	"github.com/oseye/agent/internal/platform/darwin/kqueue"
-	"github.com/oseye/agent/internal/platform/darwin/ps"
-	"github.com/oseye/agent/internal/platform/darwin/unifiedlog"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/darwin/darwinnet"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/darwin/es"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/darwin/kqueue"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/darwin/ps"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform/darwin/unifiedlog"
 )
 
 // DarwinDriver is the PlatformDriver implementation for macOS.

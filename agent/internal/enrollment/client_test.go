@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/enrollment"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/enrollment"
 )
 
 func TestNeedsEnrollmentNoToken(t *testing.T) {

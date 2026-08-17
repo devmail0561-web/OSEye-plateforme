@@ -6,9 +6,9 @@ package platform_test
 import (
 	"context"
 
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/platform"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform"
 )
 
 // mockDriver is a minimal PlatformDriver used only to verify the interface compiles.

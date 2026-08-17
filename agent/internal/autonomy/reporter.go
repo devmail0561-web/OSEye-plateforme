@@ -10,8 +10,8 @@ import (
 	"log/slog"
 	"time"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/responder"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
 )
 
 // decisionPayload is the minimal payload sent to the server for a decision.

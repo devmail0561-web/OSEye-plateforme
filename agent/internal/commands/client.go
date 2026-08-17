@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/backoff"
-	"github.com/oseye/agent/internal/collector"
-	"github.com/oseye/agent/internal/config"
-	"github.com/oseye/agent/internal/responder"
-	"github.com/oseye/agent/internal/snapshot"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/snapshot"
 )
 
 const (

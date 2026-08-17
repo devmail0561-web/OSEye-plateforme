@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	gen "github.com/oseye/agent/gen"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
 )
 
 func openMemory(t *testing.T) *Buffer {

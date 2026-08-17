@@ -3,16 +3,13 @@ import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
 
 let capturedAuth: string | null = null
-let capturedBody: Record<string, unknown> | null = null
 
 const server = setupServer(
   http.get('*/api/v1/health', ({ request }) => {
     capturedAuth = request.headers.get('authorization')
     return HttpResponse.json({ status: 'ok', service: 'test' })
   }),
-  http.post('*/api/v1/auth/token', async ({ request }) => {
-    const text = await request.text()
-    capturedBody = Object.fromEntries(new URLSearchParams(text))
+  http.post('*/api/v1/auth/token', async () => {
     return HttpResponse.json({ access_token: 'fresh', token_type: 'bearer' })
   }),
 )
@@ -21,7 +18,6 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterEach(() => {
   server.resetHandlers()
   capturedAuth = null
-  capturedBody = null
   vi.clearAllMocks()
 })
 afterAll(() => server.close())

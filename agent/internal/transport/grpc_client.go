@@ -12,10 +12,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/backoff"
-	"github.com/oseye/agent/internal/chain"
-	"github.com/oseye/agent/internal/config"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/chain"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
 )
 
 const (

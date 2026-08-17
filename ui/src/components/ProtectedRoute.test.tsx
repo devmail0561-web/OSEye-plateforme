@@ -10,9 +10,19 @@ import { useAuthStore } from '@/stores/authStore'
 import ProtectedRoute from './ProtectedRoute'
 
 function makeRouter(isAuthenticated: boolean) {
+  const mockState = {
+    accessToken: isAuthenticated ? 'test-token' : null,
+    expiresAt: isAuthenticated ? Date.now() + 3600000 : null,
+    isAuthenticated,
+    roles: isAuthenticated ? ['analyst'] : [],
+    login: vi.fn(),
+    logout: vi.fn(),
+    setToken: vi.fn(),
+    getToken: vi.fn(() => isAuthenticated ? 'test-token' : null),
+  }
+
   vi.mocked(useAuthStore).mockImplementation(
-    (selector: (s: { isAuthenticated: boolean }) => unknown) =>
-      selector({ isAuthenticated }),
+    (selector: any) => selector(mockState),
   )
 
   return createMemoryRouter([

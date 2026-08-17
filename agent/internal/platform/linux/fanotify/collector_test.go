@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 func TestFanotifyCollector_Creation(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/backoff"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
 )
 
 func TestNextNeverExceedsMax(t *testing.T) {

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, GitBranch } from 'lucide-react'
-import { chainApi, type UniversalEvent } from '@/api/client'
-import { Spinner } from '@/components/ui'
+import { chainApi } from '@/api/client'
+import type { UniversalEvent } from '@/api/client'
 import RelativeTime from '@/components/RelativeTime'
 
 const SEV_COLOR: Record<string, string> = {
@@ -84,7 +84,7 @@ export default function EventChain() {
                       )}
                     </div>
                     <div className="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
-                      <RelativeTime ts={new Date(ev.timestamp_ns / 1_000_000).toISOString()} />
+                      <RelativeTime iso={new Date(ev.timestamp_ns / 1_000_000).toISOString()} />
                     </div>
                   </div>
 

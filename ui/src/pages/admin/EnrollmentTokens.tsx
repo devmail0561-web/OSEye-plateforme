@@ -5,10 +5,10 @@ import type { EnrollmentToken } from '@/api/client'
 import { Badge, Button, EmptyState, Input, Spinner } from '@/components/ui'
 import RelativeTime from '@/components/RelativeTime'
 
-function expiresVariant(expiresAt: string): 'red' | 'yellow' | 'green' {
+function expiresVariant(expiresAt: string): 'red' | 'amber' | 'green' {
   const ms = new Date(expiresAt).getTime() - Date.now()
   if (ms < 3_600_000) return 'red'
-  if (ms < 21_600_000) return 'yellow'
+  if (ms < 21_600_000) return 'amber'
   return 'green'
 }
 

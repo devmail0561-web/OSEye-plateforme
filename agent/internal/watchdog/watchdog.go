@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 )
 
 const emergencyFactor = 0.1

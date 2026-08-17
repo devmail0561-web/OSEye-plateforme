@@ -1,4 +1,4 @@
-module github.com/oseye/agent
+module github.com/devmail0561-web/OSEye-plateforme/agent
 
 go 1.25.0
 

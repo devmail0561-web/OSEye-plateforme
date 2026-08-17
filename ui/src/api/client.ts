@@ -25,6 +25,22 @@ import type {
   ApiKeyResponse,
 } from '@/types'
 
+// Re-export commonly used types for convenience
+export type {
+  UniversalEvent,
+  Alert,
+  Decision,
+  ForensicCase,
+  CaseNote,
+  EvidenceItem,
+  Rule,
+  Incident,
+  TokenResponse,
+  PaginatedResponse,
+  ApiKeyCreated,
+  ApiKeyResponse,
+}
+
 // ── Axios instance ────────────────────────────────────────────────────────────
 
 const api: AxiosInstance = axios.create({

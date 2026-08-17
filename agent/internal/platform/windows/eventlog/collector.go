@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/oseye/agent/internal/collector"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 	"golang.org/x/sys/windows"
 )
 

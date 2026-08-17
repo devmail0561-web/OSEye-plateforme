@@ -18,7 +18,7 @@ license: "Apache-2.0"
 
 contents:
   # Agent binary
-  - src: dist/oseye-agent
+  - src: dist/oseye-agent-linux-amd64
     dst: /usr/bin/oseye-agent
     file_info:
       mode: 0755
@@ -26,7 +26,7 @@ contents:
       group: root
 
   # Config CLI tool
-  - src: dist/oseye-config
+  - src: dist/oseye-config-linux-amd64
     dst: /usr/bin/oseye-config
     file_info:
       mode: 0755
@@ -79,10 +79,6 @@ scripts:
   postinstall: packaging/scripts/postinst
   preremove: packaging/scripts/prerm
   postremove: packaging/scripts/postrm
-
-deb:
-  fields:
-    Installed-Size: "20000"
 
 rpm:
   group: "System Environment/Daemons"

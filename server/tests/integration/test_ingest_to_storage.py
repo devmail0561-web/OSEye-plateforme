@@ -38,7 +38,7 @@ from oseye.storage.migrations import run_migrations
 from oseye.storage.repositories.events import SQLEventRepository
 from oseye.workers.storage_writer import StorageWriter
 
-TEST_SECRET = "integration-test-hs256"
+TEST_SECRET = "integration-test-hs256-secret-min32bytes"
 TEST_CN = str(uuid.uuid4())  # simulated mTLS CN = agent UUID
 
 

@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"time"
 
-	gen "github.com/oseye/agent/gen"
-	"github.com/oseye/agent/internal/backoff"
+	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
 )
 
 // PolicyClient maintains the server→agent SurveillanceProfile stream and

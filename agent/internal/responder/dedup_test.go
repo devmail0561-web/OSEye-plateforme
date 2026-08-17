@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oseye/agent/internal/responder"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
 )
 
 func TestDeduplicatorAllowsFirst(t *testing.T) {

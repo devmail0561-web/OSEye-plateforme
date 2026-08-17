@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	"github.com/oseye/agent/internal/config"
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
 )
 
 var version = "dev"
