@@ -398,6 +398,51 @@ docker logs oseye-nginx
 
 ---
 
+### 11. Events non reçus par le serveur — "send batch failed"
+
+**Symptômes :**
+```
+{"msg":"send batch failed — events buffered","err":"max retries exceeded: 15 attempts","count":204}
+{"msg":"send batch failed — events buffered","err":"context deadline exceeded","count":10}
+```
+Côté serveur :
+```
+agent_key_not_registered cn=<agent>
+```
+Aucun log `batch_ingested` dans les logs serveur.
+
+**Cause :**
+`require_agent_keys=True` était hardcodé dans le servicer gRPC, mais le répertoire `/etc/oseye/agent_keys` n'existe pas. Résultat : `agent_public_key=None` → `context.abort(UNAUTHENTICATED)` sur chaque appel IngestEvents → timeout côté agent.
+
+**Ce bug est corrigé depuis v0.2.0-alpha.1.** Le serveur active désormais `require_agent_keys=True` uniquement si des fichiers `.pub` sont présents dans `agent_keys_dir`.
+
+**Vérification :**
+```bash
+# Les events doivent apparaître dans les logs serveur
+docker logs oseye-server | grep batch_ingested
+# → batch_ingested accepted=N cn=<agent> rejected=0
+
+# Si toujours absent, vérifier le statut de require_agent_keys
+docker logs oseye-server | grep "agent_key\|enforcement"
+```
+
+---
+
+### 12. gRPC streams policy/commands échouent — AttributeError
+
+**Symptômes :**
+```
+{"msg":"commands stream error, reconnecting","err":"rpc error: code = Unknown desc = Unexpected
+<class 'AttributeError'>: 'grpc._cython.cygrpc._SyncServicerContext' object has no attribute 'cancelled'"}
+```
+
+**Cause :**
+`_SyncServicerContext` de grpcio n'expose ni `is_active()` ni `cancelled()`. La seule API disponible pour détecter la déconnexion client est `add_callback()`.
+
+**Ce bug est corrigé depuis v0.2.0-alpha.1.** Les méthodes `ReceivePolicy` et `StreamCommands` utilisent maintenant `threading.Event` + `context.add_callback(_cancelled.set)`.
+
+---
+
 ## Contacts
 
 Pour signaler un bug ou demander de l'aide :

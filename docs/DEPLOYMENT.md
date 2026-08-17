@@ -548,6 +548,18 @@ sur https://localhost/api/v1/auth/token. Raison : échec de la requête CORS.
 -e 'OSEYE_API_CORS_ORIGINS=["http://localhost:5174","https://oseye.example.com"]'
 ```
 
+### ❌ Events non reçus — "send batch failed" sans erreur visible
+
+**Problème :** Le serveur tourne sans le répertoire `/etc/oseye/agent_keys`. Avec `require_agent_keys=True` (ancien défaut), toutes les requêtes `IngestEvents` sont rejetées silencieusement avec `UNAUTHENTICATED`. L'agent voit des timeouts.
+
+**Symptôme serveur :**
+```
+agent_key_not_registered cn=<agent>
+```
+Aucun log `batch_ingested`.
+
+**Solution (v0.2.0-alpha.1+) :** Ce comportement est corrigé — `require_agent_keys` est activé uniquement quand des fichiers `.pub` sont présents dans `agent_keys_dir`. Pour les versions antérieures, supprimer le répertoire `agent_keys` vide ou y placer les clés publiques des agents.
+
 ### ❌ UI : `VITE_API_URL` non pris en compte
 
 **Problème :** L'image Docker UI est buildée sans passer la variable `VITE_API_URL` comme `ARG` au build. Vite intègre les variables d'environnement au moment du build (pas au runtime), donc `VITE_API_URL` passé en `-e` sur `docker run` est ignoré.
