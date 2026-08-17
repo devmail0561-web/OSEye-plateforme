@@ -351,7 +351,7 @@ class AgentServiceServicer:
                 sub = await self._bus.subscribe(topic)
                 async for msg in sub:
                     msg_queue.put(msg)
-                    if context.is_active() is False:
+                    if context.cancelled():
                         break
             except Exception as exc:  # noqa: BLE001
                 _logger.error("policy_stream_error", error=str(exc))
@@ -368,7 +368,7 @@ class AgentServiceServicer:
             return
 
         try:
-            while context.is_active() is not False:
+            while not context.cancelled():
                 try:
                     raw = msg_queue.get(timeout=1.0)
                 except _queue.Empty:
@@ -419,7 +419,7 @@ class AgentServiceServicer:
                 sub = await self._bus.subscribe(topic)
                 async for msg in sub:
                     cmd_queue.put(msg)
-                    if context.is_active() is False:
+                    if context.cancelled():
                         break
             except Exception as exc:  # noqa: BLE001
                 _logger.error("commands_stream_error", error=str(exc))
@@ -436,7 +436,7 @@ class AgentServiceServicer:
             return
 
         try:
-            while context.is_active() is not False:
+            while not context.cancelled():
                 try:
                     raw = cmd_queue.get(timeout=1.0)
                 except _queue.Empty:

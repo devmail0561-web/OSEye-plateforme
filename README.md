@@ -168,7 +168,7 @@ Toutes les valeurs sont validées strictement au démarrage (ports numériques, 
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | **Guide de déploiement production** — Docker, PKI, secrets, scaling |
 | [`docs/AGENT_CLI.md`](docs/AGENT_CLI.md) | **Guide CLI agent** — `oseye-agent` vs `oseye-config`, enrollment, configuration |
 | [`docs/SERVER_CLI.md`](docs/SERVER_CLI.md) | **Guide CLI serveur** — init, setup, validation, variables d'environnement |
-| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | **Dépannage** — 7 problèmes courants avec solutions |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | **Dépannage** — 10 problèmes courants avec solutions |
 | [`docs/DESCRIPTION.md`](docs/DESCRIPTION.md) | Description fonctionnelle du projet |
 | [`SECURITY.md`](SECURITY.md) | Politique de sécurité — signalement, mécanismes CIA |
 | [`CHANGELOG.md`](CHANGELOG.md) | Historique des versions |

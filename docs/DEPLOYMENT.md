@@ -436,6 +436,103 @@ sudo systemctl restart oseye-agent
 
 ---
 
+## Pièges courants à éviter
+
+### ❌ Secrets trop courts
+
+**Problème :** `OSEYE_SECRET_KEY` ou `OSEYE_CHECKPOINT_HMAC_KEY` trop courts.
+
+```bash
+# ❌ Trop court (29 chars)
+OSEYE_SECRET_KEY=test-secret-min32b-local-only
+
+# ✅ Minimum 32 caractères
+OSEYE_SECRET_KEY=$(openssl rand -hex 16)  # 32 chars hex
+OSEYE_CHECKPOINT_HMAC_KEY=$(openssl rand -hex 32)  # 64 chars hex
+```
+
+**Erreur typique :**
+```
+RuntimeError: OSEYE_SECRET_KEY is too short (29 chars). Minimum 32 characters required.
+RuntimeError: OSEYE_CHECKPOINT_HMAC_KEY must be a hex string
+```
+
+### ❌ Certificat sans SANs
+
+**Problème :** Le certificat serveur n'a pas de Subject Alternative Names.
+
+```bash
+# ❌ Sans SANs
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -out server.crt
+
+# ✅ Avec SANs (obligatoire pour Go 1.15+)
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -out server.crt \
+  -extfile <(echo "subjectAltName=DNS:localhost,DNS:oseye-server,IP:127.0.0.1")
+```
+
+**Erreur typique :**
+```
+x509: certificate relies on legacy Common Name field, use SANs instead
+```
+
+### ❌ Permissions certificats agent
+
+**Problème :** L'agent ne peut pas lire ses certificats après enrollment.
+
+```bash
+# ❌ Enrollment root, agent tourne sous user oseye
+sudo oseye-config enroll ...
+# → certificats créés avec owner root:root
+
+# ✅ Corriger après enrollment
+sudo chown -R oseye:oseye /etc/oseye/certs/
+sudo chmod 640 /etc/oseye/certs/agent.key
+sudo chmod 644 /etc/oseye/certs/{agent.crt,ca.crt}
+```
+
+**Erreur typique :**
+```
+"grpc client init failed — running in buffer-only mode"
+"err":"open /etc/oseye/certs/agent.key: permission denied"
+```
+
+### ❌ Token d'enrollment expiré
+
+**Problème :** Tokens créés par `oseye-server init` expirent après 24h.
+
+```bash
+# ❌ Token > 24h
+oseye-config enroll --token <OLD_TOKEN>
+# → "Invalid or expired enrollment token"
+
+# ✅ Créer un nouveau token
+docker exec oseye-server python -c "
+from oseye.enrollment_store import EnrollmentStore
+import asyncio
+# Créer nouveau token (TODO: ajouter CLI oseye-server enrollment token create)
+"
+```
+
+**Solution temporaire :** Relancer `oseye-server init` génère un nouveau token.
+
+### ❌ gRPC context.is_active()
+
+**Problème :** Code serveur utilise `context.is_active()` qui n'existe pas dans grpcio.
+
+```python
+# ❌ Incorrect (AttributeError)
+while context.is_active() is not False:
+    ...
+
+# ✅ Correct
+while not context.cancelled():
+    ...
+```
+
+**Ce bug est corrigé dans la version actuelle.**
+
+---
+
 ## Monitoring et maintenance
 
 ### Logs serveur

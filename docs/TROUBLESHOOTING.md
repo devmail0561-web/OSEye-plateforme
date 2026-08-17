@@ -227,6 +227,120 @@ OSEYE_SECRET_KEY=b067a56cdd711e290932259814c8086f
 
 ---
 
+### 8. Agent : permission denied sur les certificats
+
+**Symptômes :**
+```
+"grpc client init failed — running in buffer-only mode"
+"err":"open /etc/oseye/certs/agent.key: permission denied"
+```
+
+**Cause :**
+L'agent tourne sous l'utilisateur `oseye` mais les certificats créés par `oseye-config enroll` (lancé en root) ont des permissions restrictives par défaut.
+
+**Solution :**
+Corriger les permissions après enrollment :
+```bash
+sudo chown -R oseye:oseye /etc/oseye/certs/
+sudo chmod 640 /etc/oseye/certs/agent.key
+sudo chmod 644 /etc/oseye/certs/agent.crt
+sudo chmod 644 /etc/oseye/certs/ca.crt
+sudo systemctl restart oseye-agent
+```
+
+**Vérification :**
+```bash
+sudo journalctl -u oseye-agent -f
+# Doit afficher "collectors started" sans erreur "permission denied"
+```
+
+---
+
+### 9. Serveur : gRPC streams échouent avec AttributeError
+
+**Symptômes :**
+```
+rpc error: code = Unknown desc = Unexpected <class 'AttributeError'>: 
+'grpc._cython.cygrpc._SyncServicerContext' object has no attribute 'is_active'
+```
+
+Logs agent :
+```
+"policy stream error, reconnecting"
+"commands stream error, reconnecting"
+```
+
+**Cause :**
+`context.is_active()` n'existe pas dans grpcio. La méthode correcte est `context.cancelled()`.
+
+**Solution :**
+Modifier `server/oseye/ingest/grpc_service.py` :
+```python
+# ❌ Incorrect
+while context.is_active() is not False:
+if context.is_active() is False:
+
+# ✅ Correct
+while not context.cancelled():
+if context.cancelled():
+```
+
+Rebuild et redéployer :
+```bash
+docker build -t oseye-server:0.2.0-alpha.1 -f server/Dockerfile .
+docker restart oseye-server
+```
+
+**Vérification :**
+```bash
+docker logs oseye-server | grep -E "policy_stream_opened|commands_stream_opened"
+# Doit afficher les streams ouverts sans erreurs répétées
+```
+
+---
+
+### 10. Enrollment : certificat sans SANs
+
+**Symptômes :**
+```
+sign CSR: tls: failed to verify certificate: x509: certificate relies on 
+legacy Common Name field, use SANs instead
+```
+
+**Cause :**
+Le certificat serveur n'a pas de Subject Alternative Names (SANs). Go 1.15+ refuse ces certificats.
+
+**Solution :**
+Régénérer le certificat serveur avec SANs :
+```bash
+cd ~/oseye-certs
+
+# 1. Créer nouvelle CSR
+openssl req -newkey rsa:2048 -nodes \
+  -keyout server.key -out server.csr \
+  -subj "/C=FR/O=OSEye/CN=localhost"
+
+# 2. Signer avec SANs
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key \
+  -CAcreateserial -out server.crt -days 365 \
+  -extfile <(echo "subjectAltName=DNS:localhost,DNS:oseye-server,IP:127.0.0.1")
+
+# 3. Vérifier
+openssl x509 -in server.crt -text -noout | grep -A1 "Subject Alternative Name"
+# Doit afficher : DNS:localhost, DNS:oseye-server, IP Address:127.0.0.1
+
+# 4. Redémarrer
+docker restart oseye-server oseye-nginx
+```
+
+**Note :**
+Pour production, ajouter tous les hostnames/IPs utilisés :
+```
+subjectAltName=DNS:oseye.example.com,DNS:prod.oseye.local,IP:10.0.0.50
+```
+
+---
+
 ## Checklist déploiement production
 
 ### Serveur
