@@ -64,9 +64,7 @@ def _check_rate_limit(ip: str, max_calls: int = 10, window_seconds: float = 60.0
 
 
 def _hash(pw: str) -> str:
-    # bcrypt silently truncates at 72 bytes; enforce explicitly to avoid
-    # silent auth failures when passwords differ only after byte 72.
-    encoded = pw.encode("utf-8")[:72]
+    encoded = pw.encode("utf-8")
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(encoded, salt)
     return hashed.decode("utf-8")
@@ -127,14 +125,23 @@ def _load_users() -> dict[str, dict[str, Any]]:
 _USERS: dict[str, dict[str, Any]] = _load_users()
 
 
+_PW_MAX_BYTES = 72  # bcrypt hard limit — reject early to avoid silent truncation
+
+
 def _authenticate(username: str, password: str) -> dict[str, Any] | None:
     """Return the user record if credentials are valid, else None.
 
     H-03: when the username is not found, call dummy verify to consume the
     same time as a real bcrypt check and prevent timing-based username enumeration.
     """
+    # Reject passwords that exceed the bcrypt limit — a password longer than
+    # 72 bytes would be silently truncated, potentially allowing a weaker
+    # password to match a stronger stored hash.
+    if len(password.encode("utf-8")) > _PW_MAX_BYTES:
+        return None
+
     user = _USERS.get(username)
-    pw_bytes = password.encode("utf-8")[:72]
+    pw_bytes = password.encode("utf-8")
 
     if user is None:
         # H-03: uniform response time — prevents username enumeration via timing.

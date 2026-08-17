@@ -40,14 +40,17 @@ def _hash(password: str) -> str:
 
 def _ask_password(prompt: str) -> str:
     import getpass
+    from ._ui import PW_MIN_LEN, PW_MAX_BYTES, _validate_password
+    print(f"  (min {PW_MIN_LEN} chars, max {PW_MAX_BYTES} bytes)")
     while True:
         pw = getpass.getpass(prompt)
-        if len(pw) < 8:
-            print("Password must be at least 8 characters.", file=sys.stderr)
+        error = _validate_password(pw)
+        if error:
+            print(f"  {error}", file=sys.stderr)
             continue
         confirm = getpass.getpass("Confirm password: ")
         if pw != confirm:
-            print("Passwords do not match.", file=sys.stderr)
+            print("  Passwords do not match.", file=sys.stderr)
             continue
         return pw
 
@@ -66,6 +69,11 @@ def _cmd_create(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     if args.password:
+        from ._ui import _validate_password
+        error = _validate_password(args.password)
+        if error:
+            print(f"Error: {error}", file=sys.stderr)
+            sys.exit(1)
         password = args.password
     else:
         password = _ask_password(f"Password for '{username}': ")
@@ -88,6 +96,11 @@ def _cmd_passwd(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     if args.password:
+        from ._ui import _validate_password
+        error = _validate_password(args.password)
+        if error:
+            print(f"Error: {error}", file=sys.stderr)
+            sys.exit(1)
         password = args.password
     else:
         password = _ask_password(f"New password for '{username}': ")

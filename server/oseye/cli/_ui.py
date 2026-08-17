@@ -56,12 +56,27 @@ def ask(prompt: str, default: str = "") -> str:
     return val or default
 
 
+PW_MIN_LEN = 8
+PW_MAX_BYTES = 72  # bcrypt hard limit
+
+
+def _validate_password(pw: str) -> str | None:
+    """Return an error message if invalid, else None."""
+    if len(pw) < PW_MIN_LEN:
+        return f"Password must be at least {PW_MIN_LEN} characters."
+    if len(pw.encode("utf-8")) > PW_MAX_BYTES:
+        return f"Password exceeds {PW_MAX_BYTES} bytes (bcrypt limit). Use a shorter password."
+    return None
+
+
 def ask_password(prompt: str) -> str:
+    print(c(f"  (min {PW_MIN_LEN} chars, max {PW_MAX_BYTES} bytes)", DIM))
     while True:
         try:
             pw = getpass.getpass(c(f"  → {prompt}: ", CYAN))
-            if len(pw) < 12:
-                warn("Password must be at least 12 characters.")
+            error = _validate_password(pw)
+            if error:
+                warn(error)
                 continue
             confirm = getpass.getpass(c("  → Confirm: ", CYAN))
             if pw != confirm:
