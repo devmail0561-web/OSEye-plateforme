@@ -479,18 +479,19 @@ x509: certificate relies on legacy Common Name field, use SANs instead
 
 **Problème :** L'agent ne peut pas lire ses certificats après enrollment.
 
-```bash
-# ❌ Enrollment root, agent tourne sous user oseye
-sudo oseye-config enroll ...
-# → certificats créés avec owner root:root
+✅ **Depuis v0.2.0-alpha.1** : Ce problème est **résolu automatiquement**. 
 
-# ✅ Corriger après enrollment
+`oseye-config enroll` change maintenant automatiquement l'ownership des certificats vers `oseye:oseye` après leur création.
+
+**Si vous utilisez une version antérieure** :
+```bash
+# Corriger manuellement après enrollment
 sudo chown -R oseye:oseye /etc/oseye/certs/
 sudo chmod 640 /etc/oseye/certs/agent.key
 sudo chmod 644 /etc/oseye/certs/{agent.crt,ca.crt}
 ```
 
-**Erreur typique :**
+**Erreur typique (versions < 0.2.0-alpha.1) :**
 ```
 "grpc client init failed — running in buffer-only mode"
 "err":"open /etc/oseye/certs/agent.key: permission denied"

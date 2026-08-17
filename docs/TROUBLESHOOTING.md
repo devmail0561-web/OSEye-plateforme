@@ -239,7 +239,9 @@ OSEYE_SECRET_KEY=b067a56cdd711e290932259814c8086f
 L'agent tourne sous l'utilisateur `oseye` mais les certificats créés par `oseye-config enroll` (lancé en root) ont des permissions restrictives par défaut.
 
 **Solution :**
-Corriger les permissions après enrollment :
+✅ **Depuis v0.2.0-alpha.1** : `oseye-config enroll` fixe automatiquement les permissions (chown vers `oseye:oseye`).
+
+Si vous utilisez une version antérieure, corriger manuellement :
 ```bash
 sudo chown -R oseye:oseye /etc/oseye/certs/
 sudo chmod 640 /etc/oseye/certs/agent.key
@@ -252,6 +254,9 @@ sudo systemctl restart oseye-agent
 ```bash
 sudo journalctl -u oseye-agent -f
 # Doit afficher "collectors started" sans erreur "permission denied"
+
+ls -la /etc/oseye/certs/
+# Doit afficher owner=oseye group=oseye
 ```
 
 ---

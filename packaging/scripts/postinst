@@ -2,8 +2,12 @@
 set -e
 
 # Fix ownership of data and config directories.
+# Note: enrollment (oseye-config enroll) will also chown certs/ recursively,
+# but we set the base directory permissions here to ensure consistency.
 chown -R oseye:oseye /var/lib/oseye/ /etc/oseye/ 2>/dev/null || true
+chmod 750 /etc/oseye/ 2>/dev/null || true
 chmod 700 /etc/oseye/certs/ 2>/dev/null || true
+chmod 750 /var/lib/oseye/ 2>/dev/null || true
 
 # Reload systemd and enable the service.
 # The service is NOT started here — the operator must enroll the agent first
