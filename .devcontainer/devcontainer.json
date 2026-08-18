@@ -1,0 +1,37 @@
+{
+  "name": "OSEye Dev",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": { "version": "1.25" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "bash scripts/dev-install.sh --no-docker --ci",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.ruff",
+        "golang.go",
+        "ms-vscode.makefile-tools",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "go.goroot": "/usr/local/go",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "forwardPorts": [8000, 50051, 5173, 5174],
+  "portsAttributes": {
+    "8000": { "label": "OSEye API" },
+    "50051": { "label": "OSEye gRPC" },
+    "5173": { "label": "OSEye UI (Vite)" }
+  },
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspaces/oseye,type=bind"
+  ]
+}

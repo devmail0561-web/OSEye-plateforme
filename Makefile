@@ -22,7 +22,8 @@ export VENV_PYTHON := $(PYTHON)
         audit dev-up dev-down \
         run-server run-agent run-workers dev-certs \
         ui-dev ui-build ui-test ui-lint site-dev \
-        package-agent package-server package-all init-server \
+        package-agent package-server package-all package-dev init-server \
+        dev-install dev-install-no-docker dev-install-ci \
         version checksums build-agent build-config
 
 # Variables de contrôle
@@ -88,9 +89,13 @@ help:
 	@echo ""
 	@echo "Packaging & déploiement"
 	@echo "  package-agent     — build .deb + .rpm pour oseye-agent (requiert nfpm)"
-	@echo "  package-server    — build images Docker serveur + UI"
-	@echo "  package-all       — package-agent + package-server"
+	@echo "  package-server    — build binaire PyInstaller + .deb + .rpm + image Docker serveur"
+	@echo "  package-all       — package-agent + package-server (tous artefacts prod)"
+	@echo "  package-dev       — artefacts dev (binaires debug + tarball sources)"
 	@echo "  init-server       — initialiser PKI prod + token enrollment"
+	@echo "  dev-install       — installer l'environnement dev complet"
+	@echo "  dev-install-no-docker — installer l'environnement dev sans Docker"
+	@echo "  dev-install-ci    — installer l'environnement dev pour CI"
 	@echo ""
 
 # ── Setup ────────────────────────────────────────────────────────────────────
@@ -104,6 +109,18 @@ setup: $(VENV)/bin/python3.12
 $(VENV)/bin/python3.12:
 	python3.12 -m venv $(VENV)
 	$(PIP) install -e "$(CURDIR)/server[dev]"
+
+## Install complete dev environment (Go, Python, Node, deps, certs)
+dev-install:
+	@bash scripts/dev-install.sh
+
+## Install dev env without Docker
+dev-install-no-docker:
+	@bash scripts/dev-install.sh --no-docker
+
+## Install dev env in CI mode (no prompts, no Docker)
+dev-install-ci:
+	@bash scripts/dev-install.sh --no-docker --ci
 
 # ── Proto codegen ─────────────────────────────────────────────────────────────
 
@@ -325,15 +342,71 @@ checksums:
 	@echo "==> Generating SHA256SUMS"
 	cd $(DIST_DIR) && sha256sum * > SHA256SUMS
 
-# Build production Docker images for the server stack
-package-server:
-	@echo "==> Build image oseye-server:$(VERSION)"
-	DOCKER_HOST=unix://$(HOME)/.docker/desktop/docker.sock docker build -t oseye-server:$(VERSION) server/
-	@echo "==> Build image oseye-ui:$(VERSION)"
-	DOCKER_HOST=unix://$(HOME)/.docker/desktop/docker.sock docker build -t oseye-ui:$(VERSION) ui/
-	@echo "==> Images prêtes. Compose de prod: infra/docker/docker-compose.prod.yml"
+## Build server binary (PyInstaller) + .deb + .rpm + Docker image
+package-server: ## Build oseye-server binary, .deb, .rpm and Docker image
+	@echo "==> [1/3] Build binaire serveur (PyInstaller)"
+	pip install --quiet pyinstaller 2>/dev/null || true
+	cd server && pip install --quiet -e . 2>/dev/null || true
+	pyinstaller server/oseye/main.py \
+		--onefile \
+		--name oseye-server \
+		--distpath dist/ \
+		--workpath /tmp/pyinstaller-build \
+		--specpath /tmp/pyinstaller-spec \
+		--add-data "server/oseye/policy/profiles:oseye/policy/profiles" \
+		--add-data "rules:rules" \
+		--hidden-import oseye \
+		--hidden-import grpc \
+		--noconfirm \
+		--clean
+	@echo "==> [2/3] Packaging .deb + .rpm"
+	@if command -v nfpm >/dev/null 2>&1; then \
+		VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+			--config packaging/nfpm-server.yaml \
+			--packager deb \
+			--target $(DIST_DIR); \
+		VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+			--config packaging/nfpm-server.yaml \
+			--packager rpm \
+			--target $(DIST_DIR); \
+		echo "==> Packages serveur:"; \
+		ls -lh $(DIST_DIR)/oseye-server_* $(DIST_DIR)/oseye-server-*.rpm 2>/dev/null || true; \
+	else \
+		echo "==> nfpm non trouvé — skip .deb/.rpm (installer: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest)"; \
+	fi
+	@echo "==> [3/3] Build image Docker"
+	docker build -t oseye-server:$(VERSION) \
+		-f server/Dockerfile . 2>/dev/null || \
+	DOCKER_HOST=unix://$(HOME)/.docker/desktop/docker.sock \
+		docker build -t oseye-server:$(VERSION) \
+		-f server/Dockerfile .
+	@echo "==> Image oseye-server:$(VERSION) prête"
 
+## Build ALL production artifacts (agent + server binaries + packages + Docker)
 package-all: package-agent package-server
+	@echo ""
+	@echo "==> Artefacts prod disponibles dans $(DIST_DIR)/"
+	@ls -lh $(DIST_DIR)/ 2>/dev/null | grep -v "^total" | grep -v "^l" || true
+	@echo ""
+	@$(MAKE) checksums
+	@echo "==> SHA256SUMS généré dans $(DIST_DIR)/SHA256SUMS"
+
+## Build dev distribution (tarballs sources + binaires debug non-strippés)
+package-dev:
+	@echo "==> Build artefacts développement (non-prod, debug)"
+	mkdir -p $(DIST_DIR)/dev
+	# Binaire agent debug (avec symboles)
+	cd agent && go build -o ../$(DIST_DIR)/dev/oseye-agent-debug ./cmd/oseye-agent
+	cd agent && go build -o ../$(DIST_DIR)/dev/oseye-config-debug ./cmd/oseye-config
+	# Sources server (tarball pour distribution)
+	tar czf $(DIST_DIR)/dev/oseye-server-src-$(VERSION).tar.gz \
+		--exclude='**/__pycache__' \
+		--exclude='**/*.pyc' \
+		--exclude='.venv' \
+		--exclude='dist' \
+		server/ sdk/ rules/ packaging/ scripts/ Makefile VERSION
+	@echo "==> Artefacts dev dans $(DIST_DIR)/dev/"
+	@ls -lh $(DIST_DIR)/dev/
 
 # First-run server initialization (PKI + enrollment token)
 init-server:
