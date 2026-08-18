@@ -40,7 +40,8 @@ def _hash(password: str) -> str:
 
 def _ask_password(prompt: str) -> str:
     import getpass
-    from ._ui import PW_MIN_LEN, PW_MAX_BYTES, _validate_password
+
+    from ._ui import PW_MAX_BYTES, PW_MIN_LEN, _validate_password
     print(f"  (min {PW_MIN_LEN} chars, max {PW_MAX_BYTES} bytes)")
     while True:
         pw = getpass.getpass(prompt)
@@ -65,7 +66,8 @@ def _cmd_create(args: argparse.Namespace) -> None:
 
     role = args.role
     if role not in _VALID_ROLES:
-        print(f"Invalid role '{role}'. Valid roles: {', '.join(sorted(_VALID_ROLES))}", file=sys.stderr)
+        valid = ', '.join(sorted(_VALID_ROLES))
+        print(f"Invalid role '{role}'. Valid roles: {valid}", file=sys.stderr)
         sys.exit(1)
 
     if args.password:

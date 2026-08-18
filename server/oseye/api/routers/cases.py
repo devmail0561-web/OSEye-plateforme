@@ -26,7 +26,6 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field, StringConstraints
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger

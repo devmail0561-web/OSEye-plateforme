@@ -26,8 +26,8 @@ def _apply_rlimits(cpu_limit_s: int, mem_limit_bytes: int) -> None:
 
     # SECURITY NOTE (PL-01): seccomp-bpf filtering is NOT implemented.
     # A malicious plugin subprocess has unrestricted syscall access including
-    # socket(), execve(), ptrace(). Implement via python-seccomp (libseccomp-dev)
-    # before enabling plugins in production.
+    # socket(), execve(), ptrace(). Implement via python-seccomp
+    # (libseccomp-dev) before enabling plugins in production.
     """
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit_s, cpu_limit_s))
     resource.setrlimit(resource.RLIMIT_AS, (mem_limit_bytes, mem_limit_bytes))
@@ -108,7 +108,8 @@ class PluginSandbox:
                     os._exit(1)  # Abort plugin launch if strict mode
                 else:
                     print(
-                        f"plugin_sandbox: unshare(CLONE_NEWNET) failed (ret={ret}) — network not isolated",
+                        f"plugin_sandbox: unshare(CLONE_NEWNET) failed "
+                        f"(ret={ret}) — network not isolated",
                         file=sys.stderr,
                     )
             _apply_rlimits(cpu_limit, mem_limit)

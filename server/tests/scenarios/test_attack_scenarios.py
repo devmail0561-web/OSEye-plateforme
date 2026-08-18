@@ -237,20 +237,33 @@ class TestPrivilegeEscalation:
         assert "rule_suid_execution" in _rule_ids(matches)
 
     def test_sudo_bash_triggers(self, engine: RuleEngine) -> None:
-        ev = _ev(
-            process_name="sudo",
-            cmdline="sudo bash -i",
-        )
-        matches = engine.evaluate(ev)
-        assert "rule_sudo_abuse" in _rule_ids(matches)
+        """rule_sudo_abuse requires threshold=3 in 60s — send 3 events."""
+        last_match: list = []
+        for _ in range(3):
+            ev = _ev(process_name="sudo", cmdline="sudo bash -i", uid=1001, hostname="sudo-host-bash")
+            record_event_for_temporal("rule_sudo_abuse", ev.model_dump(), entity_key="sudo-host-bash:1001")
+            matches = engine.evaluate(ev)
+            if "rule_sudo_abuse" in _rule_ids(matches):
+                last_match.extend(matches)
+        assert any(m.rule_id == "rule_sudo_abuse" for m in last_match), \
+            "rule_sudo_abuse should fire after 3 sudo bash invocations"
 
     def test_sudo_python_shell_triggers(self, engine: RuleEngine) -> None:
-        ev = _ev(
-            process_name="sudo",
-            cmdline="sudo python3 -c 'import os; os.system(\"/bin/bash\")'",
-        )
-        matches = engine.evaluate(ev)
-        assert "rule_sudo_abuse" in _rule_ids(matches)
+        """rule_sudo_abuse requires threshold=3 in 60s — send 3 events."""
+        last_match: list = []
+        for _ in range(3):
+            ev = _ev(
+                process_name="sudo",
+                cmdline="sudo python3 -c 'import os; os.system(\"/bin/bash\")'",
+                uid=1002,
+                hostname="sudo-host-py",
+            )
+            record_event_for_temporal("rule_sudo_abuse", ev.model_dump(), entity_key="sudo-host-py:1002")
+            matches = engine.evaluate(ev)
+            if "rule_sudo_abuse" in _rule_ids(matches):
+                last_match.extend(matches)
+        assert any(m.rule_id == "rule_sudo_abuse" for m in last_match), \
+            "rule_sudo_abuse should fire after 3 sudo python invocations"
 
     def test_setcap_triggers(self, engine: RuleEngine) -> None:
         ev = _ev(

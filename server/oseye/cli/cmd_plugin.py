@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -43,7 +42,7 @@ async def _do_upload(path: Path, sig: Path | None, verify: bool) -> None:
             print(f"  Copied signature → {expected_sig}")
 
     info = await manager.install(path, verify=verify)
-    print(f"\nPlugin installed:")
+    print("\nPlugin installed:")
     print(f"  Name   : {info.name}")
     print(f"  Path   : {info.path}")
     print(f"  Status : {info.status}")

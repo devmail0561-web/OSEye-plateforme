@@ -43,7 +43,8 @@ class MISPProvider:
                             )
                 except socket.gaierror as exc:
                     raise ValueError(
-                        f"MISP URL {self._misp_url!r}: DNS resolution failed — cannot validate for SSRF. "
+                        f"MISP URL {self._misp_url!r}: DNS resolution failed — "
+                        "cannot validate for SSRF. "
                         "Ensure the hostname resolves before starting the server."
                     ) from exc
             # TI-MED-002: log only that MISP is configured, never the URL itself

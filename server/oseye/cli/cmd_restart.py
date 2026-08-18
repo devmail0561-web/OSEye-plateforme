@@ -7,7 +7,6 @@ import os
 import subprocess
 import sys
 
-
 _SYSTEMCTL = "/usr/bin/systemctl"
 
 

@@ -10,7 +10,6 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Config loading — reads server.env + secrets.env (DB URL + HMAC key)
 # ---------------------------------------------------------------------------
@@ -89,11 +88,11 @@ async def _create(hours: int) -> None:
     expires_at = datetime.now(UTC) + timedelta(hours=hours)
     token_id = await repo.create(raw, expires_at, created_by="cli")
 
-    print(f"\nEnrollment token created:")
+    print("\nEnrollment token created:")
     print(f"  Token   : {raw}")
     print(f"  ID      : {token_id}")
     print(f"  Expires : {expires_at.strftime('%Y-%m-%d %H:%M UTC')} ({hours}h)")
-    print(f"\nTo enroll an agent:")
+    print("\nTo enroll an agent:")
     print(f"  oseye-config enroll --server <HOST>:50051 --token {raw}\n")
 
 

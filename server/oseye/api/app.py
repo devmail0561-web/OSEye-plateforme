@@ -154,6 +154,7 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     # enabling SPA client-side routing (e.g. /dashboard, /alerts).
     if settings.ui_dir:
         from pathlib import Path as _Path
+
         from starlette.staticfiles import StaticFiles
         _ui = _Path(settings.ui_dir)
         if _ui.is_dir() and (_ui / "index.html").exists():

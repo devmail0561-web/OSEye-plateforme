@@ -38,6 +38,11 @@ except ImportError:
 _logger = get_logger(__name__)
 
 
+def _on_db_fut_error(f) -> None:  # noqa: ANN001
+    if f.exception():
+        _logger.error("agent_db_update_failed", error=str(f.exception()))
+
+
 def _extract_cn_from_context(context: grpc.ServicerContext) -> str | None:
     """Extract the Common Name from the mTLS client certificate.
 
@@ -212,7 +217,7 @@ class AgentServiceServicer:
                     self._agent_repo.upsert(cn=cn, online=True, ip_address=_ip),
                     self._loop,
                 )
-                _fut.add_done_callback(lambda f: _logger.error("agent_db_update_failed", error=str(f.exception())) if f.exception() else None)
+                _fut.add_done_callback(_on_db_fut_error)
 
             total_accepted = 0
             total_rejected = 0
@@ -302,7 +307,7 @@ class AgentServiceServicer:
                         self._agent_repo.update_last_seen(cn),
                         self._loop,
                     )
-                    _fut.add_done_callback(lambda f: _logger.error("agent_db_update_failed", error=str(f.exception())) if f.exception() else None)
+                    _fut.add_done_callback(_on_db_fut_error)
 
             if _pb2 is None:  # pragma: no cover
                 return None
@@ -313,7 +318,7 @@ class AgentServiceServicer:
                     self._agent_repo.set_offline(cn),
                     self._loop,
                 )
-                _fut.add_done_callback(lambda f: _logger.error("agent_db_update_failed", error=str(f.exception())) if f.exception() else None)
+                _fut.add_done_callback(_on_db_fut_error)
 
             return _pb2.IngestResponse(
                 accepted=total_accepted,

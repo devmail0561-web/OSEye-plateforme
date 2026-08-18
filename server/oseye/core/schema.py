@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Literal
-from uuid import UUID, uuid4
-
 import ipaddress as _ipaddress
-from typing import Annotated
+from datetime import UTC, datetime
+from typing import Annotated, Literal
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, BeforeValidator, Field
 

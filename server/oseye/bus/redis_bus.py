@@ -148,7 +148,10 @@ class RedisEventBus:
                     except aioredis.ResponseError as e:
                         # [LOW-1] purge disappeared streams from seen_topics
                         err_str = str(e)
-                        to_remove = {t for t in seen_topics if f"'{t}'" in err_str or f'"{t}"' in err_str or err_str.endswith(t)}
+                        to_remove = {
+                            t for t in seen_topics
+                            if f"'{t}'" in err_str or f'"{t}"' in err_str or err_str.endswith(t)
+                        }
                         if to_remove:
                             seen_topics -= to_remove
                             streams = {t: ">" for t in seen_topics}

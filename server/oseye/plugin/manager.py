@@ -99,8 +99,10 @@ class PluginManager:
                 f"Invalid plugin name {name!r}: must be a valid Python identifier, "
                 "not a keyword, and not start with underscore."
             )
-        _RESERVED = frozenset({"os", "sys", "builtins", "importlib", "subprocess", "socket", "pathlib"})
-        if name in _RESERVED:
+        _reserved = frozenset({
+            "os", "sys", "builtins", "importlib", "subprocess", "socket", "pathlib",
+        })
+        if name in _reserved:
             raise ValueError(f"Plugin name {name!r} conflicts with a reserved module name.")
 
         # SEC-PLUGIN-003: signature enforcement.

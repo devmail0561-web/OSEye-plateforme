@@ -192,7 +192,11 @@ class SQLIncidentRepository:
                 )
                 session.add(alert_row)
 
-                stmt = select(IncidentRow).where(IncidentRow.incident_id == str(incident_id)).with_for_update()
+                stmt = (
+                    select(IncidentRow)
+                    .where(IncidentRow.incident_id == str(incident_id))
+                    .with_for_update()
+                )
                 result = await session.execute(stmt)
                 incident_row = result.scalar_one_or_none()
                 if incident_row is None:

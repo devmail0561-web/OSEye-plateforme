@@ -17,7 +17,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_role
 from oseye.core.observability import get_logger

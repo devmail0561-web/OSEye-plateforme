@@ -43,7 +43,7 @@ def _unset_key(path: Path, key: str) -> bool:
     if not path.exists():
         return False
     lines = _read_env_file(path)
-    filtered = [l for l in lines if not (l.strip().startswith(f"{key}=") or l.strip() == key)]
+    filtered = [ln for ln in lines if not (ln.strip().startswith(f"{key}=") or ln.strip() == key)]
     if len(filtered) == len(lines):
         return False
     _write_env_file(path, filtered)

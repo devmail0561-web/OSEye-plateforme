@@ -8,7 +8,6 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from pydantic import BaseModel
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.schema import Rule

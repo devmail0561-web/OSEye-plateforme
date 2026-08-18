@@ -7,7 +7,6 @@ import subprocess
 import sys
 import urllib.request
 
-
 _SYSTEMCTL = "/usr/bin/systemctl"
 
 

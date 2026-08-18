@@ -8,7 +8,6 @@ import signal
 import subprocess
 import sys
 
-
 _SYSTEMCTL = "/usr/bin/systemctl"
 
 

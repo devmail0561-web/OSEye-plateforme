@@ -6,19 +6,20 @@ SEC-AUTH-001: Passwords are verified with bcrypt.
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import os
 import os as _os
 import threading as _threading
 import time
 from collections import OrderedDict
+from pathlib import Path as _Path
 from typing import Any
 
 import bcrypt
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -87,8 +88,6 @@ def _hash(pw: str) -> str:
 # OSEYE_ADMIN_PASSWORD / OSEYE_ANALYST_PASSWORD environment variables.
 # ---------------------------------------------------------------------------
 
-import json as _json
-from pathlib import Path as _Path
 
 _USERS_FILE = _Path(os.getenv("OSEYE_USERS_FILE", "/etc/oseye/users.json"))
 _OSEYE_ENV = os.getenv("OSEYE_ENV", "development").lower()
