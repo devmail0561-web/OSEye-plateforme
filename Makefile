@@ -392,21 +392,44 @@ package-all: package-agent package-server
 	@echo "==> SHA256SUMS généré dans $(DIST_DIR)/SHA256SUMS"
 
 ## Build dev distribution (tarballs sources + binaires debug non-strippés)
-package-dev:
-	@echo "==> Build artefacts développement (non-prod, debug)"
+package-dev: ## Build oseye-dev .deb + .rpm (binaires debug agent + serveur, config dev prête)
+	@echo "==> [1/3] Build binaires agent (debug — avec symboles)"
 	mkdir -p $(DIST_DIR)/dev
-	# Binaire agent debug (avec symboles)
-	cd agent && go build -o ../$(DIST_DIR)/dev/oseye-agent-debug ./cmd/oseye-agent
-	cd agent && go build -o ../$(DIST_DIR)/dev/oseye-config-debug ./cmd/oseye-config
-	# Sources server (tarball pour distribution)
-	tar czf $(DIST_DIR)/dev/oseye-server-src-$(VERSION).tar.gz \
-		--exclude='**/__pycache__' \
-		--exclude='**/*.pyc' \
-		--exclude='.venv' \
-		--exclude='dist' \
-		server/ sdk/ rules/ packaging/ scripts/ Makefile VERSION
-	@echo "==> Artefacts dev dans $(DIST_DIR)/dev/"
-	@ls -lh $(DIST_DIR)/dev/
+	cd agent && go build \
+	  -ldflags "-X main.version=$(VERSION)" \
+	  -o ../$(DIST_DIR)/dev/oseye-agent-debug ./cmd/oseye-agent
+	cd agent && go build \
+	  -ldflags "-X main.version=$(VERSION)" \
+	  -o ../$(DIST_DIR)/dev/oseye-config-debug ./cmd/oseye-config
+	@echo "==> [2/3] Build binaire serveur (PyInstaller dev)"
+	@if command -v pyinstaller >/dev/null 2>&1; then \
+	  pyinstaller server/oseye/main.py \
+	    --onefile --name oseye-server \
+	    --distpath $(DIST_DIR) \
+	    --workpath /tmp/pyinstaller-build \
+	    --specpath /tmp/pyinstaller-spec \
+	    --add-data "server/oseye/policy/profiles:oseye/policy/profiles" \
+	    --add-data "rules:rules" \
+	    --hidden-import oseye --hidden-import grpc \
+	    --noconfirm --clean; \
+	else \
+	  echo "  pyinstaller absent — skip binaire serveur (installer: pip install pyinstaller)"; \
+	fi
+	@echo "==> [3/3] Packaging .deb + .rpm (oseye-dev)"
+	@if command -v nfpm >/dev/null 2>&1; then \
+	  VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+	    --config packaging/nfpm-dev.yaml \
+	    --packager deb \
+	    --target $(DIST_DIR); \
+	  VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+	    --config packaging/nfpm-dev.yaml \
+	    --packager rpm \
+	    --target $(DIST_DIR); \
+	  echo "==> Packages dev:"; \
+	  ls -lh $(DIST_DIR)/oseye-dev_* $(DIST_DIR)/oseye-dev-*.rpm 2>/dev/null || true; \
+	else \
+	  echo "  nfpm absent — skip .deb/.rpm (installer: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest)"; \
+	fi
 
 # First-run server initialization (PKI + enrollment token)
 init-server:
