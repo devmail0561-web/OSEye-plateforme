@@ -90,8 +90,10 @@ services:
       OSEYE_LOG_LEVEL: info
       OSEYE_ENV: production
       # Management API — activer pour permettre l'accès via UI ou API clients.
-      # L'UI peut être hébergée n'importe où (CDN, container séparé, même serveur).
       OSEYE_MANAGEMENT_API_ENABLED: "true"
+      # URL et port du serveur UI (CORS auto-configuré + redirect GET /)
+      # Mettre l'URL réelle de l'UI, quelle que soit son hébergement.
+      OSEYE_UI_URL: "https://oseye.example.com"
       # UI intégrée sur ce serveur (optionnel — monter ui/dist dans /app/ui-dist)
       # OSEYE_UI_DIR: /app/ui-dist
       # Secrets lus depuis les fichiers Docker secrets par l'entrypoint

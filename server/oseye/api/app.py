@@ -112,11 +112,15 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     # -------------------------------------------------------------------
-    # CORS
+    # CORS — merge api_cors_origins with ui_url if set
     # -------------------------------------------------------------------
+    cors_origins = list(settings.api_cors_origins)
+    if settings.ui_url and settings.ui_url.rstrip("/") not in cors_origins:
+        cors_origins.append(settings.ui_url.rstrip("/"))
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.api_cors_origins,
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Enrollment-Token"],
@@ -161,14 +165,31 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
         import logging as _log
         _log.getLogger(__name__).info(
             "management_api_disabled — agent-only mode "
-            "(set OSEYE_UI_DIR or OSEYE_MANAGEMENT_API_ENABLED=true to enable)"
+            "(set OSEYE_MANAGEMENT_API_ENABLED=true to enable)"
         )
         app.state.ws_alert_manager = None
         app.state.ws_decision_manager = None
 
+    # -------------------------------------------------------------------
+    # Redirect GET / → UI when management API is active and UI is external.
+    # Serves as a convenience entry point: the API root redirects to the UI.
+    # Not registered when ui_dir is set (StaticFiles handles / instead).
+    # -------------------------------------------------------------------
+    if settings.management_api_active and settings.ui_url and not settings.ui_dir:
+        from fastapi.responses import RedirectResponse
+
+        _ui_redirect = settings.ui_url.rstrip("/")
+
+        @app.get("/", include_in_schema=False)
+        async def _root_redirect() -> RedirectResponse:
+            return RedirectResponse(url=_ui_redirect, status_code=302)
+
+    # -------------------------------------------------------------------
     # UI static file serving — mounted LAST so API routes take priority.
     # StaticFiles(html=True) serves index.html for any path not matching a file,
     # enabling SPA client-side routing (e.g. /dashboard, /alerts).
+    # Only used when the UI is served from THIS server (OSEYE_UI_DIR set).
+    # -------------------------------------------------------------------
     if settings.ui_dir:
         from pathlib import Path as _Path
 

@@ -154,13 +154,27 @@ class Settings(BaseSettings):
         description="Fallback autonomy level for profiles not listed in PROFILE_AUTONOMY.",
     )
 
-    # UI static file serving — optional
+    # UI origin URL — URL and port of the UI server (wherever it is hosted).
+    # Used to:
+    #   - Automatically add to CORS allow_origins
+    #   - Redirect GET / → UI when management API is active and ui_dir is unset
+    #   - Tighten the Content-Security-Policy connect-src to this origin
+    # Examples: "https://ui.example.com", "http://localhost:5173"
+    ui_url: str | None = Field(
+        default=None,
+        description=(
+            "URL of the UI server (e.g. https://ui.example.com or http://localhost:5173). "
+            "Automatically added to CORS origins and used for redirect from /."
+        ),
+    )
+
+    # UI static file serving — optional, only when UI runs on THIS server.
     # When set, the server mounts the built UI from this directory and serves
-    # it as a SPA (catch-all → index.html). Leave empty to run agent-only mode.
+    # it as a SPA (catch-all → index.html).
     ui_dir: str | None = Field(
         default=None,
         description=(
-            "Path to the built UI dist directory. "
+            "Path to the built UI dist directory (local serving only). "
             "Set with: oseye-server ui set <PATH>"
         ),
     )
