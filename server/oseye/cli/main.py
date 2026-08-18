@@ -16,7 +16,12 @@ Usage:
   oseye-server status
   oseye-server ui set <PATH>
   oseye-server ui unset
+  oseye-server ui url <URL>
+  oseye-server ui url --unset
   oseye-server ui status
+  oseye-server api enable
+  oseye-server api disable
+  oseye-server api status
   oseye-server plugin upload <FILE> [--sig FILE] [--no-verify]
   oseye-server plugin list
   oseye-server enrollment token create  [--valid-hours N]
@@ -38,7 +43,8 @@ Commands:
   stop        Gracefully stop the server (SIGTERM / systemctl stop)
   restart     Stop then start the server (systemctl restart)
   status      Show server status and API health
-  ui          Configure built UI static file serving (set/unset/status)
+  ui          Configure UI serving and UI server URL (set/unset/url/status)
+  api         Enable/disable management REST API (enable/disable/status)
   plugin      Manage plugins without the UI (upload/list)
   validate    Validate the current configuration and report missing files
   update      Check for and install the latest binary release
@@ -78,6 +84,9 @@ def main(argv: list[str] | None = None) -> None:
         run(rest)
     elif cmd == "ui":
         from .cmd_ui import run
+        run(rest)
+    elif cmd == "api":
+        from .cmd_api import run
         run(rest)
     elif cmd == "plugin":
         from .cmd_plugin import run
