@@ -112,6 +112,18 @@ curl https://<HOSTNAME>/api/v1/health
 # → {"status": "ok"}
 ```
 
+### Recommandations de sécurité production
+
+| Variable | Recommandation |
+|---|---|
+| `OSEYE_GRPC_INSECURE_DEV` | Doit être `false` (défaut) |
+| `OSEYE_PLUGIN_REQUIRE_SIGNATURE` | Doit être `true` (défaut) |
+| `OSEYE_PLUGIN_STRICT_NETNS` | Mettre `true` si le kernel supporte les user namespaces |
+| `OSEYE_DATA_DIR` | Changer de `/tmp` (défaut) vers `/var/lib/oseye` |
+| `OSEYE_ENV` | Mettre `production` (active HSTS, désactive /docs) |
+
+**Signatures agent (recommandé) :** quand tous les agents ont une clé Ed25519 enregistrée dans `/etc/oseye/agent_keys/`, activer la vérification des batches. Le serveur active automatiquement `require_agent_keys=True` si le répertoire contient des clés.
+
 ### Étape 4 : Enroller un agent
 
 Sur chaque machine à surveiller :
@@ -134,6 +146,24 @@ Pour créer un nouveau token si l'ancien a expiré :
 ```bash
 docker exec oseye-server oseye-server enrollment token create
 ```
+
+### Optionnel : servir l'UI depuis le serveur
+
+Par défaut le serveur tourne en mode API-only. Pour servir l'UI intégrée :
+
+```bash
+# Builder l'UI
+make ui-build  # produit ui/dist/
+
+# Configurer le serveur
+sudo oseye-server ui set /opt/oseye/ui/dist
+
+# Redémarrer
+oseye-server restart
+```
+
+L'UI est alors accessible sur `https://<HOSTNAME>/`.
+Les routes `/api/v1/*` restent prioritaires sur le fichier statique.
 
 ---
 

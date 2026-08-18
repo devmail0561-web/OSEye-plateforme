@@ -172,8 +172,52 @@ OSEYE_INOTIFY_WATCHES=[{"path":"/tmp","recursive":false,"mask":4095}]
 | `OSEYE_SYSLOG_ADDR` | `host:port` | `127.0.0.1:514` | Listener syslog |
 | `OSEYE_QUARANTINE_DIR` | path | `/var/lib/oseye/quarantine` | Dir quarantaine malware |
 | `OSEYE_ED25519_SIGNING_KEY` | path | `/etc/oseye/certs/agent.ed25519.key` | Signature événements |
+| `OSEYE_INSECURE_KEY_PERMS` | bool | `false` | Démarrer même si la clé Ed25519 a des permissions > 0600. **Ne jamais utiliser en production.** |
 | `OSEYE_ENROLL_URL` | URL | `` | URL enrollment (auto-enrollment) |
 | `OSEYE_ENROLL_TOKEN` | string | `` | Token enrollment (auto-enrollment) |
+
+---
+
+## 🔒 Sécurité — Clé privée Ed25519
+
+**Permissions clé privée :** La clé Ed25519 (`OSEYE_AGENT_KEY_PATH` / `OSEYE_ED25519_SIGNING_KEY`) doit avoir les permissions `0600`. L'agent refuse de démarrer si d'autres utilisateurs peuvent la lire (protection contre le vol de clé).
+
+```bash
+# Vérifier les permissions
+ls -la /etc/oseye/certs/agent.ed25519.key
+# Doit afficher : -rw------- root root ...
+
+# Corriger si nécessaire
+sudo chmod 0600 /etc/oseye/certs/agent.ed25519.key
+```
+
+En environnement de test uniquement, passer `OSEYE_INSECURE_KEY_PERMS=true` pour contourner cette vérification.
+
+---
+
+## ♻️ Résilience et reconnexion
+
+L'agent maintient un **buffer SQLite local** pour absorber les interruptions réseau sans perte d'événements.
+
+- **Buffer capé à 100 000 événements.** En cas de dépassement, les événements les plus anciens sont supprimés (éviction FIFO) pour laisser place aux nouveaux.
+- **Replay automatique au reconnect :** à la reconnexion gRPC, les événements bufferisés pendant la déconnexion sont rejoués dans l'ordre FIFO avant de reprendre la collecte live.
+
+Le chemin du buffer est configurable via `OSEYE_BUFFER_PATH` (défaut : `/var/lib/oseye/buffer.db`).
+
+---
+
+## ⚡ Watchdog CPU/RAM
+
+L'agent mesure en continu sa consommation CPU et RAM. Quand la consommation dépasse le seuil du profil actif (`OSEYE_MAX_CPU_PCT`, `OSEYE_MAX_MEM_MB`), il réduit automatiquement le taux de collecte (`throttle_factor`).
+
+Le serveur peut également envoyer un signal `SET_THROTTLE` si le lag du bus Redis dépasse le seuil de backpressure, forçant l'agent à ralentir côté émission.
+
+Pour ajuster les limites :
+```bash
+sudo oseye-config set OSEYE_MAX_CPU_PCT=2.0
+sudo oseye-config set OSEYE_MAX_MEM_MB=128
+sudo systemctl restart oseye-agent
+```
 
 ---
 

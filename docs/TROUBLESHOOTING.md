@@ -443,6 +443,45 @@ docker logs oseye-server | grep "agent_key\|enforcement"
 
 ---
 
+### 13. Worker serveur ne traite plus les events (crash silencieux)
+
+**Symptômes :** Les alertes ou décisions s'arrêtent de se générer. Le serveur répond aux requêtes API mais plus rien ne se passe côté détection.
+
+**Cause :** Un worker asyncio (rule_worker, ml_worker, etc.) a crashé sur une exception non attrapée.
+
+**Diagnostic :**
+```bash
+# Rechercher les crashes de workers dans les logs
+docker logs oseye-server 2>&1 | grep "worker_task_crashed"
+# ou
+journalctl -u oseye-server | grep "worker_task_crashed"
+```
+
+**Solution :** Redémarrer le serveur (`oseye-server restart`). Investiguer l'exception loggée pour corriger la cause racine.
+
+**Note :** Depuis v0.2.0, chaque crash de worker est loggué avec le nom du worker et la stack trace complète (niveau ERROR).
+
+---
+
+### 14. `oseye-server plugin upload` échoue : "Invalid plugin name" ou "signature required"
+
+**Causes possibles :**
+
+1. **Nom invalide** : le fichier .py a un nom qui n'est pas un identifiant Python valide, est un mot-clé, commence par `_`, ou correspond à un module réservé (os, sys, subprocess…). Renommer le fichier.
+
+2. **Signature manquante** : `OSEYE_PLUGIN_REQUIRE_SIGNATURE=true` (défaut). Fournir un fichier `.sig` :
+   ```bash
+   oseye-server plugin upload my_plugin.py --sig my_plugin.sig
+   ```
+   Pour développement uniquement :
+   ```bash
+   OSEYE_PLUGIN_REQUIRE_SIGNATURE=false oseye-server plugin upload my_plugin.py --no-verify
+   ```
+
+3. **Clé non enregistrée** : le fichier `.sig` est présent mais aucune clé publique Ed25519 dans `/etc/oseye/plugin_keys/`. Ajouter la clé `.pem` dans ce répertoire.
+
+---
+
 ## Contacts
 
 Pour signaler un bug ou demander de l'aide :

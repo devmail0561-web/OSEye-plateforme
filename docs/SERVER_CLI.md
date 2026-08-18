@@ -43,6 +43,11 @@ oseye-server enrollment token create           Créer un token d'enrollment
 oseye-server enrollment token list             Lister les tokens actifs
 oseye-server enrollment token revoke <ID>      Révoquer un token
 oseye-server validate                          Valider la configuration actuelle
+oseye-server ui set <PATH>                     Configurer le répertoire dist de l'UI
+oseye-server ui unset                          Mode API-only (désactive le service UI)
+oseye-server ui status                         Afficher la configuration UI courante
+oseye-server plugin upload <FILE> [--sig]      Uploader un plugin
+oseye-server plugin list                       Lister les plugins installés
 oseye-server update                            Mettre à jour vers la dernière version
 oseye-server uninstall                         Désinstaller serveur et/ou agents
 oseye-server version                           Afficher la version
@@ -227,6 +232,70 @@ OK — configuration is valid
 
 ---
 
+## 🖥️ `oseye-server ui` — Servir l'UI intégrée
+
+**Rôle :** Configure le serveur pour servir l'UI web depuis son propre process (optionnel).
+Sans configuration, le serveur tourne en mode API-only.
+
+**Usage :**
+```bash
+oseye-server ui set <PATH>    # Configurer le répertoire dist de l'UI
+oseye-server ui unset          # Revenir en mode API-only
+oseye-server ui status         # Afficher la configuration courante
+```
+
+**Exemple :**
+```bash
+# Après avoir buildé l'UI (make ui-build) :
+sudo oseye-server ui set /opt/oseye/ui/dist
+
+# Vérifier
+oseye-server ui status
+# UI dir : /opt/oseye/ui/dist  [valid]
+
+# Mode API-only
+sudo oseye-server ui unset
+```
+
+**Fonctionnement :**
+- Monte `StaticFiles` en dernier dans FastAPI (les routes `/api/v1/*` restent prioritaires)
+- Toute URL non-API → sert `index.html` (SPA routing)
+- Écrit `OSEYE_UI_DIR=<path>` dans `/etc/oseye/server.env`
+- Redémarrage requis après changement
+
+---
+
+## 🔌 `oseye-server plugin` — Gérer les plugins sans l'UI
+
+**Rôle :** Upload et liste les plugins sans que le serveur soit en cours d'exécution.
+
+**Usage :**
+```bash
+oseye-server plugin upload <FILE.py> [--sig FILE] [--no-verify]
+oseye-server plugin list
+```
+
+**Exemple :**
+```bash
+# Upload avec vérification de signature (défaut)
+sudo oseye-server plugin upload my_analyzer.py --sig my_analyzer.sig
+
+# Upload sans vérification (OSEYE_PLUGIN_REQUIRE_SIGNATURE=false requis)
+sudo oseye-server plugin upload my_analyzer.py --no-verify
+
+# Lister les plugins installés
+oseye-server plugin list
+# Name          Status      PID     Path
+# my_analyzer   loaded      -       /etc/oseye/plugins/my_analyzer.py
+```
+
+**Notes :**
+- Lit `OSEYE_PLUGINS_DIR` depuis l'environnement ou `/etc/oseye/server.env`
+- Validation du nom : identifiant Python valide, pas de mot-clé, pas de nom réservé (os, sys, subprocess…)
+- Redémarrage du serveur requis pour activer le plugin
+
+---
+
 ## 🔄 `oseye-server update` — Mise à jour
 
 **Rôle :** Télécharge et installe la dernière version depuis GitHub releases.
@@ -341,6 +410,20 @@ sudo oseye-server uninstall --server --purge --yes
 | `OSEYE_VIRUSTOTAL_API_KEY` | Clé VirusTotal |
 | `OSEYE_MISP_URL` | URL instance MISP |
 | `OSEYE_MISP_API_KEY` | Clé API MISP |
+
+### UI
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `OSEYE_UI_DIR` | `` (vide) | Répertoire dist de l'UI buildée. Vide = mode API-only |
+
+### Plugin
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `OSEYE_PLUGINS_DIR` | `/etc/oseye/plugins` | Répertoire d'installation des plugins |
+| `OSEYE_PLUGIN_REQUIRE_SIGNATURE` | `true` | Vérification de signature obligatoire à l'upload |
+| `OSEYE_PLUGIN_STRICT_NETNS` | `false` | Si `true`, abort le lancement d'un plugin si l'isolation réseau (unshare CLONE_NEWNET) échoue |
 
 ### Observability
 
