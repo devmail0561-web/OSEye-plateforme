@@ -170,6 +170,40 @@ OSEYE_CHECKPOINT_HMAC_KEY=$(openssl rand -hex 32)  # 64 chars hex
 
 ---
 
+### Endpoints API renvoient 404 (ex: `/api/v1/alerts`)
+
+**Symptôme :** Toutes les requêtes API management retournent 404. Seuls `/health` et `/enroll/*` répondent.
+
+**Cause :** Le serveur est en mode agent-only (`OSEYE_MANAGEMENT_API_ENABLED=false` par défaut).
+
+**Solution :**
+```bash
+sudo oseye-server api enable
+oseye-server restart
+# Vérifier :
+oseye-server api status
+```
+
+---
+
+### L'UI ne charge pas / CORS bloqué
+
+**Symptôme :** L'UI retourne une erreur CORS ou le serveur renvoie 404 sur `/`.
+
+**Causes possibles :**
+1. `OSEYE_UI_URL` non configuré → CORS non autorisé pour l'origine de l'UI
+2. `OSEYE_MANAGEMENT_API_ENABLED=false` → API indisponible
+
+**Solution :**
+```bash
+# Configurer l'URL de l'UI (CORS + redirect automatiques)
+sudo oseye-server ui url https://ui.example.com
+sudo oseye-server api enable
+oseye-server restart
+```
+
+---
+
 ## Checklist de déploiement
 
 ```

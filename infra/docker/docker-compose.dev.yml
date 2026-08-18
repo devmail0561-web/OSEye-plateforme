@@ -47,7 +47,6 @@ services:
     environment:
       OSEYE_DB_BACKEND: postgresql
       OSEYE_DB_URL: postgresql+asyncpg://oseye:oseye_dev@postgres:5432/oseye
-      OSEYE_BUS_BACKEND: redis
       OSEYE_REDIS_URL: redis://redis:6379/0
       OSEYE_API_HOST: 0.0.0.0
       OSEYE_API_PORT: "8000"
@@ -60,12 +59,14 @@ services:
       OSEYE_ANALYST_PASSWORD: analyst123
       OSEYE_JWT_PRIVATE_KEY_PATH: /etc/oseye/certs/jwt_private.pem
       OSEYE_JWT_PUBLIC_KEY_PATH: /etc/oseye/certs/jwt_public.pem
-      OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
-      OSEYE_ED25519_PUBLIC_KEY: /etc/oseye/certs/enrollment_ed25519.pub
-      OSEYE_ENROLLMENT_CA_CERT_FILE: /etc/oseye/certs/ca.crt
-      OSEYE_ENROLLMENT_CA_KEY_FILE: /etc/oseye/certs/ca.key
-      OSEYE_GRPC_TLS_CERT: /etc/oseye/certs/server.crt
-      OSEYE_GRPC_TLS_KEY: /etc/oseye/certs/server.key
+      OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+      OSEYE_TLS_CERT_FILE: /etc/oseye/certs/server.crt
+      OSEYE_TLS_KEY_FILE: /etc/oseye/certs/server.key
+      OSEYE_TLS_CA_CERT_FILE: /etc/oseye/certs/ca.crt
+      OSEYE_TLS_CA_KEY_FILE: /etc/oseye/certs/ca.key
+      OSEYE_AGENT_KEYS_DIR: /etc/oseye/agent_keys
+      OSEYE_MANAGEMENT_API_ENABLED: "true"
+      OSEYE_UI_URL: "http://localhost:5173"
       OSEYE_PLUGINS_DIR: /tmp/oseye-plugins
       OSEYE_DATA_DIR: /tmp/oseye-data
       OSEYE_LOG_LEVEL: debug

@@ -43,9 +43,14 @@ oseye-server enrollment token create           Créer un token d'enrollment
 oseye-server enrollment token list             Lister les tokens actifs
 oseye-server enrollment token revoke <ID>      Révoquer un token
 oseye-server validate                          Valider la configuration actuelle
-oseye-server ui set <PATH>                     Configurer le répertoire dist de l'UI
-oseye-server ui unset                          Mode API-only (désactive le service UI)
+oseye-server ui set <PATH>                     Configurer le répertoire dist de l'UI (local)
+oseye-server ui unset                          Arrêter de servir l'UI depuis ce serveur
+oseye-server ui url <URL>                      Configurer l'URL du serveur UI externe
+oseye-server ui url --unset                    Supprimer l'URL UI
 oseye-server ui status                         Afficher la configuration UI courante
+oseye-server api enable                        Activer l'API management
+oseye-server api disable                       Désactiver — mode agent-only
+oseye-server api status                        État de l'API management
 oseye-server plugin upload <FILE> [--sig]      Uploader un plugin
 oseye-server plugin list                       Lister les plugins installés
 oseye-server update                            Mettre à jour vers la dernière version
@@ -232,19 +237,44 @@ OK — configuration is valid
 
 ---
 
-## 🖥️ `oseye-server ui` — Servir l'UI intégrée
+## 🖥️ `oseye-server ui` — Configuration de l'UI
 
-**Rôle :** Configure le serveur pour servir l'UI web depuis son propre process (optionnel).
-Sans configuration, le serveur tourne en mode API-only.
+**Rôle :** Configure la relation entre le serveur et l'interface web, que celle-ci soit
+hébergée sur le même serveur ou ailleurs (CDN, serveur séparé, localhost).
 
 **Usage :**
 ```bash
-oseye-server ui set <PATH>    # Configurer le répertoire dist de l'UI
-oseye-server ui unset          # Revenir en mode API-only
-oseye-server ui status         # Afficher la configuration courante
+oseye-server ui url <URL>      Configurer l'URL du serveur UI (CORS + redirect /)
+oseye-server ui url --unset    Supprimer l'URL UI
+oseye-server ui set <PATH>     Servir l'UI depuis ce serveur (répertoire dist)
+oseye-server ui unset          Arrêter de servir l'UI depuis ce serveur
+oseye-server ui status         Afficher la configuration UI courante
 ```
 
-**Exemple :**
+### `ui url` — URL du serveur UI (recommandé)
+
+Configure l'URL où est hébergée l'UI, **quelle que soit son hébergement** :
+
+```bash
+# UI externe (CDN, serveur séparé, localhost dev)
+sudo oseye-server ui url https://ui.example.com
+
+# Développement local
+sudo oseye-server ui url http://localhost:5173
+
+# Supprimer
+sudo oseye-server ui url --unset
+```
+
+**Effets automatiques :**
+- `OSEYE_UI_URL` ajouté aux CORS `allow_origins`
+- `GET /` redirige vers l'URL UI (quand management API actif)
+- Écrit `OSEYE_UI_URL=<url>` dans `/etc/oseye/server.env`
+
+### `ui set` / `ui unset` — Servir l'UI localement
+
+Si l'UI doit être servie **depuis ce même serveur** :
+
 ```bash
 # Après avoir buildé l'UI (make ui-build) :
 sudo oseye-server ui set /opt/oseye/ui/dist
@@ -252,16 +282,55 @@ sudo oseye-server ui set /opt/oseye/ui/dist
 # Vérifier
 oseye-server ui status
 # UI dir : /opt/oseye/ui/dist  [valid]
+# UI URL : https://ui.example.com  [CORS configured, redirect from /]
 
-# Mode API-only
+# Arrêter de servir l'UI localement
 sudo oseye-server ui unset
 ```
 
-**Fonctionnement :**
-- Monte `StaticFiles` en dernier dans FastAPI (les routes `/api/v1/*` restent prioritaires)
-- Toute URL non-API → sert `index.html` (SPA routing)
-- Écrit `OSEYE_UI_DIR=<path>` dans `/etc/oseye/server.env`
-- Redémarrage requis après changement
+> `OSEYE_UI_DIR` et `OSEYE_UI_URL` sont **indépendants** : on peut configurer l'un sans l'autre.
+
+**Redémarrage requis après tout changement.**
+
+---
+
+## 🔒 `oseye-server api` — Activer/désactiver l'API management
+
+**Rôle :** Par défaut le serveur démarre en **mode agent-only** — seuls `/api/v1/health`
+et `/api/v1/enroll/*` sont exposés. Cette commande active l'API management complète.
+
+**Usage :**
+```bash
+sudo oseye-server api enable    Activer l'API management (alertes, règles, décisions…)
+sudo oseye-server api disable   Désactiver — retour mode agent-only
+     oseye-server api status    État courant
+```
+
+**Exemple :**
+```bash
+# Activer
+sudo oseye-server api enable
+oseye-server restart
+
+# Vérifier
+oseye-server api status
+# Management API : ENABLED  [/etc/oseye/server.env]
+#   Endpoints : auth, alerts, decisions, rules, cases, agents, plugins…
+
+# Désactiver (sécurité maximale — agent-only)
+sudo oseye-server api disable
+oseye-server restart
+```
+
+**Endpoints toujours disponibles (mode agent-only) :**
+- `GET /api/v1/health`
+- `POST /api/v1/enroll/*`
+- gRPC port (agents)
+
+**Endpoints nécessitant `api enable` :**
+- Authentification (`/auth/token`, `/auth/refresh`)
+- Toute l'API de gestion (alertes, règles, décisions, cas, plugins…)
+- WebSocket temps réel (`/ws/alerts`, `/ws/decisions`)
 
 ---
 

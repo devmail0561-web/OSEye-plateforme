@@ -17,6 +17,12 @@ All endpoints require a JWT Bearer token (except `/health` and `/auth/login`).
 curl -H "Authorization: Bearer $TOKEN" https://server:8000/api/v1/...
 ```
 
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution">
+**API management** : tous les endpoints listés ici (sauf `/health` et `/enroll/*`) requièrent `OSEYE_MANAGEMENT_API_ENABLED=true` côté serveur.
+</Aside>
+
 ## Endpoints
 
 ### Health
@@ -81,7 +87,22 @@ Query parameters:
 | GET | `/agents` | List connected agents |
 | GET | `/agents/{cn}` | Get agent detail |
 | DELETE | `/agents/{cn}` | Revoke agent |
-| POST | `/agents/{cn}/profile` | Push surveillance profile |
+
+### Policies (profils de surveillance)
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/policies` | Lister les profils disponibles |
+| `GET` | `/api/v1/policies/{name}` | Détails d'un profil |
+| `POST` | `/api/v1/policies/{name}/apply` | Pousser vers un agent ou tous |
+
+Pousse le profil `{name}` vers l'agent `agent_cn` (ou tous si null). Requiert `admin`.
+
+**Corps pour apply :**
+```json
+{ "agent_cn": "mon-serveur.example.com" }
+```
+`agent_cn: null` = broadcast vers tous les agents.
 
 ### Rules
 

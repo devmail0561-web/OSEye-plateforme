@@ -39,6 +39,10 @@ L'agent requiert Linux avec kernel 5.10+ pour les collecteurs eBPF. macOS et Win
    # → {"status": "ok"}
    ```
 
+   <Aside type="note">
+   **Mode agent-only** : en environnement de développement, le serveur active automatiquement l'API management (`OSEYE_MANAGEMENT_API_ENABLED=true` dans docker-compose.dev.yml). En production ou installation native, il faut l'activer explicitement.
+   </Aside>
+
 2. **Installer l'agent**
 
    ```bash

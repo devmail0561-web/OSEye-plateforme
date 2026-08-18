@@ -57,7 +57,7 @@ Browser
   └─► nginx :443 (SSL)
         ├── /api/*  → oseye-server:8000
         ├── /ws/*   → oseye-server:8000 (WebSocket)
-        └── /*      → oseye-ui:5173
+        └── /*      → UI (OSEYE_UI_URL ou OSEYE_UI_DIR)
 
 oseye-server ──► postgres:5432  (réseau oseye-backend, isolé)
              ──► redis:6379     (réseau oseye-backend, isolé)
@@ -104,7 +104,14 @@ Pour les tests locaux avec HTTPS, visiter d'abord `https://localhost:443` dans l
 | `OSEYE_CHECKPOINT_HMAC_KEY` | Oui | 64 hex chars |
 | `OSEYE_ADMIN_PASSWORD` | Oui | Mot de passe UI admin |
 | `OSEYE_API_CORS_ORIGINS` | Oui | JSON array des origines autorisées |
-| `OSEYE_GRPC_TLS_CERT` | Prod | Certificat serveur gRPC |
-| `OSEYE_GRPC_TLS_KEY` | Prod | Clé privée gRPC |
+| `OSEYE_TLS_CERT_FILE` | Prod | Certificat serveur gRPC |
+| `OSEYE_TLS_KEY_FILE` | Prod | Clé privée gRPC |
+| `OSEYE_MANAGEMENT_API_ENABLED` | Non | Activer l'API management (auth, alertes, règles…). Mettre `true` en prod. Défaut : `false`. |
+| `OSEYE_UI_URL` | Non | URL du serveur UI — CORS auto-configuré + redirect `/` vers l'UI. |
+
+<Aside type="caution" title="Mode agent-only par défaut">
+  Sans `OSEYE_MANAGEMENT_API_ENABLED=true`, seuls `/health` et `/enroll/*` sont exposés.
+  L'API management (alertes, règles, tableaux de bord) nécessite `OSEYE_MANAGEMENT_API_ENABLED=true`.
+</Aside>
 
 Voir la [référence complète](/OSEye-plateforme/reference/config-server/).

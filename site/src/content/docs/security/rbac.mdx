@@ -30,6 +30,10 @@ OSEye implements three roles with increasing privileges:
 | Manage users | — | — | Y |
 | Server settings | — | — | Y |
 
+:::note[Mode agent-only]
+Quand `OSEYE_MANAGEMENT_API_ENABLED=false` (défaut), aucun endpoint RBAC n'est exposé. L'authentification s'applique uniquement quand l'API management est activée.
+:::
+
 ## User Management
 
 ### Create User (Admin)

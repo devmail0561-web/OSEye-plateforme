@@ -51,6 +51,7 @@ Critical paths rejected for quarantine: `/`, `/bin`, `/sbin`, `/usr`, `/lib`, `/
 | Variable | Type | Default | Validation |
 |----------|------|---------|------------|
 | `OSEYE_ED25519_SIGNING_KEY` | path | `/etc/oseye/certs/agent.ed25519.key` | Must be absolute path |
+| `OSEYE_INSECURE_KEY_PERMS` | bool | `false` | Autoriser le démarrage si la clé Ed25519 a des permissions > 0600. **Développement uniquement** — ne jamais utiliser en production. |
 
 ### Collection
 

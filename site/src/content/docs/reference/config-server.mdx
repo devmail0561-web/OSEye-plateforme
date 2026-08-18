@@ -40,6 +40,15 @@ oseye-server user list
 sudo oseye-server enrollment token create [--valid-hours 24]
 oseye-server enrollment token list
 sudo oseye-server enrollment token revoke <TOKEN_ID>
+
+# API management
+oseye-server api enable          # Activer l'API management
+oseye-server api disable         # Désactiver (mode agent-only)
+oseye-server api status          # État courant
+
+# UI
+oseye-server ui url <URL>        # Configurer OSEYE_UI_URL
+oseye-server ui url --unset      # Supprimer OSEYE_UI_URL
 ```
 
 ---
@@ -84,6 +93,14 @@ sudo oseye-server enrollment token revoke <TOKEN_ID>
 | `OSEYE_TLS_CA_CERT_FILE` | `/etc/oseye/certs/ca.crt` | CA certificate (agent mTLS verification) |
 | `OSEYE_TLS_CA_KEY_FILE` | `/etc/oseye/certs/ca.key` | CA private key (enrollment signing) |
 | `OSEYE_TLS_CA_KEY_PASSWORD` | _(empty)_ | Passphrase for the CA key. Set in `secrets.env`. |
+
+## Mode API et UI
+
+| Variable | Type | Défaut | Description |
+|---|---|---|---|
+| `OSEYE_MANAGEMENT_API_ENABLED` | bool | `false` | Active l'API management (auth, alertes, décisions, règles, cas…). Par défaut seuls `/health` et `/enroll/*` sont exposés. Mettre `true` pour accès dashboard ou API clients. |
+| `OSEYE_UI_URL` | string | — | URL du serveur UI (ex: `https://ui.example.com`). Ajouté automatiquement aux CORS + redirect `GET /` vers cette URL. |
+| `OSEYE_UI_DIR` | string | — | Répertoire `dist/` de l'UI buildée, si l'UI est servie depuis **ce** serveur. Indépendant de `OSEYE_UI_URL`. |
 
 ## Authentication (JWT RS256)
 

@@ -59,11 +59,10 @@ For larger environments (50+ agents), deploy OSEye components across multiple ma
 
 ```bash
 # Redis Streams (recommended for < 500 agents)
-OSEYE_BUS_BACKEND=redis
 OSEYE_REDIS_URL=redis://redis-cluster:6379/0
 
 # Kafka (for > 500 agents)
-OSEYE_BUS_BACKEND=kafka
+OSEYE_BUS_BACKEND=kafka  # Kafka — prévu dans une future version
 OSEYE_KAFKA_BROKERS=kafka1:9092,kafka2:9092,kafka3:9092
 ```
 
@@ -200,7 +199,6 @@ redis-cli --cluster create \
 
 OSEye server configuration:
 ```bash
-OSEYE_BUS_BACKEND=redis
 OSEYE_REDIS_URL=redis://redis1:7000,redis2:7000,redis3:7000/0
 ```
 
@@ -223,7 +221,7 @@ services:
 
 OSEye server configuration:
 ```bash
-OSEYE_BUS_BACKEND=kafka
+OSEYE_BUS_BACKEND=kafka  # Kafka — prévu dans une future version
 OSEYE_KAFKA_BROKERS=kafka1:9092,kafka2:9092,kafka3:9092
 OSEYE_KAFKA_TOPIC_PREFIX=oseye
 OSEYE_KAFKA_CONSUMER_GROUP=oseye-workers

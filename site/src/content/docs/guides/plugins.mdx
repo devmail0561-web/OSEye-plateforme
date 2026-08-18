@@ -70,6 +70,21 @@ curl -X POST https://server:8000/api/v1/plugins/upload \
   -F "plugin=@notifier_slack.ospkg"
 ```
 
+### Via CLI (le serveur n'a pas besoin de tourner)
+
+```bash
+# Upload avec vérification de signature (défaut)
+sudo oseye-server plugin upload my_plugin.py --sig my_plugin.sig
+
+# Upload sans vérification (développement uniquement)
+sudo oseye-server plugin upload my_plugin.py --no-verify
+
+# Lister les plugins installés
+oseye-server plugin list
+```
+
+Redémarrer le serveur après upload : `oseye-server restart`
+
 ## Signature Verification
 
 In production (`OSEYE_PLUGIN_REQUIRE_SIGNATURE=true`), all plugins must be signed with Ed25519. The server verifies the signature before loading.
@@ -82,6 +97,13 @@ curl -X POST https://server:8000/api/v1/plugins/keys \
   -H "Content-Type: application/json" \
   -d '{"name": "team-key", "public_key": "base64-encoded-ed25519-pubkey"}'
 ```
+
+### Security Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OSEYE_PLUGIN_REQUIRE_SIGNATURE` | `true` | Require Ed25519 signature verification before loading a plugin. |
+| `OSEYE_PLUGIN_STRICT_NETNS` | `false` | Si `true`, le lancement d'un plugin échoue si l'isolation réseau (unshare CLONE_NEWNET) n'est pas disponible. Activer en production. |
 
 ## Plugin Lifecycle
 

@@ -14,7 +14,7 @@ Internet
   └─► nginx :443 (HTTPS)
         ├── /api/*  → oseye-server:8000
         ├── /ws/*   → oseye-server:8000
-        └── /*      → oseye-ui:5173
+        └── /*      → UI (hébergée séparément via OSEYE_UI_URL, ou locale via OSEYE_UI_DIR)
 
 oseye-server ──► postgres  (réseau interne Docker)
              ──► redis     (réseau interne Docker)
@@ -64,6 +64,10 @@ oseye-server ──► postgres  (réseau interne Docker)
    Le compose lit automatiquement les fichiers générés par `setup` — aucune variable à passer manuellement.
 
 </Steps>
+
+<Aside type="note">
+Par défaut le serveur démarre en **mode agent-only**. Pour activer l'API management (dashboard, alertes, règles) : `oseye-server api enable` puis `oseye-server restart`.
+</Aside>
 
 ---
 

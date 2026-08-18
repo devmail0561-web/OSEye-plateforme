@@ -133,3 +133,12 @@ OSEye ships with 35+ rules covering:
 - Defense evasion (log deletion, timestomping, process injection)
 - Lateral movement (SSH brute force, port scanning)
 - Exfiltration (large DNS queries, unusual outbound traffic)
+
+:::note[Seuils des règles built-in]
+Quelques règles importantes et leur comportement par défaut :
+
+- **`rule_sudo_abuse`** : alerte après **3 invocations** `sudo bash/python/perl` en 60 secondes pour le même utilisateur — pas sur une invocation isolée.
+- **`rule_port_scan`** : compteur **par IP source** (`hostname:src_ip`) — 20 connexions TCP new en 30s depuis la même IP. N'agrège pas le trafic de toutes les sources.
+- **`rule_ssh_lateral`** : 3 connexions SSH internes en 60s depuis la même IP source.
+- **`rule_outbound_c2_beaconing`** : 5 connexions vers le même `dst_ip` sur ports 8080/8443/2222 en 300s.
+:::
