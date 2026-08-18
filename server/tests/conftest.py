@@ -19,13 +19,17 @@ os.environ.setdefault(
     "test-secret-key-for-pytest-32chars",
 )
 
-# ML-R-03: MLEngine validates OSEYE_CHECKPOINT_HMAC_KEY at construction time.
-# Provide a deterministic test key so tests can instantiate MLEngine() freely.
-os.environ.setdefault(
-    "OSEYE_CHECKPOINT_HMAC_KEY",
-    # 32-byte deterministic test key (hex-encoded, audit L-25 fix)
-    "74657374636865636b706f696e74686d61636b657966727079746573743132333435",
-)
+# ML-R-03: MLEngine validates OSEYE_CHECKPOINT_HMAC_KEY at construction time
+# (fix ML-03 removed the non-hex fallback).  Ensure the key is always a valid
+# hex string — if the CI/env value is not hex (e.g. a base64 secret), replace
+# it with a deterministic test key so tests can instantiate MLEngine() freely.
+_hmac_raw = os.environ.get("OSEYE_CHECKPOINT_HMAC_KEY", "")
+try:
+    bytes.fromhex(_hmac_raw)
+except ValueError:
+    os.environ["OSEYE_CHECKPOINT_HMAC_KEY"] = (
+        "74657374636865636b706f696e74686d61636b657966727079746573743132333435"
+    )
 
 
 @pytest.fixture(autouse=True)
