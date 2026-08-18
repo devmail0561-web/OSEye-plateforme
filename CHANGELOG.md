@@ -4,6 +4,55 @@ All notable changes to OSEye are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0-alpha.1] — 2026-08-18
+
+### Added
+
+**Architecture distribuée (multi-serveurs)**
+- JWT blocklist → Redis (`oseye:jwt:revoked:{jti}` SETEX avec TTL) — révocations partagées entre instances
+- WebSocket → Redis pub/sub (`oseye:ws:alerts`, `oseye:ws:decisions`) — fanout multi-serveurs
+- Policy engine → Redis SET (`oseye:policy:connected_agents`) — `push_to_all()` touche tous les agents sur tous les serveurs
+- Decision Engine → leader Redis SETNX (`oseye:decision:leader`) — un seul écrivain pour le journal BLAKE3
+- Profile re-sync à la reconnexion agent — `push_default_to_agent()` déclenché à chaque `ReceivePolicy`
+- `OSEYE_SERVER_ROLE=collector|worker|api|all` — démarrage sélectif des composants
+- `OSEYE_ML_WORKER_ENABLED`, `OSEYE_RULE_WORKER_ENABLED`, `OSEYE_DECISION_WORKER_ENABLED`, `OSEYE_GRPC_SERVER_ENABLED`
+
+**Mode agent-only par défaut**
+- `OSEYE_MANAGEMENT_API_ENABLED=false` par défaut — seuls `/health` et `/enroll/*` exposés
+- `OSEYE_UI_URL` — URL du serveur UI externe (CORS auto + redirect `GET /`)
+- `OSEYE_UI_DIR` — optionnel, servir l'UI depuis ce serveur
+- `oseye-server api enable/disable/status` — activer/désactiver l'API management
+- `oseye-server ui url <URL>` — configurer l'URL UI
+
+**Packaging**
+- `oseye-dev` — package tout-en-un pour développeurs (agent debug + serveur + config dev)
+- `nfpm-dev.yaml` + scripts pre/postinst + service systemd `oseye-dev`
+- `make package-dev` — produit `oseye-dev.deb` + `.rpm`
+- `install.sh` — installeur universel (installe, configure, lance)
+- `.devcontainer/devcontainer.json` — VS Code Dev Containers / GitHub Codespaces
+
+**Sécurité — users système séparés**
+- `oseye-agt` — agent (accès `/etc/oseye/agent.env`, `/var/lib/oseye/agent/`)
+- `oseye-srv` — serveur (accès `/etc/oseye/server.env`, certs, plugins)
+- `oseye-dev` — package dev uniquement
+- `server/Dockerfile` : `USER oseye-srv`
+
+### Fixed
+
+**Audit 2026-08-18 — 24 CRITICAL/HIGH corrigés**
+- `decision/journal.py` : `broken: list[int]` — `verify_chain()` était inopérant (DE-01)
+- `workers/rule_worker.py` : try/except autour de `evaluate()` — fin du crash silencieux (W-01)
+- `correlation/linkers/same_host.py` : `created_at` → `updated_at` — corrélation restaurée (W-02)
+- `api/routers/auth.py` : rate limit proxy-aware — brute-force protégé derrière nginx (API-01/02)
+- `ingest/grpc_service.py` : `config_json` envoyait `{}` — profils et règles arrivent maintenant à l'agent
+- `policy/engine.py` : topic `policy:push:{UUID}` → `policy:push:{cn}` — push profil fonctionnel
+- `plugin/manager.py` : validation nom dans `install()` — `__init__.py` et modules réservés rejetés
+- 9 règles YAML MITRE corrigées (seuils, entity_key, champs morts)
+- Variables TLS renommées : `OSEYE_TLS_CERT_FILE`, `OSEYE_TLS_KEY_FILE`, `OSEYE_TLS_CA_*`
+- `OSEYE_BUS_BACKEND` supprimée (n'existait plus dans config.py)
+- `docker-compose.prod.yml` : secrets Docker via `*_FILE` pattern + entrypoint.sh
+- `_task_done_callback` attaché sur les 10 workers asyncio
+
 ## [Unreleased] — 2026-08-16
 
 ### Security
