@@ -388,9 +388,8 @@ class AgentServiceServicer:
                 if raw is None:
                     break
                 try:
-                    # [AUDIT] always extract config sub-key — avoids leaking unrelated keys
                     data = json.loads(raw)
-                    config_raw: bytes = json.dumps(data.get("config", {})).encode("utf-8")
+                    config_raw: bytes = json.dumps(data).encode("utf-8")
                     profile = _pb2.SurveillanceProfilePB(
                         name=data.get("name", ""),
                         description=data.get("description", ""),

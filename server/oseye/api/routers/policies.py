@@ -9,7 +9,6 @@ Endpoints:
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -27,7 +26,7 @@ router = APIRouter(prefix="/api/v1/policies", tags=["policies"])
 
 
 class ApplyRequest(BaseModel):
-    agent_id: UUID | None = None
+    agent_cn: str | None = None  # TLS certificate CN of the target agent
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +96,9 @@ async def apply_profile(
         )
 
     try:
-        if body.agent_id is not None:
-            await engine.push_to_agent(body.agent_id, name)
-            return {"profile": name, "pushed_to": str(body.agent_id)}
+        if body.agent_cn is not None:
+            await engine.push_to_agent(body.agent_cn, name)
+            return {"profile": name, "pushed_to": body.agent_cn}
         else:
             await engine.push_to_all(name)
             return {"profile": name, "pushed_to": "all"}

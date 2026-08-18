@@ -6,7 +6,6 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
 import yaml
 
@@ -38,7 +37,7 @@ class PolicyEngine:
     ) -> None:
         self._bus = bus
         self._profiles: dict[str, SurveillanceProfile] = {}
-        self._known_agents: set[UUID] = set()
+        self._known_agents: set[str] = set()  # agent CNs (TLS certificate CN)
         self._default_profile = default_profile
         self._rule_signer = rule_signer
 
@@ -82,23 +81,23 @@ class PolicyEngine:
     def list_profiles(self) -> list[SurveillanceProfile]:
         return sorted(self._profiles.values(), key=lambda p: p.name)
 
-    def seed_known_agents(self, agent_ids: list[UUID]) -> None:
-        """Pre-populate the known-agents set from persisted data."""
-        self._known_agents.update(agent_ids)
+    def seed_known_agents(self, cns: list[str]) -> None:
+        """Pre-populate the known-agents set from persisted CNs."""
+        self._known_agents.update(cns)
 
-    def unregister_agent(self, agent_id: UUID) -> None:
-        """POL-01: Remove *agent_id* from _known_agents.
+    def unregister_agent(self, cn: str) -> None:
+        """POL-01: Remove *cn* from _known_agents.
 
         Call this from the gRPC service when an agent's stream disconnects so
         that _known_agents does not grow indefinitely on long-running servers.
         """
-        self._known_agents.discard(agent_id)
-        _logger.info("policy.agent_unregistered", agent_id=str(agent_id))
+        self._known_agents.discard(cn)
+        _logger.info("policy.agent_unregistered", cn=cn)
 
-    async def push_default_to_agent(self, agent_id: UUID) -> None:
+    async def push_default_to_agent(self, cn: str) -> None:
         """Push the default profile to a newly connected agent."""
         if self._default_profile in self._profiles:
-            await self.push_to_agent(agent_id, self._default_profile)
+            await self.push_to_agent(cn, self._default_profile)
         else:
             _logger.error(
                 "policy.default_profile_not_found",
@@ -114,8 +113,8 @@ class PolicyEngine:
     # Push to agents
     # ------------------------------------------------------------------
 
-    async def push_to_agent(self, agent_id: UUID, profile_name: str) -> None:
-        """Publish profile JSON to bus topic ``policy:push:{agent_id}``.
+    async def push_to_agent(self, cn: str, profile_name: str) -> None:
+        """Publish profile JSON to bus topic ``policy:push:{cn}``.
 
         The payload includes the standard SurveillanceProfile fields plus:
         - ``autonomy``  — autonomy level for the agent's local rule engine
@@ -145,13 +144,13 @@ class PolicyEngine:
                 _logger.error("policy.ruleset_build_failed", error=str(exc))
                 return  # do not push a profile without its rule_set
 
-        topic = f"policy:push:{agent_id}"
+        topic = f"policy:push:{cn}"
         payload: bytes = json.dumps(payload_data).encode("utf-8")
         await self._bus.publish(topic, payload)
-        self._known_agents.add(agent_id)
+        self._known_agents.add(cn)
         _logger.info(
             "policy.pushed",
-            agent_id=str(agent_id),
+            cn=cn,
             profile=profile_name,
             topic=topic,
             rule_set_injected=self._rule_signer is not None,
@@ -170,13 +169,13 @@ class PolicyEngine:
             raise KeyError(f"Unknown profile: {profile_name!r}")
 
         results: dict[str, str] = {}
-        for agent_id in list(self._known_agents):
+        for cn in list(self._known_agents):
             try:
-                await self.push_to_agent(agent_id, profile_name)
-                results[str(agent_id)] = "ok"
+                await self.push_to_agent(cn, profile_name)
+                results[cn] = "ok"
             except Exception as exc:
-                _logger.error("push_to_agent_failed", cn=str(agent_id), error=str(exc))
-                results[str(agent_id)] = f"error: {exc}"
+                _logger.error("push_to_agent_failed", cn=cn, error=str(exc))
+                results[cn] = f"error: {exc}"
 
         _logger.info(
             "policy.broadcast",

@@ -132,14 +132,18 @@ class MLWorker:
     async def _process(self, event: UniversalEvent) -> None:
         # A/B test active: score_event internally scores both champion and
         # challenger and returns the authoritative champion score.
+        loop = asyncio.get_running_loop()
         if self._ab_session is not None:
             try:
-                ml_score = self._ab_session.score_event(event)
+                ml_score = await loop.run_in_executor(
+                    None, self._ab_session.score_event, event
+                )
             except Exception as exc:  # noqa: BLE001
                 _log.debug("ml_worker_ab_score_error", error=str(exc))
-                ml_score = self._engine.score_event(event)
+                ml_score = await loop.run_in_executor(
+                    None, self._engine.score_event, event
+                )
         else:
-            loop = asyncio.get_running_loop()
             ml_score = await loop.run_in_executor(None, self._engine.score_event, event)
         self._total_scored += 1
 

@@ -256,12 +256,9 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             rule_signer=rule_signer,
         )
         await policy_engine.load_profiles()
-        _agent_ids_for_policy = await repo.get_distinct_agent_ids()
-        policy_engine.seed_known_agents(_agent_ids_for_policy)
         _logger.info(
             "policy_engine_ready",
             profiles=len(policy_engine.list_profiles()),
-            known_agents=len(_agent_ids_for_policy),
         )
 
         # ------------------------------------------------------------------
@@ -375,6 +372,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # Agent tracking repository
         agent_repo = SQLAgentRepository(backend.session_factory)
         grpc_servicer._agent_repo = agent_repo  # noqa: SLF001
+
+        # Seed policy engine with CNs of previously connected agents.
+        _known_cns = [row.cn for row in await agent_repo.list()]
+        policy_engine.seed_known_agents(_known_cns)
+        _logger.info("policy_engine_seeded", known_agents=len(_known_cns))
 
         # Load persisted agent blocklist so revocations survive restarts
         blocked_agents_repo = SQLBlockedAgentsRepository(backend.session_factory)
