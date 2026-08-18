@@ -89,7 +89,10 @@ services:
       OSEYE_PLUGIN_REQUIRE_SIGNATURE: "true"
       OSEYE_LOG_LEVEL: info
       OSEYE_ENV: production
-      # UI intégrée — monter ui/dist dans /app/ui-dist (make ui-build)
+      # Management API — activer pour permettre l'accès via UI ou API clients.
+      # L'UI peut être hébergée n'importe où (CDN, container séparé, même serveur).
+      OSEYE_MANAGEMENT_API_ENABLED: "true"
+      # UI intégrée sur ce serveur (optionnel — monter ui/dist dans /app/ui-dist)
       # OSEYE_UI_DIR: /app/ui-dist
       # Secrets lus depuis les fichiers Docker secrets par l'entrypoint
       OSEYE_SECRET_KEY_FILE: /run/secrets/secret_key

@@ -166,28 +166,28 @@ class Settings(BaseSettings):
     )
 
     # Management API (alerts, decisions, rules, cases, auth …)
-    # Default: enabled only when ui_dir is set.
-    # Set to true explicitly to enable the management API without serving the UI
-    # (e.g. API-only access via curl/SDK while UI is hosted elsewhere).
+    # Default: false — agent-only mode.
+    # The UI may be hosted anywhere (same server, CDN, separate container, etc.).
+    # This flag controls only whether the management REST API is exposed,
+    # independently of OSEYE_UI_DIR (which only controls static file serving).
+    #
     # When false, only agent-facing endpoints are registered:
     #   GET  /api/v1/health
     #   POST /api/v1/enroll/*  (agent enrollment)
-    #   gRPC (always on a separate port)
-    management_api_enabled: bool | None = Field(
-        default=None,
+    #   gRPC port (always on, separate process)
+    management_api_enabled: bool = Field(
+        default=False,
         description=(
-            "Enable the management REST API (auth, alerts, rules, etc.). "
-            "Defaults to true when OSEYE_UI_DIR is set, false otherwise. "
-            "Set OSEYE_MANAGEMENT_API_ENABLED=true to enable without UI."
+            "Enable the management REST API (auth, alerts, rules, cases, etc.). "
+            "Default false — set true when the management UI or API clients need access. "
+            "Independent of OSEYE_UI_DIR (UI can be hosted elsewhere)."
         ),
     )
 
     @property
     def management_api_active(self) -> bool:
         """True when the management REST API should be registered."""
-        if self.management_api_enabled is not None:
-            return self.management_api_enabled
-        return self.ui_dir is not None
+        return self.management_api_enabled
 
     # Update checker
     update_github_repo: str = Field(
