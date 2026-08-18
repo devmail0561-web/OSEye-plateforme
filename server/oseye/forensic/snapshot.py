@@ -45,13 +45,25 @@ def diff_snapshots(
 
 
 def _row_to_snapshot(row: SnapshotRow) -> AgentSnapshot:
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    try:
+        processes_raw = json.loads(row.processes or "[]")
+    except (json.JSONDecodeError, TypeError):
+        _log.warning("snapshot_corrupt_processes id=%s", str(getattr(row, 'id', '?')))
+        processes_raw = []
+    try:
+        connections_raw = json.loads(row.connections or "[]")
+    except (json.JSONDecodeError, TypeError):
+        _log.warning("snapshot_corrupt_connections id=%s", str(getattr(row, 'id', '?')))
+        connections_raw = []
     return AgentSnapshot(
         snapshot_id=UUID(row.snapshot_id),
         agent_id=UUID(row.agent_id),
         hostname=row.hostname,
         taken_at=datetime.fromisoformat(row.taken_at),
-        processes=[ProcessInfo.model_validate(p) for p in json.loads(row.processes)],
-        connections=[ConnectionInfo.model_validate(c) for c in json.loads(row.connections)],
+        processes=[ProcessInfo.model_validate(p) for p in processes_raw],
+        connections=[ConnectionInfo.model_validate(c) for c in connections_raw],
         case_id=UUID(row.case_id) if row.case_id else None,
     )
 

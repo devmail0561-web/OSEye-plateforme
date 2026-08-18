@@ -74,7 +74,9 @@
     and (event.type == "open" or event.type == "access")
     and (event.resource contains "/.aws/credentials" or event.resource contains "/.env"
          or event.resource contains "/etc/kubernetes" or event.resource contains "kubeconfig"
-         or event.resource contains "docker-compose.yml" or event.resource contains ".npmrc"
+         or (event.resource contains "/etc/" and event.resource contains "docker-compose")
+         or (event.resource contains "/opt/" and event.resource contains "docker-compose")
+         or event.resource contains ".npmrc"
          or event.resource contains ".pypirc")
     # R-02 : uid != 0 supprimé — fanotify/inotify ne peuplent pas le champ uid
     # (défaut Pydantic = 0), donc le filtre bloquerait toutes les alertes.

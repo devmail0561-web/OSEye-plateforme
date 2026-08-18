@@ -8,8 +8,7 @@
   condition: |
     event.category == "file"
     and event.type == "delete"
-    and (event.resource contains "/var/log/" or event.resource contains "/var/log/auth"
-         or event.resource contains "/var/log/syslog" or event.resource contains "/var/log/messages")
+    and event.resource contains "/var/log/"
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]
@@ -96,12 +95,10 @@
     event.category == "process"
     and (event.process_name == "insmod" or event.process_name == "modprobe")
     and event.uid == 0
-    # R-05 : exclusions des modules légitimes courants pour réduire les faux positifs.
-    and not(event.executable contains "depmod")
-    and not(event.resource contains "nvidia")
-    and not(event.resource contains "vboxdrv")
-    and not(event.resource contains "vmw_")
-    and not(event.resource contains "bluetooth")
+    # R-06 : exclusions modules légitimes via cmdline (resource non peuplé par netlink).
+    and not(event.cmdline contains "nvidia")
+    and not(event.cmdline contains "vboxdrv")
+    and not(event.cmdline contains "vmware")
   timeframe: null
   threshold: null
   actions: [ALERT, INVESTIGATE]

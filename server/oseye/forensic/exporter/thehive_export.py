@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import ipaddress as _ipaddress
 
 from oseye.core.schema import Alert, ForensicCase
 
@@ -13,7 +13,14 @@ _STATUS_MAP: dict[str, str] = {
     "resolved": "Resolved",
     "archived": "Archived",
 }
-_IP_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+
+
+def _is_valid_ip(addr: str) -> bool:
+    try:
+        _ipaddress.ip_address(addr)
+        return True
+    except ValueError:
+        return False
 
 
 def _collect_distinct_ips(alerts: list[Alert]) -> list[str]:
@@ -23,7 +30,7 @@ def _collect_distinct_ips(alerts: list[Alert]) -> list[str]:
         entity = alert.entity_id
         # entity_id may be "hostname:pid" or a bare IP
         candidate = entity.split(":")[0] if ":" in entity else entity
-        if _IP_RE.match(candidate) and candidate not in seen:
+        if _is_valid_ip(candidate) and candidate not in seen:
             seen.add(candidate)
             ips.append(candidate)
     return ips

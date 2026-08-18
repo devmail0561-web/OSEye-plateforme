@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import time
 import uuid
 from typing import Any, Literal
 
 from oseye.core.schema import UniversalEvent
-from oseye.normalizer.adapters.linux._utils import safe_int
+from oseye.normalizer.adapters.linux._utils import agent_ts, safe_int
 from oseye.normalizer.secret_masker import mask
 
 # Mapping: syscall name → (category, event_type)
@@ -55,7 +54,7 @@ class AuditdAdapter:
 
         return UniversalEvent(
             event_id=uuid.uuid4(),
-            timestamp_ns=time.time_ns(),
+            timestamp_ns=agent_ts(data),
             hostname=hostname,
             agent_id=uuid.UUID(agent_id),
             category=category,

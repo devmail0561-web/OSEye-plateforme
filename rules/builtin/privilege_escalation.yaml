@@ -40,8 +40,9 @@
          or event.cmdline contains "python" or event.cmdline contains "perl"
          or event.cmdline contains " -i " or event.cmdline ends_with " -i"
          or event.cmdline contains "su -")
-  timeframe: null
-  threshold: null
+  timeframe: 60
+  threshold: 3
+  entity_key: "hostname:uid"
   actions: [ALERT]
   explanation: >
     Utilisation de sudo pour lancer un shell interactif ou un interpréteur.

@@ -19,8 +19,9 @@
          or event.dst_ip starts_with "172.26." or event.dst_ip starts_with "172.27."
          or event.dst_ip starts_with "172.28." or event.dst_ip starts_with "172.29."
          or event.dst_ip starts_with "172.30." or event.dst_ip starts_with "172.31.")
-  timeframe: null
-  threshold: null
+  timeframe: 60
+  threshold: 3
+  entity_key: "hostname:src_ip"
   actions: [ALERT]
   explanation: >
     Connexion SSH sortante vers une adresse IP interne.
@@ -43,6 +44,7 @@
     # la condition était donc toujours fausse et supprimait toutes les alertes.
   timeframe: 30
   threshold: 20
+  entity_key: "hostname:src_ip"
   actions: [ALERT]
   explanation: >
     Plus de 20 connexions TCP new en 30 secondes. Pattern typique d'un scan de ports
@@ -93,10 +95,10 @@
     Montage de partage réseau NFS/SMB (tout utilisateur, y compris root).
     Peut indiquer une reconnaissance ou un accès latéral à des ressources partagées.
 
-- id: rule_rdp_tunneling
-  name: "Tunnel RDP via SSH (port forwarding)"
+- id: rule_ssh_dynamic_forward
+  name: "Redirection de port SSH ou proxy SOCKS dynamique (-L/-R/-D)"
   enabled: true
-  severity: high
+  severity: medium
   tags: [lateral_movement, protocol_tunneling]
   mitre: [T1572]
   platforms: [linux]
@@ -109,5 +111,7 @@
   threshold: null
   actions: [ALERT, INVESTIGATE]
   explanation: >
-    Création d'un tunnel SSH vers le port RDP (3389) ou en mode SOCKS (-D).
-    Technique de pivot réseau courante dans les intrusions avancées.
+    Redirection de port SSH (-L/-R vers port RDP 3389) ou ouverture d'un proxy
+    SOCKS dynamique (-D). L'option -D seule est trop générique pour CRITICAL/HIGH ;
+    sévérité abaissée à MEDIUM. Technique de pivot réseau courante dans les
+    intrusions avancées.

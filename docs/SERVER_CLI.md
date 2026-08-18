@@ -193,23 +193,37 @@ oseye-server validate
 ```
 
 **Vérifications :**
-- Variables d'environnement requises
-- Format des URLs (DB, Redis)
-- Longueur des secrets (>= 32 chars)
-- Existence des certificats TLS
-- Connexion PostgreSQL/Redis
+- Variables d'environnement via pydantic-settings (types, valeurs manquantes, poids décision)
+- Existence des fichiers TLS (cert, key, CA, JWT keys)
+- Expiration des certificats (avertissement si expiré)
 
-**Sortie :**
+**Sortie (succès) :**
 ```
-✓ Database connection OK
-✓ Redis connection OK
-✓ TLS certificates present
-✓ JWT keys valid
-⚠ OSEYE_ADMIN_PASSWORD uses weak default
-✗ OSEYE_SECRET_KEY too short (29 chars, need 32+)
+OK — configuration is valid
 
-Configuration invalid — 1 error, 1 warning
+  DB        sqlite — sqlite+aiosqlite:///./oseye_dev.db
+  Redis     redis://localhost:6379/0
+  API       0.0.0.0:8000
+  gRPC      :50051
+  TLS cert  /etc/oseye/certs/server.crt
+  CA cert   /etc/oseye/certs/ca.crt
+  JWT priv  /etc/oseye/certs/jwt_private.pem
+  Profile   workstation
+  Log level INFO
 ```
+
+**Sortie (erreurs) :**
+```
+OK — configuration is valid
+
+  ...
+
+  Missing files:
+    ✗ /etc/oseye/certs/server.crt
+    ✗ /etc/oseye/certs/ca.key
+```
+
+> Note : `validate` ne teste **pas** la connectivité DB ou Redis. Pour tester la connexion, démarrez le serveur avec `--validate-only`.
 
 ---
 
@@ -274,11 +288,10 @@ sudo oseye-server uninstall --server --purge --yes
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `OSEYE_DB_BACKEND` | `sqlite` ou `postgresql` | Backend de stockage |
+| `OSEYE_DB_BACKEND` | `sqlite` \| `postgresql` \| `clickhouse` | Backend de stockage |
 | `OSEYE_DB_URL` | URL | Connexion database |
-| `OSEYE_BUS_BACKEND` | `redis` | Event bus |
-| `OSEYE_REDIS_URL` | URL | Connexion Redis |
-| `OSEYE_SECRET_KEY` | string (32+ chars) | Clé pour tokens/sessions |
+| `OSEYE_REDIS_URL` | URL | Connexion Redis (event bus) |
+| `OSEYE_SECRET_KEY` | string (32+ chars) | HMAC pour signatures API keys |
 | `OSEYE_CHECKPOINT_HMAC_KEY` | hex (64 chars) | HMAC pour ML checkpoints |
 | `OSEYE_ADMIN_PASSWORD` | string | Mot de passe admin |
 | `OSEYE_ANALYST_PASSWORD` | string | Mot de passe analyst |
@@ -289,16 +302,17 @@ sudo oseye-server uninstall --server --purge --yes
 |----------|--------|-------------|
 | `OSEYE_API_HOST` | `0.0.0.0` | Interface d'écoute |
 | `OSEYE_API_PORT` | `8000` | Port API |
-| `OSEYE_API_CORS_ORIGINS` | `["*"]` | Origins CORS (JSON array) |
+| `OSEYE_API_CORS_ORIGINS` | `["http://localhost:5173"]` | Origins CORS (JSON array) |
 
 ### gRPC (agents)
 
 | Variable | Défaut | Description |
 |----------|--------|-------------|
 | `OSEYE_GRPC_PORT` | `50051` | Port gRPC |
-| `OSEYE_GRPC_INSECURE_DEV` | `false` | Mode HTTP (dev uniquement) |
-| `OSEYE_GRPC_TLS_CERT` | `/etc/oseye/certs/server.crt` | Certificat TLS |
-| `OSEYE_GRPC_TLS_KEY` | `/etc/oseye/certs/server.key` | Clé privée TLS |
+| `OSEYE_GRPC_INSECURE_DEV` | `false` | Mode sans TLS (dev uniquement — jamais en prod) |
+| `OSEYE_TLS_CERT_FILE` | `/etc/oseye/certs/server.crt` | Certificat TLS serveur |
+| `OSEYE_TLS_KEY_FILE` | `/etc/oseye/certs/server.key` | Clé privée TLS serveur |
+| `OSEYE_TLS_CA_CERT_FILE` | `/etc/oseye/certs/ca.crt` | CA racine (vérification agents) |
 
 ### JWT
 
@@ -306,15 +320,18 @@ sudo oseye-server uninstall --server --purge --yes
 |----------|--------|-------------|
 | `OSEYE_JWT_PRIVATE_KEY_PATH` | `/etc/oseye/certs/jwt_private.pem` | Clé RSA privée |
 | `OSEYE_JWT_PUBLIC_KEY_PATH` | `/etc/oseye/certs/jwt_public.pem` | Clé RSA publique |
-| `OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Durée validité token |
+| `OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Durée validité access token (minutes) |
+| `OSEYE_JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Durée validité refresh token (jours) |
+| `OSEYE_DATA_DIR` | `/var/lib/oseye` | Répertoire blocklist tokens révoqués (mode 700 recommandé) |
 
-### Enrollment
+### Enrollment et agents
 
 | Variable | Défaut | Description |
 |----------|--------|-------------|
-| `OSEYE_ENROLLMENT_CA_CERT_FILE` | `/etc/oseye/certs/ca.crt` | CA pour signing |
-| `OSEYE_ENROLLMENT_CA_KEY_FILE` | `/etc/oseye/certs/ca.key` | Clé CA |
-| `OSEYE_ED25519_PUBLIC_KEY` | `/etc/oseye/certs/enrollment_ed25519.pub` | Vérif signatures |
+| `OSEYE_TLS_CA_KEY_FILE` | `/etc/oseye/certs/ca.key` | Clé CA (signature certificats agents) |
+| `OSEYE_TLS_CA_KEY_PASSWORD` | `` (vide) | Passphrase clé CA chiffrée (optionnel) |
+| `OSEYE_AGENT_KEYS_DIR` | `/etc/oseye/agent_keys` | Répertoire clés Ed25519 agents (`{cn}.pub`) |
+| `OSEYE_ENROLLMENT_TOKEN_DEFAULT_TTL_HOURS` | `24` | Durée validité token enrollment (1–8760h) |
 
 ### Threat Intelligence (optionnel)
 
@@ -331,6 +348,7 @@ sudo oseye-server uninstall --server --purge --yes
 |----------|--------|-------------|
 | `OSEYE_LOG_LEVEL` | `INFO` | DEBUG, INFO, WARNING, ERROR |
 | `OSEYE_OTEL_ENDPOINT` | `` | OTLP gRPC endpoint (ex: localhost:4317) |
+| `OSEYE_OTEL_INSECURE` | `false` | Connexion OTLP sans TLS (dev uniquement) |
 
 ---
 
@@ -402,22 +420,12 @@ oseye-server start
 
 ### Comment gérer les tokens d'enrollment ?
 
-Actuellement, `oseye-server init` génère un token initial. Pour en créer d'autres :
+`oseye-server init` génère un token initial. Pour en créer d'autres, voir la section [`oseye-server enrollment token`](#oseye-server-enrollment-token--tokens-denrollment) :
 
-**Via Python (dans container ou environnement) :**
-```python
-from oseye.enrollment_store import EnrollmentStore
-store = EnrollmentStore(repo)
-token = await store.create_token(valid_hours=24)
-print(token)
-```
-
-**Via CLI (à venir) :**
 ```bash
-# Roadmap
-oseye-server enrollment token create [--valid-hours 24]
+sudo oseye-server enrollment token create [--valid-hours 24]
 oseye-server enrollment token list
-oseye-server enrollment token revoke <TOKEN>
+sudo oseye-server enrollment token revoke <TOKEN_ID>
 ```
 
 ### Puis-je utiliser SQLite en production ?

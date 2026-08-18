@@ -45,7 +45,7 @@
 - id: rule_data_destruction
   name: "Tentative de destruction massive de données"
   enabled: true
-  severity: critical
+  severity: high
   tags: [impact, data_destruction]
   mitre: [T1485]
   platforms: [linux]
@@ -58,7 +58,8 @@
       (event.process_name == "rm" and (event.cmdline contains "-rf /" or event.cmdline contains "--no-preserve-root"))
       or (event.process_name == "shred" and event.cmdline contains "-u")
       or (event.cmdline contains "dd if=/dev/zero of=/dev/sd")
-      or (event.cmdline contains "mkfs")
+      or ((event.cmdline contains "mkfs.ext" or event.cmdline contains "mkfs.xfs" or event.cmdline contains "mkfs.btrfs")
+          and (event.cmdline contains "/dev/sd" or event.cmdline contains "/dev/nvme" or event.cmdline contains "/dev/vd"))
     )
   timeframe: null
   threshold: null
@@ -110,9 +111,9 @@
          or event.dst_port == 9001 or event.dst_port == 8443 or event.dst_port == 8080
          or event.dst_port == 2222 or event.dst_port == 31337 or event.dst_port == 12345
          or event.dst_port == 54321)
-    and event.process_name not in ["curl", "wget", "apt", "apt-get", "pip", "pip3", "npm", "yarn", "docker", "java"]
   timeframe: 300
   threshold: 5
+  entity_key: "hostname:dst_ip"
   actions: [ALERT, INVESTIGATE]
   explanation: >
     Connexions répétées vers la même IP externe (hors RFC1918/loopback) sur des ports
