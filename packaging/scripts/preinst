@@ -1,11 +1,12 @@
 #!/bin/sh
 set -e
 
-# Create system user 'oseye' (no login, no home) if it does not exist.
-if ! id oseye >/dev/null 2>&1; then
+# Créer l'utilisateur système oseye-agt (agent) s'il n'existe pas.
+# L'agent tourne sous oseye-agt — séparé de oseye-srv (serveur) pour isolation.
+if ! id oseye-agt >/dev/null 2>&1; then
     useradd --system \
             --no-create-home \
             --shell /usr/sbin/nologin \
             --comment "OSEye EDR Agent" \
-            oseye
+            oseye-agt
 fi

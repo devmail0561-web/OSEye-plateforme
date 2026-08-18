@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload 2>/dev/null || true
+fi
+
+if [ "$1" = "purge" ]; then
+    rm -rf /var/lib/oseye/dev /tmp/oseye-dev
+    rm -f /etc/oseye/dev.env
+
+    # oseye-dev est propre au package dev — supprimer sans condition croisée.
+    if getent passwd oseye-dev >/dev/null; then
+        userdel oseye-dev 2>/dev/null || true
+    fi
+    if getent group oseye-dev >/dev/null; then
+        groupdel oseye-dev 2>/dev/null || true
+    fi
+fi

@@ -1,24 +1,26 @@
 #!/bin/sh
 set -e
 
-# Fix ownership of data and config directories.
-# Note: enrollment (oseye-config enroll) will also chown certs/ recursively,
-# but we set the base directory permissions here to ensure consistency.
-chown -R oseye:oseye /var/lib/oseye/ /etc/oseye/ 2>/dev/null || true
-chmod 750 /etc/oseye/ 2>/dev/null || true
-chmod 700 /etc/oseye/certs/ 2>/dev/null || true
-chmod 750 /var/lib/oseye/ 2>/dev/null || true
+# Répertoires agent — accessibles uniquement par oseye-agt
+install -d -m 750 /etc/oseye
+chown root:oseye-agt /etc/oseye
+install -d -m 700 /etc/oseye/certs
+chown oseye-agt:oseye-agt /etc/oseye/certs
+install -d -m 750 /var/lib/oseye/agent
+chown oseye-agt:oseye-agt /var/lib/oseye/agent
 
-# Reload systemd and enable the service.
-# The service is NOT started here — the operator must enroll the agent first
-# (run enroll-agent.sh to populate /etc/oseye/agent.env and install certs).
+# agent.env lisible uniquement par oseye-agt
+if [ -f /etc/oseye/agent.env.example ] && [ ! -f /etc/oseye/agent.env ]; then
+    cp /etc/oseye/agent.env.example /etc/oseye/agent.env
+fi
+chmod 640 /etc/oseye/agent.env 2>/dev/null || true
+chown root:oseye-agt /etc/oseye/agent.env 2>/dev/null || true
+
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload
     systemctl enable oseye-agent
     echo ""
-    echo "OSEye agent installed. Next steps:"
-    echo "  1. On the server, run:  sudo bash /usr/share/doc/oseye-agent/init-server.sh"
-    echo "  2. On this host, run:   OSEYE_SERVER=<addr>:8000 OSEYE_TOKEN=<token> \\"
-    echo "                            sudo bash /usr/share/doc/oseye-agent/enroll-agent.sh"
-    echo "  The service will start automatically after enrollment."
+    echo "OSEye agent installé."
+    echo "  Enroller l'agent : oseye-config enroll --server <HOST>:50051 --token <TOKEN>"
+    echo "  Le service démarre automatiquement après l'enrollment."
 fi

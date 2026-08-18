@@ -1,12 +1,7 @@
 #!/bin/sh
 set -e
 
-if [ "$1" = "remove" ] || [ "$1" = "0" ]; then
-    if systemctl is-active --quiet oseye-agent 2>/dev/null; then
-        echo "Stopping oseye-agent..."
-        systemctl stop oseye-agent
-    fi
-    if systemctl is-enabled --quiet oseye-agent 2>/dev/null; then
-        systemctl disable oseye-agent
-    fi
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop oseye-agent 2>/dev/null || true
+    systemctl disable oseye-agent 2>/dev/null || true
 fi

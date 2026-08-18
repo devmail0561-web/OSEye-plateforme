@@ -22,12 +22,12 @@ RUN uv pip install --system --no-cache -e .
 
 # Non-root service user. The /etc/oseye volume files written by
 # 'oseye-server init/setup' must be owned or group-accessible by this user.
-RUN groupadd -r oseye && useradd -r -g oseye -s /sbin/nologin oseye
+RUN groupadd -r oseye-srv && useradd -r -g oseye-srv -s /sbin/nologin oseye-srv
 
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-USER oseye
+USER oseye-srv
 
 EXPOSE 8000 50051
 

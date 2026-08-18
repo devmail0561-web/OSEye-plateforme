@@ -1,19 +1,31 @@
 #!/bin/sh
 set -e
 
+# Répertoires serveur — accessibles uniquement par oseye-srv
 install -d -m 700 /etc/oseye/certs
+chown oseye-srv:oseye-srv /etc/oseye/certs
 install -d -m 750 /etc/oseye/agent_keys
+chown oseye-srv:oseye-srv /etc/oseye/agent_keys
 install -d -m 750 /etc/oseye/plugin_keys
+chown oseye-srv:oseye-srv /etc/oseye/plugin_keys
 install -d -m 750 /etc/oseye/plugins
-install -d -m 750 /var/lib/oseye
+chown oseye-srv:oseye-srv /etc/oseye/plugins
+install -d -m 750 /var/lib/oseye/server
+chown oseye-srv:oseye-srv /var/lib/oseye/server
 
-chown -R oseye:oseye /var/lib/oseye/server/ /etc/oseye/ 2>/dev/null || true
+# server.env lisible uniquement par oseye-srv
+if [ -f /etc/oseye/server.env.example ] && [ ! -f /etc/oseye/server.env ]; then
+    cp /etc/oseye/server.env.example /etc/oseye/server.env
+fi
+chmod 640 /etc/oseye/server.env 2>/dev/null || true
+chown root:oseye-srv /etc/oseye/server.env 2>/dev/null || true
 
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload
     systemctl enable oseye-server
     echo ""
-    echo "OSEye server installed. Next steps:"
-    echo "  1. Copy /etc/oseye/server.env.example to /etc/oseye/server.env and edit it."
-    echo "  2. Run: sudo systemctl start oseye-server"
+    echo "OSEye server installé."
+    echo "  1. Initialiser : sudo oseye-server init"
+    echo "  2. Configurer  : sudo oseye-server setup"
+    echo "  3. Démarrer    : sudo oseye-server start"
 fi

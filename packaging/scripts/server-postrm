@@ -6,12 +6,15 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 if [ "$1" = "purge" ]; then
-    rm -rf /etc/oseye /var/lib/oseye
-    # Supprimer l'utilisateur système oseye si présent
-    if getent passwd oseye > /dev/null; then
-        userdel oseye 2>/dev/null || true
+    rm -rf /var/lib/oseye/server
+    rm -f /etc/oseye/server.env /etc/oseye/secrets.env
+
+    # oseye-srv est propre à oseye-server — supprimer sans condition croisée.
+    # oseye-agt (agent) et oseye-dev (dev) ont leurs propres users distincts.
+    if getent passwd oseye-srv >/dev/null; then
+        userdel oseye-srv 2>/dev/null || true
     fi
-    if getent group oseye > /dev/null; then
-        groupdel oseye 2>/dev/null || true
+    if getent group oseye-srv >/dev/null; then
+        groupdel oseye-srv 2>/dev/null || true
     fi
 fi

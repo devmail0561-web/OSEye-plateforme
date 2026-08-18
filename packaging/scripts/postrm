@@ -1,20 +1,27 @@
 #!/bin/sh
 set -e
 
-BUFFER_DIR="/var/lib/oseye"
-
 systemctl daemon-reload 2>/dev/null || true
 
 if [ "$1" = "purge" ] || [ "$1" = "2" ]; then
-    # Backup buffer if non-empty before purge
-    if [ -d "$BUFFER_DIR" ] && [ "$(ls -A "$BUFFER_DIR" 2>/dev/null)" ]; then
-        BACKUP="/tmp/oseye-buffer-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
-        echo "WARNING: buffer directory is not empty — backing up to $BACKUP"
-        tar czf "$BACKUP" -C "$BUFFER_DIR" . 2>/dev/null || true
+    # Backup buffer SQLite si non-vide avant purge
+    BUFFER="/var/lib/oseye/agent"
+    if [ -d "$BUFFER" ] && [ "$(ls -A "$BUFFER" 2>/dev/null)" ]; then
+        BACKUP="/tmp/oseye-agent-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+        echo "WARNING: répertoire agent non vide — sauvegarde dans $BACKUP"
+        tar czf "$BACKUP" -C "$BUFFER" . 2>/dev/null || true
     fi
 
-    rm -rf "$BUFFER_DIR"
-    rm -rf /etc/oseye
-    userdel oseye 2>/dev/null || true
-    groupdel oseye 2>/dev/null || true
+    rm -rf /var/lib/oseye/agent
+    rm -f /etc/oseye/agent.env /etc/oseye/agent.env.example
+
+    # Supprimer oseye-agt uniquement si oseye-server et oseye-dev ne sont pas installés.
+    # Ces packages utilisent des users différents (oseye-srv, oseye-dev) — la suppression
+    # de oseye-agt n'affecte pas les autres services.
+    if getent passwd oseye-agt >/dev/null; then
+        userdel oseye-agt 2>/dev/null || true
+    fi
+    if getent group oseye-agt >/dev/null; then
+        groupdel oseye-agt 2>/dev/null || true
+    fi
 fi

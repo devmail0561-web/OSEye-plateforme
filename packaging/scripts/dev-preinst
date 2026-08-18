@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# Créer l'utilisateur système oseye-dev s'il n'existe pas.
+if ! id oseye-dev >/dev/null 2>&1; then
+    useradd --system \
+            --no-create-home \
+            --shell /usr/sbin/nologin \
+            --comment "OSEye EDR (dev)" \
+            oseye-dev
+fi

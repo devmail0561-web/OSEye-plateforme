@@ -31,8 +31,8 @@ contents:
     type: config|noreplace
     file_info:
       mode: 0640
-      owner: oseye
-      group: oseye
+      owner: oseye-srv
+      group: oseye-srv
 
   # Systemd unit
   - src: packaging/systemd/oseye-server.service
@@ -47,8 +47,8 @@ contents:
     type: dir
     file_info:
       mode: 0750
-      owner: oseye
-      group: oseye
+      owner: oseye-srv
+      group: oseye-srv
 
 scripts:
   preinstall:  packaging/scripts/server-preinst

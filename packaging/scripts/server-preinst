@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
-if ! id oseye >/dev/null 2>&1; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin oseye
+# Créer l'utilisateur système oseye-srv (serveur) s'il n'existe pas.
+# Le serveur tourne sous oseye-srv — séparé de oseye-agt (agent) pour isolation.
+if ! id oseye-srv >/dev/null 2>&1; then
+    useradd --system \
+            --no-create-home \
+            --shell /usr/sbin/nologin \
+            --comment "OSEye EDR Server" \
+            oseye-srv
 fi

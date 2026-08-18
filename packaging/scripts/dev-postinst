@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+install -d -m 750 /var/lib/oseye/dev
+chown oseye-dev:oseye-dev /var/lib/oseye/dev
+install -d -m 750 /tmp/oseye-dev
+chown oseye-dev:oseye-dev /tmp/oseye-dev
+install -d -m 750 /tmp/oseye-dev/plugins
+chown oseye-dev:oseye-dev /tmp/oseye-dev/plugins
+
+chmod 640 /etc/oseye/dev.env
+chown root:oseye-dev /etc/oseye/dev.env
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl enable oseye-dev
+    systemctl start oseye-dev
+    echo ""
+    echo "OSEye dev installé et démarré."
+    echo "  API     : http://localhost:8000/api/v1/health"
+    echo "  Admin   : admin123"
+    echo "  Logs    : journalctl -u oseye-dev -f"
+    echo "  Arrêter : systemctl stop oseye-dev"
+fi

@@ -8,8 +8,8 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=oseye
-Group=oseye
+User=oseye-agt
+Group=oseye-agt
 
 # eBPF requires elevated capabilities.
 # Linux >= 5.8 (Debian 11+, Ubuntu 20.10+, RHEL 9+):

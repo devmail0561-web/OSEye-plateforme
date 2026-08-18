@@ -47,8 +47,8 @@ contents:
     type: config|noreplace
     file_info:
       mode: 0600
-      owner: oseye
-      group: oseye
+      owner: oseye-agt
+      group: oseye-agt
 
   # Enrollment script — available post-install for reference
   - src: scripts/enroll-agent.sh
@@ -63,16 +63,16 @@ contents:
     type: dir
     file_info:
       mode: 0700
-      owner: oseye
-      group: oseye
+      owner: oseye-agt
+      group: oseye-agt
 
   # Offline buffer directory
   - dst: /var/lib/oseye/
     type: dir
     file_info:
       mode: 0750
-      owner: oseye
-      group: oseye
+      owner: oseye-agt
+      group: oseye-agt
 
 scripts:
   preinstall: packaging/scripts/preinst

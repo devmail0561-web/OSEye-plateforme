@@ -1,0 +1,85 @@
+# nfpm v2 — oseye-dev package configuration
+# Package tout-en-un pour les développeurs OSEye.
+# Contient : agent (debug) + serveur (debug) + config dev prête à l'emploi.
+# Usage: VERSION=0.2.0-alpha.1 nfpm package --config packaging/nfpm-dev.yaml --target dist/ --packager deb
+name: oseye-dev
+arch: ${ARCH}
+platform: linux
+version: "${VERSION}"
+version_schema: semver
+maintainer: "OSEye Project <contact@oseye.io>"
+description: |
+  OSEye EDR — Environnement développement tout-en-un.
+  Installe l'agent et le serveur en mode développement (SQLite, logs debug,
+  gRPC sans TLS, API management activée). Prêt à l'emploi sans configuration.
+  NE PAS utiliser en production.
+homepage: "https://github.com/devmail0561-web/OSEye-plateforme"
+license: "Apache-2.0"
+
+# oseye-dev dépend de : aucune dépendance externe requise
+# Conflit avec les versions prod pour éviter les mélanges accidentels
+conflicts:
+  - oseye-server
+  - oseye-agent
+
+contents:
+  # ── Binaires (debug — avec symboles, sans -trimpath ni -s -w) ──────────────
+  - src: dist/dev/oseye-agent-debug
+    dst: /usr/bin/oseye-agent
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  - src: dist/dev/oseye-config-debug
+    dst: /usr/bin/oseye-config
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  - src: dist/oseye-server
+    dst: /usr/bin/oseye-server
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  # ── Configuration dev (prête à l'emploi) ───────────────────────────────────
+  - src: packaging/config/dev.env
+    dst: /etc/oseye/dev.env
+    type: config|noreplace
+    file_info:
+      mode: 0640
+      owner: root
+      group: oseye-dev
+
+  # ── Service systemd dev ────────────────────────────────────────────────────
+  - src: packaging/systemd/oseye-dev.service
+    dst: /usr/lib/systemd/system/oseye-dev.service
+    file_info:
+      mode: 0644
+      owner: root
+      group: root
+
+  # ── Répertoires ────────────────────────────────────────────────────────────
+  - dst: /var/lib/oseye/
+    type: dir
+    file_info:
+      mode: 0750
+      owner: oseye-dev
+      group: oseye-dev
+
+scripts:
+  preinstall:  packaging/scripts/dev-preinst
+  postinstall: packaging/scripts/dev-postinst
+  preremove:   packaging/scripts/dev-prerm
+  postremove:  packaging/scripts/dev-postrm
+
+deb:
+  fields:
+    Installed-Size: "50000"
+
+rpm:
+  group: "Development/Tools"
+  summary: "OSEye EDR — Environnement développement"

@@ -1,0 +1,20 @@
+[Unit]
+Description=OSEye Dev — serveur + agent (développement)
+Documentation=https://github.com/devmail0561-web/OSEye-plateforme
+After=network.target
+
+[Service]
+Type=simple
+User=oseye-dev
+Group=oseye-dev
+EnvironmentFile=-/etc/oseye/dev.env
+ExecStart=/usr/bin/oseye-server start
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=15
+
+# Dev : accès écriture aux répertoires de dev
+ReadWritePaths=/var/lib/oseye /tmp/oseye-dev
+
+[Install]
+WantedBy=multi-user.target
