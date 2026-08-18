@@ -263,11 +263,20 @@ class EntityAnomalyDetector:
         try:
             with open(tmp, "wb") as fh:
                 pickle.dump(payload, fh, protocol=pickle.HIGHEST_PROTOCOL)
-            os.replace(tmp, path)
             if hmac_key is not None:
-                _write_mac(path, hmac_key)
+                # ML-04: write MAC on the tmp file BEFORE the atomic rename so
+                # that the final .pkl always has a companion .mac in place.
+                # A crash between os.replace calls would leave the old .pkl with
+                # its valid .mac, which is safe (old checkpoint, correct MAC).
+                _write_mac(tmp, hmac_key)  # creates tmp.mac alongside tmp
+                mac_tmp = Path(str(tmp) + ".mac")
+                os.replace(tmp, path)
+                os.replace(mac_tmp, Path(str(path) + ".mac"))
+            else:
+                os.replace(tmp, path)
         except Exception:
             tmp.unlink(missing_ok=True)
+            Path(str(tmp) + ".mac").unlink(missing_ok=True)
             raise
 
     @classmethod

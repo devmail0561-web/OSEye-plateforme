@@ -54,7 +54,7 @@ class SameHostLinker:
             return 0.0
 
         cutoff = datetime.now(UTC) - timedelta(seconds=self._timeframe)
-        if incident.created_at < cutoff:
+        if incident.updated_at < cutoff:
             return 0.0
 
         # Base: host + timeframe matched

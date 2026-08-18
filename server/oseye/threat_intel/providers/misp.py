@@ -29,8 +29,11 @@ class MISPProvider:
             if parsed.hostname:
                 # Resolve the hostname and check every resolved address to prevent
                 # SSRF via hostname pointing to a private/internal address (H-17).
+                # TI-04: set a short timeout to avoid blocking the event loop during init.
                 try:
+                    socket.setdefaulttimeout(2.0)
                     resolved = socket.getaddrinfo(parsed.hostname, None)
+                    socket.setdefaulttimeout(None)
                     for _, _, _, _, sockaddr in resolved:
                         addr = ipaddress.ip_address(sockaddr[0])
                         if addr.is_loopback or addr.is_private or addr.is_link_local:
@@ -38,8 +41,11 @@ class MISPProvider:
                                 f"MISP URL resolves to a non-routable address "
                                 f"({sockaddr[0]}): SSRF protection"
                             )
-                except socket.gaierror:
-                    pass  # DNS resolution failure at init — allow, will fail at request time
+                except socket.gaierror as exc:
+                    raise ValueError(
+                        f"MISP URL {self._misp_url!r}: DNS resolution failed — cannot validate for SSRF. "
+                        "Ensure the hostname resolves before starting the server."
+                    ) from exc
             # TI-MED-002: log only that MISP is configured, never the URL itself
             # (which may contain an internal hostname or embedded credentials).
             logger.warning(

@@ -120,7 +120,7 @@ class RedisEventBus:
             try:
                 # Throttle SCAN to once every 5s — new topics arrive rarely
                 # (agent enrollment), not on every message.
-                _now = asyncio.get_event_loop().time()
+                _now = asyncio.get_running_loop().time()
                 if _now - _last_scan >= _scan_interval:
                     _last_scan = _now
                     matching.clear()
@@ -148,7 +148,7 @@ class RedisEventBus:
                     except aioredis.ResponseError as e:
                         # [LOW-1] purge disappeared streams from seen_topics
                         err_str = str(e)
-                        to_remove = {t for t in seen_topics if t in err_str}
+                        to_remove = {t for t in seen_topics if f"'{t}'" in err_str or f'"{t}"' in err_str or err_str.endswith(t)}
                         if to_remove:
                             seen_topics -= to_remove
                             streams = {t: ">" for t in seen_topics}

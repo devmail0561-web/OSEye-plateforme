@@ -15,10 +15,10 @@ from __future__ import annotations
 import os
 import re
 import tempfile
-from pathlib import Path
-from typing import Any
+from pathlib import Path as _Path
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Request, UploadFile, status
 from pydantic import BaseModel
 
 from oseye.api.auth.rbac import require_role
@@ -27,7 +27,7 @@ from oseye.core.observability import get_logger
 # SEC-PLUGIN-001: only allow plugin installs from this directory (configurable via env).
 # Default is /var/lib/oseye/plugin-uploads (not /tmp) to avoid world-readable staging
 # on systems where /tmp is globally accessible; override via OSEYE_PLUGIN_UPLOAD_DIR.
-_PLUGIN_UPLOAD_DIR = Path(
+_PLUGIN_UPLOAD_DIR = _Path(
     os.environ.get("OSEYE_PLUGIN_UPLOAD_DIR", "/var/lib/oseye/plugin-uploads")
 ).resolve()
 
@@ -85,7 +85,7 @@ async def list_plugins(
 
 @router.get("/{name}")
 async def get_plugin(
-    name: str,
+    name: Annotated[str, Path(max_length=200, pattern=r"^[a-zA-Z0-9_-]+$")],
     request: Request,
     _: dict[str, Any] = Depends(_require_reader),
 ) -> dict[str, Any]:
@@ -129,7 +129,7 @@ async def upload_plugin(
     # can read the staged file.
     tmpdir = tempfile.mkdtemp(prefix="oseye_plugin_")
     os.chmod(tmpdir, 0o700)
-    dest = Path(tmpdir) / filename
+    dest = _Path(tmpdir) / filename
 
     dest.write_bytes(content)
     _logger.info("plugin_uploaded", filename=filename, size=len(content))
@@ -157,7 +157,7 @@ async def install_plugin(
     _: dict[str, Any] = Depends(_require_admin),
 ) -> dict[str, Any]:
     # SEC-PLUGIN-001: resolve the path and verify it is within the allowed upload directory
-    resolved = Path(body.path).resolve()
+    resolved = _Path(body.path).resolve()
     if not resolved.is_relative_to(_PLUGIN_UPLOAD_DIR):
         _logger.warning(
             "plugin_install_path_traversal_blocked path=%s allowed_base=%s",
@@ -186,7 +186,7 @@ async def install_plugin(
 
 @router.post("/{name}/enable")
 async def enable_plugin(
-    name: str,
+    name: Annotated[str, Path(max_length=200, pattern=r"^[a-zA-Z0-9_-]+$")],
     request: Request,
     _: dict[str, Any] = Depends(_require_admin),
 ) -> dict[str, Any]:
@@ -199,7 +199,7 @@ async def enable_plugin(
 
 @router.post("/{name}/disable")
 async def disable_plugin(
-    name: str,
+    name: Annotated[str, Path(max_length=200, pattern=r"^[a-zA-Z0-9_-]+$")],
     request: Request,
     _: dict[str, Any] = Depends(_require_admin),
 ) -> dict[str, Any]:
@@ -212,7 +212,7 @@ async def disable_plugin(
 
 @router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_plugin(
-    name: str,
+    name: Annotated[str, Path(max_length=200, pattern=r"^[a-zA-Z0-9_-]+$")],
     request: Request,
     _: dict[str, Any] = Depends(_require_admin),
 ) -> None:

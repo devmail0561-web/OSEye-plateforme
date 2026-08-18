@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
+import os as _os
+import threading as _threading
 import time
 from collections import OrderedDict
 from typing import Any
@@ -19,8 +21,17 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
+
+
+def _auth_get_ip(request):
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        return forwarded_for.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=_auth_get_ip)
 
 # F2 / SEC-003: detect weak or missing credentials at startup
 _WEAK_DEFAULTS: frozenset[str] = frozenset({"admin123", "analyst123"})
@@ -126,7 +137,19 @@ def _load_users() -> dict[str, dict[str, Any]]:
         "analyst": {"hashed_password": _hash(analyst_pw), "roles": ["analyst"]},
     }
 
-_USERS: dict[str, dict[str, Any]] = _load_users()
+_users_lock = _threading.Lock()
+_users_cache: dict = {}
+_users_cache_ts: float = 0.0
+_USERS_TTL = 60.0  # secondes
+
+
+def _get_users() -> dict:
+    global _users_cache, _users_cache_ts
+    with _users_lock:
+        if time.monotonic() - _users_cache_ts > _USERS_TTL:
+            _users_cache = _load_users()
+            _users_cache_ts = time.monotonic()
+        return _users_cache
 
 
 _PW_MAX_BYTES = 72  # bcrypt hard limit — reject early to avoid silent truncation
@@ -144,7 +167,7 @@ def _authenticate(username: str, password: str) -> dict[str, Any] | None:
     if len(password.encode("utf-8")) > _PW_MAX_BYTES:
         return None
 
-    user = _USERS.get(username)
+    user = _get_users().get(username)
     pw_bytes = password.encode("utf-8")
 
     if user is None:
@@ -198,7 +221,11 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
     SEC-AUTH-002: reject refresh if the absolute session lifetime (now - iat) exceeds
     _MAX_SESSION_LIFETIME_SECONDS to prevent indefinite refresh chains.
     """
-    client_ip: str = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        client_ip = forwarded_for.split(",")[-1].strip()
+    else:
+        client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
     handler = request.app.state.jwt_handler
     payload = handler.verify_token(token)
@@ -221,9 +248,10 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
             )
 
     subject: str = str(payload.get("sub", ""))
-    if subject not in _USERS:
+    _users = _get_users()
+    if subject not in _users:
         raise HTTPException(status_code=401, detail="User no longer exists")
-    roles = list(_USERS[subject].get("roles", []))
+    roles = list(_users[subject].get("roles", []))
     # SEC-JWT-001: revoke the old token before issuing a new one so that both
     # tokens cannot be used concurrently (token rotation).
     handler.revoke_token(token)

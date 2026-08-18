@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from oseye.api.auth.rbac import require_role
+from oseye.api.auth.rbac import require_admin, require_role
 from oseye.core.observability import get_logger
 from oseye.core.schema import AgentSnapshot
 
@@ -56,7 +56,7 @@ async def create_snapshot(
 async def get_snapshot(
     snapshot_id: UUID,
     request: Request,
-    _: dict[str, Any] = Depends(_require_reader),
+    _: dict[str, Any] = Depends(require_admin),
 ) -> AgentSnapshot:
     repo = _get_snapshot_repo(request)
     snap = await repo.get(snapshot_id)
@@ -82,7 +82,7 @@ async def diff_snapshots(
     request: Request,
     before_id: UUID,
     after_id: UUID,
-    _: dict[str, Any] = Depends(_require_reader),
+    _: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     from oseye.forensic.snapshot import diff_snapshots as _diff
 

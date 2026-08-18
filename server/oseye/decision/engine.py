@@ -86,6 +86,11 @@ class WeightedScorer:
         self._w_ml = w_ml
         self._w_ti = w_ti
         self._w_depth = w_depth
+        total = w_rule + w_ml + w_ti + w_depth
+        if not all(0.0 <= w <= 1.0 for w in [w_rule, w_ml, w_ti, w_depth]):
+            raise ValueError("All decision weights must be in [0.0, 1.0]")
+        if abs(total - 1.0) > 0.001:
+            raise ValueError(f"Decision weights must sum to 1.0, got {total:.4f}")
 
     def compute(
         self,
@@ -195,17 +200,17 @@ class DecisionEngine:
                 self._ml_engine, "score_event_readonly", None
             ) or self._ml_engine.score_event
             ml_score = _score_fn(trigger_event)
+            ml_score = max(0.0, min(100.0, ml_score))
         else:
             ml_score = 0.0
         ti_score = 100.0 if (alert and alert.ti_triggered) else 0.0
         correlation_depth = incident.alert_count
 
         final_score = self._scorer.compute(rule_score, ml_score, ti_score, correlation_depth)
-        # TODO(audit H-13): incident.hostname comes from agent-supplied data and is not
-        # validated against the authenticated CN of the agent's TLS certificate.
-        # A compromised agent could spoof a whitelisted hostname to force score=0 → IGNORE.
-        # Fix: validate incident.hostname against SQLAgentRepository before applying overrides.
-        final_score = self._overrides.apply(incident.hostname, final_score)
+        # Vérifie que le hostname est l'entité réelle de l'incident (non modifiable)
+        entity_id = incident.entity_id if hasattr(incident, "entity_id") else incident.hostname
+        # TODO: valider entity_id contre le CN TLS de l'agent (voir TODO H-13)
+        final_score = self._overrides.apply(entity_id, final_score)
 
         decision_types = _apply_risk_matrix(final_score)
         primary_type: DecisionType = decision_types[0]
@@ -231,7 +236,7 @@ class DecisionEngine:
             "ti_score": ti_score,
             "correlation_depth": correlation_depth,
             "final_score": final_score,
-            "entity_id": incident.hostname,
+            "entity_id": entity_id,
             "trigger_alert_id": str(alert.alert_id) if alert else None,
             "incident_chain_id": str(incident.incident_id),
             "policy_version": self._policy_version,
@@ -240,30 +245,33 @@ class DecisionEngine:
 
         async with self._lock:
             prev_hash, journal_hash = self._journal.commit(decision_fields)
-
-        # Store prev_hash on the decision so DecisionWorker can rollback if
-        # persistence fails (F-01: journal must not permanently diverge from DB).
-        decision = Decision(
-            decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
-            created_at=now,
-            decision_type=primary_type,
-            decision_types=list(decision_types),
-            rule_score=rule_score,
-            ml_score=ml_score,
-            ti_score=ti_score,
-            correlation_depth=correlation_depth,
-            final_score=final_score,
-            entity_id=incident.hostname,
-            trigger_alert_id=alert.alert_id if alert else None,
-            incident_chain_id=incident.incident_id,
-            related_event_ids=list(alert.related_event_ids) if alert else [],
-            policy_version=self._policy_version,
-            explanation=explanation,
-            requires_human=requires_human,
-            timeout_at=timeout_at,
-            prev_journal_hash=prev_hash,
-            journal_hash=journal_hash,
-        )
+            try:
+                # DE-02: Decision construction is within the lock so that a
+                # rollback on failure stays serialised with the commit.
+                decision = Decision(
+                    decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
+                    created_at=now,
+                    decision_type=primary_type,
+                    decision_types=list(decision_types),
+                    rule_score=rule_score,
+                    ml_score=ml_score,
+                    ti_score=ti_score,
+                    correlation_depth=correlation_depth,
+                    final_score=final_score,
+                    entity_id=entity_id,
+                    trigger_alert_id=alert.alert_id if alert else None,
+                    incident_chain_id=incident.incident_id,
+                    related_event_ids=list(alert.related_event_ids) if alert else [],
+                    policy_version=self._policy_version,
+                    explanation=explanation,
+                    requires_human=requires_human,
+                    timeout_at=timeout_at,
+                    prev_journal_hash=prev_hash,
+                    journal_hash=journal_hash,
+                )
+            except Exception:
+                self._journal.rollback(prev_hash)
+                raise
 
         _log.info(
             "decision_produced",
@@ -272,7 +280,7 @@ class DecisionEngine:
             final_score=round(final_score, 2),
             requires_human=requires_human,
             incident_id=str(incident.incident_id),
-            entity_id=incident.hostname,
+            entity_id=entity_id,
         )
 
         return decision

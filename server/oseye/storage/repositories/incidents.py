@@ -192,7 +192,9 @@ class SQLIncidentRepository:
                 )
                 session.add(alert_row)
 
-                incident_row = await session.get(IncidentRow, str(incident_id))
+                stmt = select(IncidentRow).where(IncidentRow.incident_id == str(incident_id)).with_for_update()
+                result = await session.execute(stmt)
+                incident_row = result.scalar_one_or_none()
                 if incident_row is None:
                     raise ValueError(f"Incident {incident_id} not found")
 

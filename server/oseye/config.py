@@ -154,6 +154,27 @@ class Settings(BaseSettings):
         description="Fallback autonomy level for profiles not listed in PROFILE_AUTONOMY.",
     )
 
+    # UI static file serving — optional
+    # When set, the server mounts the built UI from this directory and serves
+    # it as a SPA (catch-all → index.html). Leave empty to run API-only.
+    ui_dir: str | None = Field(
+        default=None,
+        description=(
+            "Path to the built UI dist directory. "
+            "Set with: oseye-server ui set <PATH>"
+        ),
+    )
+
+    # Update checker
+    update_github_repo: str = Field(
+        default="oseye-security/oseye",
+        description="GitHub repository used by 'oseye-server update' to find releases.",
+    )
+    update_include_prerelease: bool = Field(
+        default=False,
+        description="Include pre-release versions in update checks.",
+    )
+
     @model_validator(mode="after")
     def _validate_weights_sum(self) -> Settings:
         """PC-08: WeightedScorer weights must sum to 1.0 (±0.001 tolerance)."""

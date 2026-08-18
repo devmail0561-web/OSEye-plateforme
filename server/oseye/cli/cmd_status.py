@@ -6,11 +6,13 @@ import os
 import subprocess
 import sys
 import urllib.request
-import urllib.error
 
 
-def _via_systemd() -> bool:
-    return bool(os.environ.get("INVOCATION_ID"))
+_SYSTEMCTL = "/usr/bin/systemctl"
+
+
+def _systemctl_available() -> bool:
+    return os.path.isfile(_SYSTEMCTL)
 
 
 def _health_check() -> dict | None:
@@ -26,8 +28,7 @@ def _health_check() -> dict | None:
 
 
 def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
-    # Systemd path: show systemctl status then health
-    if not _via_systemd():
+    if _systemctl_available():
         subprocess.run(["systemctl", "status", "oseye-server", "--no-pager"], check=False)
         print()
 
@@ -36,5 +37,5 @@ def run(argv: list[str] | None = None) -> None:  # noqa: ARG001
         print(f"API health : \033[32mok\033[0m  (status={health.get('status')})")
     else:
         print("API health : \033[31munreachable\033[0m")
-        if _via_systemd():
+        if not _systemctl_available():
             sys.exit(1)

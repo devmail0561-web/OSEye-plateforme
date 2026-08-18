@@ -157,19 +157,32 @@ class PolicyEngine:
             rule_set_injected=self._rule_signer is not None,
         )
 
-    async def push_to_all(self, profile_name: str) -> None:
+    async def push_to_all(self, profile_name: str) -> dict[str, str]:
         """Broadcast a profile to all registered agent IDs.
+
+        POL-01: each agent push is isolated — a failure for one agent does not
+        stop delivery to the others.  Returns a dict mapping agent_id → "ok"
+        or "error: <message>".
 
         Raises ``KeyError`` if *profile_name* is not loaded.
         """
         if profile_name not in self._profiles:
             raise KeyError(f"Unknown profile: {profile_name!r}")
 
+        results: dict[str, str] = {}
         for agent_id in list(self._known_agents):
-            await self.push_to_agent(agent_id, profile_name)
+            try:
+                await self.push_to_agent(agent_id, profile_name)
+                results[str(agent_id)] = "ok"
+            except Exception as exc:
+                _logger.error("push_to_agent_failed", cn=str(agent_id), error=str(exc))
+                results[str(agent_id)] = f"error: {exc}"
 
         _logger.info(
             "policy.broadcast",
             profile=profile_name,
             agent_count=len(self._known_agents),
+            ok=sum(1 for v in results.values() if v == "ok"),
+            errors=sum(1 for v in results.values() if v.startswith("error:")),
         )
+        return results

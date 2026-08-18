@@ -139,7 +139,8 @@ class MLWorker:
                 _log.debug("ml_worker_ab_score_error", error=str(exc))
                 ml_score = self._engine.score_event(event)
         else:
-            ml_score = self._engine.score_event(event)
+            loop = asyncio.get_running_loop()
+            ml_score = await loop.run_in_executor(None, self._engine.score_event, event)
         self._total_scored += 1
 
         payload = json.dumps(

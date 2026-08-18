@@ -94,7 +94,7 @@ class DecisionJournal:
             ``prev_journal_hash`` (or the genesis hash for the very first entry)
             so partial-chain verification is correct.  Defaults to the genesis hash.
         """
-        broken: set[int] = set()
+        broken: list[int] = []
         prev = start_hash if start_hash is not None else _GENESIS_HASH
 
         for i, decision in enumerate(decisions):

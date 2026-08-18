@@ -23,8 +23,12 @@ func New(privateKeyPath string) (*Signer, error) {
 		return nil, fmt.Errorf("signer: stat key file: %w", err)
 	}
 	if fi.Mode().Perm()&0o077 != 0 {
-		slog.Warn("signer: private key file has permissive permissions — should be 0600",
-			"path", privateKeyPath, "mode", fi.Mode().Perm())
+		// Allow override in dev/test environments only
+		if os.Getenv("OSEYE_INSECURE_KEY_PERMS") != "true" {
+			return nil, fmt.Errorf("signer: key file %s has permissive permissions %04o (expected 0600). Set OSEYE_INSECURE_KEY_PERMS=true to override in dev environments.", privateKeyPath, fi.Mode().Perm())
+		}
+		slog.Warn("signer: key file has permissive permissions (OSEYE_INSECURE_KEY_PERMS override active)",
+			"path", privateKeyPath, "mode", fmt.Sprintf("%04o", fi.Mode().Perm()))
 	}
 	data, err := os.ReadFile(privateKeyPath)
 	if err != nil {

@@ -23,6 +23,11 @@ def _apply_rlimits(cpu_limit_s: int, mem_limit_bytes: int) -> None:
       - RLIMIT_NOFILE: max open file descriptors (reduces exfil surface)
       - RLIMIT_NPROC: max child processes (prevents fork bombs)
       - RLIMIT_FSIZE: max bytes a single write() can produce (limits disk writes)
+
+    # SECURITY NOTE (PL-01): seccomp-bpf filtering is NOT implemented.
+    # A malicious plugin subprocess has unrestricted syscall access including
+    # socket(), execve(), ptrace(). Implement via python-seccomp (libseccomp-dev)
+    # before enabling plugins in production.
     """
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit_s, cpu_limit_s))
     resource.setrlimit(resource.RLIMIT_AS, (mem_limit_bytes, mem_limit_bytes))
@@ -30,8 +35,6 @@ def _apply_rlimits(cpu_limit_s: int, mem_limit_bytes: int) -> None:
     resource.setrlimit(resource.RLIMIT_NPROC, (8, 8))             # max 8 child processes
     _fsize = 10 * 1024 * 1024  # max 10 MB writes
     resource.setrlimit(resource.RLIMIT_FSIZE, (_fsize, _fsize))
-    # TODO(security): add seccomp-bpf via python-seccomp to block socket() calls.
-    # Requires: pip install seccomp (libseccomp-dev needed). See PL-01 audit finding.
 
 
 class PluginSandbox:
@@ -88,12 +91,26 @@ class PluginSandbox:
             # Imports are at module level to avoid import-lock deadlock after fork()
             # in a multi-threaded asyncio process.
             libc = ctypes.CDLL("libc.so.6", use_errno=True)
-            if libc.unshare(0x40000000) != 0:
+            # PL-02: configurable strict mode — abort plugin launch when
+            # network namespace isolation fails (requires CAP_SYS_ADMIN or
+            # a kernel with unprivileged user namespaces enabled).
+            strict_netns = os.environ.get("OSEYE_PLUGIN_STRICT_NETNS", "false").lower() == "true"
+            ret = libc.unshare(0x40000000)  # CLONE_NEWNET
+            if ret != 0:
                 err = ctypes.get_errno()
-                # Non-fatal: log and continue. The process will still be sandboxed
-                # by rlimits. Linux < 3.8 or missing CAP_SYS_ADMIN may fail here.
                 code = errno.errorcode.get(err, err)
-                print(f"sandbox: unshare(CLONE_NEWNET) failed: {code}", file=sys.stderr)
+                if strict_netns:
+                    print(
+                        f"plugin_sandbox: unshare(CLONE_NEWNET) failed (ret={ret}, err={code})"
+                        " — aborting plugin launch (OSEYE_PLUGIN_STRICT_NETNS=true)",
+                        file=sys.stderr,
+                    )
+                    os._exit(1)  # Abort plugin launch if strict mode
+                else:
+                    print(
+                        f"plugin_sandbox: unshare(CLONE_NEWNET) failed (ret={ret}) — network not isolated",
+                        file=sys.stderr,
+                    )
             _apply_rlimits(cpu_limit, mem_limit)
             if self._cgroup_path is not None:
                 _move_to_cgroup(self._cgroup_path)

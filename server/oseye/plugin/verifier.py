@@ -59,6 +59,17 @@ class PluginVerifier:
             logger.warning("No trusted keys loaded; verification will always fail")
             return False
 
+        # PL-05: reject oversized .sig files to prevent memory exhaustion attacks.
+        try:
+            sig_size = sig_path.stat().st_size
+        except OSError:
+            logger.exception("Failed to stat signature file")
+            return False
+        if sig_size > 256:
+            raise ValueError(
+                f"Oversized signature file {sig_path}: {sig_size} bytes (max 256)"
+            )
+
         try:
             plugin_bytes = plugin_path.read_bytes()
             sig_bytes = sig_path.read_bytes()

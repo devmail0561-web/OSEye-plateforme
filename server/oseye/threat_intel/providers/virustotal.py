@@ -47,10 +47,12 @@ class VirusTotalProvider:
 
     def _compute_score(self, stats: dict[str, int]) -> float:
         malicious = stats.get("malicious", 0)
-        total = sum(stats.values())
-        if total == 0:
+        suspicious = stats.get("suspicious", 0)
+        harmless = stats.get("harmless", 0)
+        total_with_verdict = malicious + suspicious + harmless
+        if total_with_verdict == 0:
             return 0.0
-        return (malicious / total) * 100.0
+        return (malicious + suspicious * 0.5) / total_with_verdict * 100
 
     def _parse_report(
         self,

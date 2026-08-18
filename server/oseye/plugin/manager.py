@@ -92,6 +92,17 @@ class PluginManager:
 
         name = path.stem
 
+        # PL-03: validate plugin name to prevent module shadowing / injection attacks.
+        import keyword as _keyword
+        if not (name.isidentifier() and not _keyword.iskeyword(name) and not name.startswith("_")):
+            raise ValueError(
+                f"Invalid plugin name {name!r}: must be a valid Python identifier, "
+                "not a keyword, and not start with underscore."
+            )
+        _RESERVED = frozenset({"os", "sys", "builtins", "importlib", "subprocess", "socket", "pathlib"})
+        if name in _RESERVED:
+            raise ValueError(f"Plugin name {name!r} conflicts with a reserved module name.")
+
         # SEC-PLUGIN-003: signature enforcement.
         # verify=False is an explicit caller override — skip all signature checks.
         sig_path = path.with_suffix(".sig")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os as _os
 from dataclasses import dataclass
 from typing import Annotated, Any
 from uuid import UUID
@@ -18,7 +19,13 @@ router = APIRouter(prefix="/api/v1", tags=["events"])
 # SEC-RATELIMIT-001: list events is expensive (full-table scan with filters).
 # TODO(sec): each router instantiates its own Limiter; a shared request.app.state.limiter
 # would allow the global RateLimitExceeded handler in app.py to intercept 429s correctly.
-_limiter = Limiter(key_func=get_remote_address)
+def _get_ip(request):
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        return forwarded_for.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+_limiter = Limiter(key_func=_get_ip)
 
 # ---------------------------------------------------------------------------
 # Query parameter dataclasses
@@ -85,7 +92,7 @@ def _get_event_repo(request: Request) -> Any:
 @_limiter.limit("60/minute")
 async def list_events(
     request: Request,
-    hostname: str | None = Query(default=None),
+    hostname: str | None = Query(default=None, max_length=253),
     category: str | None = Query(default=None),
     severity: str | None = Query(default=None),
     from_ts: int | None = Query(default=None),

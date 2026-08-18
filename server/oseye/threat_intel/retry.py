@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random as _random
 from collections.abc import Awaitable, Callable
 
 import httpx
@@ -83,5 +84,6 @@ async def retry_async[T](
 
         await asyncio.sleep(delay)
         delay *= 2
+        delay = delay * (0.5 + _random.random() * 0.5)
 
     return None  # unreachable but satisfies type checker

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os as _os
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
@@ -15,7 +16,15 @@ from oseye.rule_engine.evaluator import _eval_expr
 from oseye.rule_engine.models import RuleDefinition
 
 router = APIRouter(prefix="/api/v1", tags=["rules"])
-_limiter = Limiter(key_func=get_remote_address)
+
+
+def _get_ip(request):
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        return forwarded_for.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+_limiter = Limiter(key_func=_get_ip)
 
 
 # ---------------------------------------------------------------------------

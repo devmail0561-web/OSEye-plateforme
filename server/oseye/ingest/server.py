@@ -85,7 +85,7 @@ async def create_grpc_server(
     # SEC-002: pass the running event loop so IngestEvents / ReceivePolicy /
     # StreamCommands can bridge from gRPC's sync threads back to the async bus
     # via run_coroutine_threadsafe instead of the isolated asyncio.run() fallback.
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     servicer = AgentServiceServicer(
         bus=bus, validator=validator, loop=loop, require_agent_keys=False
     )

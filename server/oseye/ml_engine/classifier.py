@@ -19,6 +19,7 @@ and the matched MITRE technique list. The engine calls this after a rule fires.
 
 from __future__ import annotations
 
+import re as _re
 from collections import OrderedDict
 
 from river.linear_model import LogisticRegression
@@ -28,6 +29,10 @@ from oseye.core.schema import UniversalEvent
 from oseye.ml_engine.features import extract
 
 _LEARNING_RATE = 0.01
+
+# ML-02: reject forged technique strings to prevent LRU eviction attacks.
+# Valid MITRE technique IDs: T1234 or T1234.001 (max 10 chars)
+_MITRE_TECH_RE = _re.compile(r"^T[0-9]{4}(\.[0-9]{3})?$")
 
 # ML-R-02: hard cap on number of per-technique models to prevent unbounded memory
 # growth when the MITRE technique space is large or when noisy rules create many
@@ -47,6 +52,10 @@ class MITREClassifier:
     def __init__(self, learning_rate: float = _LEARNING_RATE) -> None:
         self._lr = learning_rate
         self._models: OrderedDict[str, LogisticRegression] = OrderedDict()
+
+    def _is_valid_technique(self, technique: str) -> bool:
+        """Return True iff *technique* matches the MITRE T-ID format (ML-02)."""
+        return bool(_MITRE_TECH_RE.match(technique)) and len(technique) <= 10
 
     def _get_or_create(self, technique: str) -> LogisticRegression:
         if technique not in self._models:
@@ -68,6 +77,10 @@ class MITREClassifier:
         Also trains a negative update for techniques that were NOT matched, to
         keep false-positive rates low as technique coverage grows.
         """
+        if not techniques:
+            return
+        # ML-02: drop technique strings that don't match the MITRE T-ID format.
+        techniques = [t for t in techniques if self._is_valid_technique(t)]
         if not techniques:
             return
 
@@ -115,6 +128,8 @@ class MITREClassifier:
             return
         features = extract(event)
         if techniques:
+            # ML-02: filter out forged/invalid technique IDs before lookup.
+            techniques = [t for t in techniques if self._is_valid_technique(t)]
             target_models = [
                 self._models[t] for t in techniques if t in self._models
             ]

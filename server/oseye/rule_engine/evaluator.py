@@ -135,7 +135,7 @@ _ALLOWED_NODES = {
 
 # F-03 / F-02: detect nested quantifiers and alternation-based ReDoS patterns.
 _REDOS_NESTED_RE = re.compile(
-    r'(\([^)]*[+*{][^)]*\)\s*[+*{?])'
+    r'(\([^)]*[+*{?][^)]*\)\s*[+*{?])'
     r'|(\([^)]*\|[^)]*\)\s*[+*{?])'
 )
 _MAX_REGEX_LEN = 200

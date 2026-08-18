@@ -90,4 +90,5 @@ async def lookup(
         _logger.info("ti_lookup_request", indicator=hash, indicator_type="hash")
         return cast(AggregatedTIReport, await ti_client.lookup(hash, "hash"))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _logger.error(str(exc))
+        raise HTTPException(status_code=400, detail="Threat Intelligence lookup failed") from exc

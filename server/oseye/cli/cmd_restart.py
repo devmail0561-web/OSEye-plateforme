@@ -8,8 +8,11 @@ import subprocess
 import sys
 
 
-def _via_systemd() -> bool:
-    return bool(os.environ.get("INVOCATION_ID"))
+_SYSTEMCTL = "/usr/bin/systemctl"
+
+
+def _systemctl_available() -> bool:
+    return os.path.isfile(_SYSTEMCTL)
 
 
 def run(argv: list[str] | None = None) -> None:
@@ -23,13 +26,13 @@ def run(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    if not _via_systemd():
+    if _systemctl_available():
         result = subprocess.run(
             ["systemctl", "restart", "--timeout", str(args.timeout), "oseye-server"],
             check=False,
         )
         sys.exit(result.returncode)
 
-    # In-container: stop then start (Docker restart policy handles the restart)
+    # Container / no-systemd path: stop (Docker restart policy handles the restart)
     from .cmd_stop import run as stop_run
     stop_run(["--timeout", str(args.timeout)])

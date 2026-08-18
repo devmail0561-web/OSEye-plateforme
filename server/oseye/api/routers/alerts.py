@@ -61,7 +61,7 @@ async def list_alerts(
     # the FastAPI validation layer rather than being forwarded to the repository.
     alert_status: Literal["open", "acknowledged", "investigating", "resolved", "false_positive"] | None = Query(default=None, alias="status"),  # noqa: E501
     severity: Literal["low", "medium", "high", "critical"] | None = Query(default=None),
-    hostname: str | None = Query(default=None),
+    hostname: str | None = Query(default=None, max_length=253),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     _auth: dict[str, Any] = Depends(require_analyst),
@@ -216,10 +216,13 @@ async def mark_false_positive(
                 pass
         if trigger_event is not None:
             try:
-                # ML-R-06: negative_feedback applies learn_one(features, False) to
-                # every known technique model — the correct negative signal.
-                # learn_from_alert(event, []) was a no-op (early return on empty list).
-                ml_engine.negative_feedback(trigger_event)
+                # ML-01 / ML-R-06: pass alert.mitre_techniques so only the
+                # matched technique models receive the negative update.
+                # Falls back to all models when techniques is None/empty.
+                ml_engine.negative_feedback(
+                    trigger_event,
+                    techniques=alert.mitre_techniques or None,
+                )
                 _logger.info(
                     "ml_false_positive_feedback",
                     alert_id=str(alert_id),

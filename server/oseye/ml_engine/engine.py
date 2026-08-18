@@ -91,20 +91,11 @@ class MLEngine:
                 )
             try:
                 self._hmac_key = bytes.fromhex(raw)
-            except ValueError as exc:
-                if os.environ.get("OSEYE_INSECURE", "").lower() == "true":
-                    import logging as _logging
-                    _logging.getLogger(__name__).warning(
-                        "OSEYE_CHECKPOINT_HMAC_KEY is not a hex string — "
-                        "using raw bytes (OSEYE_INSECURE=true). "
-                        "Use openssl rand -hex 32 in production."
-                    )
-                    self._hmac_key = raw.encode()
-                else:
-                    raise RuntimeError(
-                        "OSEYE_CHECKPOINT_HMAC_KEY must be a hex string "
-                        "(e.g. openssl rand -hex 32)"
-                    ) from exc
+            except ValueError:
+                raise RuntimeError(
+                    "OSEYE_CHECKPOINT_HMAC_KEY must be a valid hex string. "
+                    "Generate one with: openssl rand -hex 32"
+                )
         self._anomaly = anomaly_detector or EntityAnomalyDetector()
         self._classifier = classifier or MITREClassifier()
 
@@ -144,18 +135,18 @@ class MLEngine:
         """
         self._classifier.learn(trigger_event, mitre_techniques)
 
-    def negative_feedback(self, event: UniversalEvent) -> None:
-        """Apply a negative update across all known technique models.
+    def negative_feedback(
+        self, event: UniversalEvent, techniques: list[str] | None = None
+    ) -> None:
+        """Apply a negative update to technique models for a false-positive alert.
 
-        ML-R-06: called when an alert is marked as a false positive.  Delegates
-        to MITREClassifier.negative_feedback() which runs learn_one(features, False)
-        on every known technique model — the correct signal for "this event is NOT
-        malicious", regardless of which techniques were originally matched.
-
-        Unlike learn_from_alert(event, []) this actually updates the models;
-        learn_from_alert with an empty list exits immediately without learning.
+        ML-01 / ML-R-06: called when an alert is marked as a false positive.
+        When *techniques* is provided (from alert.mitre_techniques), only those
+        specific technique models receive the negative update — this prevents
+        poisoning the 499 unrelated classifiers.  Falls back to updating all
+        models when techniques is None (degraded mode, no techniques known).
         """
-        self._classifier.negative_feedback(event)
+        self._classifier.negative_feedback(event, techniques=techniques)
 
     def save_checkpoint(self, path: str | Path) -> None:
         """Persist anomaly detector + MITRE classifier state to *path*.

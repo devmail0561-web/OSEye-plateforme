@@ -93,10 +93,14 @@ class RuleWorker:
                     continue
 
                 self._total_evaluated += 1
-                matches = self._engine.evaluate(event)
-                if matches:
-                    self._total_matches += len(matches)
-                    await self._handle_matches(event, matches)
+                try:
+                    matches = self._engine.evaluate(event)
+                    if matches:
+                        self._total_matches += len(matches)
+                        await self._handle_matches(event, matches)
+                except Exception as exc:
+                    _log.error("rule_worker_event_error", error=str(exc), exc_info=True)
+                    continue
 
                 if stop_event is not None and stop_event.is_set():
                     break

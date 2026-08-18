@@ -52,15 +52,17 @@ def extract(event: UniversalEvent) -> dict[str, float]:
             event_id=str(event.event_id),
         )
 
+    # ML-05: use min/max double-clamp for all normalized fields so that
+    # negative or out-of-range input values never escape [0, 1].
     return {
-        "category_ord": _CATEGORY_ORD.get(event.category, 0.0) / _CATEGORY_MAX,
-        "severity_ord": _SEVERITY_ORD.get(event.severity, 0.0) / _SEVERITY_MAX,
-        "uid_norm": min(event.uid / 65535.0, 1.0),
+        "category_ord": min(max(_CATEGORY_ORD.get(event.category, 0.0) / _CATEGORY_MAX, 0.0), 1.0),
+        "severity_ord": min(max(_SEVERITY_ORD.get(event.severity, 0.0) / _SEVERITY_MAX, 0.0), 1.0),
+        "uid_norm": min(max(event.uid / 65535.0, 0.0), 1.0),
         "is_root": 1.0 if event.uid == 0 else 0.0,
-        "hour_norm": hour / 23.0,
-        "dst_port_norm": min((event.dst_port or 0) / 65535.0, 1.0),
-        "bytes_sent_log": min(math.log1p(event.bytes_sent or 0) / _LOG_CAP, 1.0),
-        "bytes_recv_log": min(math.log1p(event.bytes_recv or 0) / _LOG_CAP, 1.0),
+        "hour_norm": min(max(hour / 23.0, 0.0), 1.0),
+        "dst_port_norm": min(max((event.dst_port or 0) / 65535.0, 0.0), 1.0),
+        "bytes_sent_log": min(max(math.log1p(event.bytes_sent or 0) / _LOG_CAP, 0.0), 1.0),
+        "bytes_recv_log": min(max(math.log1p(event.bytes_recv or 0) / _LOG_CAP, 0.0), 1.0),
         "result_ok": 1.0 if event.result == "success" else 0.0,
         "proc_hash": proc_hash,
     }

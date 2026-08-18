@@ -175,7 +175,7 @@ class SQLDecisionRepository:
         async with self._session_factory() as session:
             stmt = (
                 select(DecisionRow.journal_hash)
-                .order_by(desc(DecisionRow.created_at))
+                .order_by(desc(DecisionRow.created_at), DecisionRow.decision_id.desc())
                 .limit(1)
             )
             result = (await session.execute(stmt)).scalar_one_or_none()

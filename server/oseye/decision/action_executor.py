@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re as _re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,16 @@ _log = get_logger(__name__)
 
 TOPIC_COMPLETED = "decisions:completed"
 TOPIC_PENDING   = "decisions:pending"
+
+# DE-05: allowlist pour les identifiants utilisés dans les noms de topic bus.
+# Empêche l'injection de topics arbitraires via un CN/entity_id agent-fourni.
+_SAFE_ID_RE = _re.compile(r"^[a-zA-Z0-9._-]{1,253}$")
+
+
+def _validate_entity_id(eid: str) -> str:
+    if not _SAFE_ID_RE.match(eid):
+        raise ValueError(f"Invalid entity_id for topic construction: {eid!r}")
+    return eid
 
 
 class ActionExecutor:
@@ -192,14 +203,19 @@ class ActionExecutor:
 
     async def _send_command(
         self, cn: str, command_type: str, payload: dict
-    ) -> str:
+    ) -> str | None:
         """Publish an AgentCommand to commands:{cn} and return the command_id.
+
+        Returns None if the publish fails — callers must NOT persist a
+        ResponseAction in that case (DE-04: no phantom command_id).
 
         CIA — Disponibilité : publishes to the bus; if the agent's StreamCommands
         stream is not open the message is dropped by the bus (no persistence in
         the bus layer). The caller must persist the command_id in response_actions
         before calling this method so the action is visible to the operator.
         """
+        # DE-05: validate cn before using it in a topic name
+        _validate_entity_id(cn)
         command_id = str(uuid.uuid4())
         message = json.dumps(
             {
@@ -219,11 +235,11 @@ class ActionExecutor:
             )
         except Exception as exc:  # noqa: BLE001
             _log.error(
-                "command_send_error",
-                command_type=command_type,
-                cn=cn,
+                "send_command_publish_failed",
+                command_id=command_id,
                 error=str(exc),
             )
+            return None  # DE-04: ne pas retourner le command_id si publish a échoué
         return command_id
 
     async def _emit_block_ip_command(
@@ -264,7 +280,7 @@ class ActionExecutor:
 
         # entity_id is the CN of the agent (hostname)
         cn = decision.entity_id
-        return await self._send_command(
+        command_id = await self._send_command(
             cn,
             "BLOCK_IP",
             {
@@ -272,6 +288,9 @@ class ActionExecutor:
                 "decision_id": str(decision.decision_id),
             },
         )
+        if command_id is None:
+            return None  # DE-04: publish failed, ne pas créer un ResponseAction fantôme
+        return command_id
 
     async def _emit_kill_process_command(
         self, decision: Decision, alert: Alert | None
@@ -350,7 +369,9 @@ class ActionExecutor:
             # Note: no retry — notifications are best-effort
 
     async def _request_additional_collection(self, decision: Decision) -> None:
-        topic = f"policy:push:{decision.entity_id}"
+        # DE-05: validate entity_id before using in topic name
+        eid = _validate_entity_id(decision.entity_id)
+        topic = f"policy:push:{eid}"
         payload = json.dumps(
             {
                 "command":     "collect_more",

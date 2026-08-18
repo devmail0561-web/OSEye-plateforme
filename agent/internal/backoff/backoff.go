@@ -29,9 +29,13 @@ func Next(current, max time.Duration) time.Duration {
 		return 1
 	}
 	// Return at least 1ns so reconnect loops never stall on zero backoff.
-	jitter := time.Duration(rand.Int64N(int64(next) + 1))
+	n := int64(next)
+	if n <= 0 {
+		return time.Duration(1)
+	}
+	jitter := time.Duration(rand.Int64N(n))
 	if jitter <= 0 {
-		return 1
+		return time.Duration(1)
 	}
 	return jitter
 }

@@ -149,4 +149,21 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     app.state.ws_alert_manager = alerts_ws_manager
     app.state.ws_decision_manager = decisions_ws_manager
 
+    # UI static file serving — mounted LAST so API routes take priority.
+    # StaticFiles(html=True) serves index.html for any path not matching a file,
+    # enabling SPA client-side routing (e.g. /dashboard, /alerts).
+    if settings.ui_dir:
+        from pathlib import Path as _Path
+        from starlette.staticfiles import StaticFiles
+        _ui = _Path(settings.ui_dir)
+        if _ui.is_dir() and (_ui / "index.html").exists():
+            app.mount("/", StaticFiles(directory=str(_ui), html=True), name="ui")
+        else:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "OSEYE_UI_DIR=%r is not a valid UI dist directory "
+                "(missing index.html) — UI not served",
+                settings.ui_dir,
+            )
+
     return app

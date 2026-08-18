@@ -95,7 +95,7 @@ async def revoke_enrollment_token(
 
 class EnrollRequest(BaseModel):
     csr: str = Field(..., max_length=8192, description="PEM-encoded PKCS#10 CSR")
-    hostname: str = Field(..., max_length=253, description="Agent hostname (used as CN + SAN)")
+    hostname: str = Field(..., max_length=253, pattern=r"^[a-zA-Z0-9]([a-zA-Z0-9\-\.]{0,251}[a-zA-Z0-9])?$", description="Agent hostname (used as CN + SAN)")
 
 
 @router.get(

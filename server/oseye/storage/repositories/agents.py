@@ -61,10 +61,10 @@ class SQLAgentRepository:
     async def set_offline(self, cn: str) -> None:
         """Mark an agent as offline."""
         async with self._session_factory() as session:
-            row = await session.get(AgentRow, cn)
-            if row is not None:
-                row.online = False
-                await session.commit()
+            async with session.begin():
+                row = await session.get(AgentRow, cn)
+                if row is not None:
+                    row.online = False
 
     async def list(self) -> list[AgentRow]:
         """Return all known agents ordered by last_seen desc."""
@@ -82,13 +82,13 @@ class SQLAgentRepository:
         """Update the last_seen timestamp for an agent without touching other fields."""
         now = datetime.now(UTC)
         async with self._session_factory() as session:
-            await session.execute(
-                update(AgentRow).where(AgentRow.cn == cn).values(last_seen=now)
-            )
-            await session.commit()
+            async with session.begin():
+                await session.execute(
+                    update(AgentRow).where(AgentRow.cn == cn).values(last_seen=now)
+                )
 
     async def reset_all_offline(self) -> None:
         """Mark every agent offline — call once at server startup to clear stale online flags."""
         async with self._session_factory() as session:
-            await session.execute(update(AgentRow).values(online=False))
-            await session.commit()
+            async with session.begin():
+                await session.execute(update(AgentRow).values(online=False))

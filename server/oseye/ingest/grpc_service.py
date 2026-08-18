@@ -208,10 +208,11 @@ class AgentServiceServicer:
                     _ip = _peer[6:_peer.rfind("]")]
                 else:
                     _ip = None
-                asyncio.run_coroutine_threadsafe(
+                _fut = asyncio.run_coroutine_threadsafe(
                     self._agent_repo.upsert(cn=cn, online=True, ip_address=_ip),
                     self._loop,
                 )
+                _fut.add_done_callback(lambda f: _logger.error("agent_db_update_failed", error=str(f.exception())) if f.exception() else None)
 
             total_accepted = 0
             total_rejected = 0
@@ -297,20 +298,22 @@ class AgentServiceServicer:
                 )
                 # AG-R-04: refresh last_seen on every successfully processed batch.
                 if self._agent_repo is not None and self._loop is not None:
-                    asyncio.run_coroutine_threadsafe(
+                    _fut = asyncio.run_coroutine_threadsafe(
                         self._agent_repo.update_last_seen(cn),
                         self._loop,
                     )
+                    _fut.add_done_callback(lambda f: _logger.error("agent_db_update_failed", error=str(f.exception())) if f.exception() else None)
 
             if _pb2 is None:  # pragma: no cover
                 return None
 
             # Mark agent offline when stream ends
             if self._agent_repo is not None and self._loop is not None:
-                asyncio.run_coroutine_threadsafe(
+                _fut = asyncio.run_coroutine_threadsafe(
                     self._agent_repo.set_offline(cn),
                     self._loop,
                 )
+                _fut.add_done_callback(lambda f: _logger.error("agent_db_update_failed", error=str(f.exception())) if f.exception() else None)
 
             return _pb2.IngestResponse(
                 accepted=total_accepted,
@@ -542,7 +545,7 @@ class AgentServiceServicer:
                     )
                 elif status == "rolled_back":
                     fut = asyncio.run_coroutine_threadsafe(
-                        repo.mark_rolled_back(command_id), self._loop
+                        repo.atomic_mark_rolled_back(command_id), self._loop
                     )
                 else:
                     fut = None

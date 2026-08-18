@@ -14,6 +14,11 @@ Usage:
   oseye-server stop      [--timeout N]
   oseye-server restart   [--timeout N]
   oseye-server status
+  oseye-server ui set <PATH>
+  oseye-server ui unset
+  oseye-server ui status
+  oseye-server plugin upload <FILE> [--sig FILE] [--no-verify]
+  oseye-server plugin list
   oseye-server enrollment token create  [--valid-hours N]
   oseye-server enrollment token list
   oseye-server enrollment token revoke  <TOKEN_ID>
@@ -33,6 +38,8 @@ Commands:
   stop        Gracefully stop the server (SIGTERM / systemctl stop)
   restart     Stop then start the server (systemctl restart)
   status      Show server status and API health
+  ui          Configure built UI static file serving (set/unset/status)
+  plugin      Manage plugins without the UI (upload/list)
   validate    Validate the current configuration and report missing files
   update      Check for and install the latest binary release
   enrollment  Manage enrollment tokens (token create/list/revoke)
@@ -68,6 +75,12 @@ def main(argv: list[str] | None = None) -> None:
         run(rest)
     elif cmd == "status":
         from .cmd_status import run
+        run(rest)
+    elif cmd == "ui":
+        from .cmd_ui import run
+        run(rest)
+    elif cmd == "plugin":
+        from .cmd_plugin import run
         run(rest)
     elif cmd == "enrollment":
         from .cmd_enrollment import run

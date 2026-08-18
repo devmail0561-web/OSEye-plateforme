@@ -10,6 +10,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import os as _os
 from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
@@ -35,7 +36,13 @@ router = APIRouter(prefix="/api/v1/decisions", tags=["decisions"])
 
 # TODO(sec): each router instantiates its own Limiter; a shared request.app.state.limiter
 # would allow the global RateLimitExceeded handler in app.py to intercept 429s correctly.
-_limiter = Limiter(key_func=get_remote_address)
+def _get_ip(request):
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        return forwarded_for.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+_limiter = Limiter(key_func=_get_ip)
 
 _require_reader = require_role("analyst", "admin")
 _require_admin = require_role("admin")
@@ -64,8 +71,8 @@ def _get_human_queue(request: Request) -> Any:
 @router.get("")
 async def list_decisions(
     request: Request,
-    entity_id: str | None = None,
-    decision_type: str | None = None,
+    entity_id: str | None = Query(default=None, max_length=200),
+    decision_type: str | None = Query(default=None, max_length=200),
     requires_human: bool | None = None,
     page: int = 1,
     page_size: int = 20,

@@ -9,9 +9,11 @@ import subprocess
 import sys
 
 
-def _via_systemd() -> bool:
-    """True when the process was started by systemd (INVOCATION_ID is set)."""
-    return bool(os.environ.get("INVOCATION_ID"))
+_SYSTEMCTL = "/usr/bin/systemctl"
+
+
+def _systemctl_available() -> bool:
+    return os.path.isfile(_SYSTEMCTL)
 
 
 def run(argv: list[str] | None = None) -> None:
@@ -25,15 +27,14 @@ def run(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    # Systemd path: delegate to systemctl
-    if not _via_systemd():
+    if _systemctl_available():
         result = subprocess.run(
             ["systemctl", "stop", "--timeout", str(args.timeout), "oseye-server"],
             check=False,
         )
         sys.exit(result.returncode)
 
-    # In-container / direct path: send SIGTERM to PID 1 (the server process)
+    # Container / no-systemd path: send SIGTERM to PID 1
     try:
         os.kill(1, signal.SIGTERM)
         print("oseye-server: SIGTERM sent to PID 1")

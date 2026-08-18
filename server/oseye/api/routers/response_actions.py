@@ -9,9 +9,9 @@ Endpoints:
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 
 from oseye.api.auth.rbac import require_admin, require_analyst
 from oseye.core.observability import get_logger
@@ -59,7 +59,7 @@ async def list_response_actions(
 
 @router.get("/{command_id}")
 async def get_response_action(
-    command_id: str,
+    command_id: Annotated[str, Path(max_length=36)],
     request: Request,
     _auth: dict[str, Any] = Depends(require_analyst),
 ) -> dict:
@@ -76,7 +76,7 @@ _NON_REVERSIBLE: frozenset[str] = frozenset({"KILL_PROCESS"})
 
 @router.post("/{command_id}/rollback", status_code=status.HTTP_204_NO_CONTENT)
 async def rollback_response_action(
-    command_id: str,
+    command_id: Annotated[str, Path(max_length=36)],
     request: Request,
     _auth: dict[str, Any] = Depends(require_admin),
 ) -> None:

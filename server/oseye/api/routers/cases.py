@@ -19,6 +19,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import os as _os
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -42,7 +43,13 @@ _require_analyst = require_role("analyst", "admin")
 _require_admin = require_role("admin")
 
 # SEC-RATELIMIT-001: exports are expensive (full case load + render).
-_limiter = Limiter(key_func=get_remote_address)
+def _get_ip(request):
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for and _os.getenv("OSEYE_TRUST_PROXY", "").lower() == "true":
+        return forwarded_for.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+_limiter = Limiter(key_func=_get_ip)
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +128,8 @@ class _CloseBody(BaseModel):
 async def list_cases(
     request: Request,
     # API-06: cap string filter lengths to prevent oversized DB queries.
-    status_filter: str | None = Query(default=None, max_length=200),
-    severity: str | None = Query(default=None, max_length=200),
+    status_filter: Literal["open", "investigating", "closed"] | None = Query(default=None),
+    severity: Literal["low", "medium", "high", "critical"] | None = Query(default=None),
     page: int = 1,
     page_size: int = 20,
     _: dict[str, Any] = Depends(_require_reader),

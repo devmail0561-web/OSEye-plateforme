@@ -46,8 +46,8 @@
     event.category == "process"
     and (event.cmdline contains "touch -t" or event.cmdline contains "touch -d")
     and event.uid != 0
-    and not(event.resource starts_with "/tmp/")
-    and not(event.resource starts_with "/var/tmp/")
+    and not(event.cmdline contains "/tmp/")
+    and not(event.cmdline contains "/var/tmp/")
   timeframe: null
   threshold: null
   actions: [ALERT]
