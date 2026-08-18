@@ -70,24 +70,35 @@ services:
     restart: unless-stopped
     environment:
       OSEYE_DB_BACKEND: postgresql
-      OSEYE_BUS_BACKEND: redis
       OSEYE_API_HOST: 0.0.0.0
       OSEYE_API_PORT: "8000"
       # CORS : lister les origines autorisées (domaine réel en prod)
       OSEYE_API_CORS_ORIGINS: '["https://oseye.example.com"]'
       OSEYE_GRPC_PORT: "50051"
       OSEYE_GRPC_INSECURE_DEV: "false"
-      OSEYE_GRPC_TLS_CERT: /etc/oseye/certs/server.crt
-      OSEYE_GRPC_TLS_KEY: /etc/oseye/certs/server.key
+      OSEYE_TLS_CERT_FILE: /etc/oseye/certs/server.crt
+      OSEYE_TLS_KEY_FILE: /etc/oseye/certs/server.key
+      OSEYE_TLS_CA_CERT_FILE: /etc/oseye/certs/ca.crt
+      OSEYE_TLS_CA_KEY_FILE: /etc/oseye/certs/ca.key
+      OSEYE_AGENT_KEYS_DIR: /etc/oseye/agent_keys
       OSEYE_JWT_PRIVATE_KEY_PATH: /etc/oseye/certs/jwt_private.pem
       OSEYE_JWT_PUBLIC_KEY_PATH: /etc/oseye/certs/jwt_public.pem
-      OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
-      OSEYE_ED25519_PUBLIC_KEY: /etc/oseye/certs/enrollment_ed25519.pub
-      OSEYE_ENROLLMENT_CA_CERT_FILE: /etc/oseye/certs/ca.crt
-      OSEYE_ENROLLMENT_CA_KEY_FILE: /etc/oseye/certs/ca.key
+      OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "15"
+      OSEYE_DATA_DIR: /var/lib/oseye
       OSEYE_PLUGINS_DIR: /var/lib/oseye/plugins
-      OSEYE_DATA_DIR: /var/lib/oseye/data
+      OSEYE_PLUGIN_REQUIRE_SIGNATURE: "true"
       OSEYE_LOG_LEVEL: info
+      OSEYE_ENV: production
+      # UI intégrée — monter ui/dist dans /app/ui-dist (make ui-build)
+      # OSEYE_UI_DIR: /app/ui-dist
+      # Secrets lus depuis les fichiers Docker secrets par l'entrypoint
+      OSEYE_SECRET_KEY_FILE: /run/secrets/secret_key
+      OSEYE_CHECKPOINT_HMAC_KEY_FILE: /run/secrets/hmac_key
+      OSEYE_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      OSEYE_ANALYST_PASSWORD_FILE: /run/secrets/analyst_password
+      OSEYE_REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      OSEYE_DB_PASSWORD_FILE: /run/secrets/db_password
+    entrypoint: ["/entrypoint.sh"]
     secrets:
       - db_password
       - redis_password
@@ -95,12 +106,12 @@ services:
       - hmac_key
       - admin_password
       - analyst_password
-    # Les secrets sont montés dans /run/secrets/ — le serveur les lit via
-    # les variables OSEYE_*_FILE (ex: OSEYE_SECRET_KEY_FILE=/run/secrets/secret_key)
     env_file:
-      - /etc/oseye/server.env   # optionnel — remplace les variables ci-dessus
+      - path: /etc/oseye/server.env
+        required: false   # optionnel — surcharge les variables ci-dessus
     volumes:
       - /etc/oseye/certs:/etc/oseye/certs:ro
+      - /etc/oseye/agent_keys:/etc/oseye/agent_keys:ro
       - /etc/oseye/enrollment_tokens:/etc/oseye/enrollment_tokens
       - oseye_data:/var/lib/oseye
     ports:
@@ -121,15 +132,9 @@ services:
       - oseye-backend   # accès postgres + redis
       - oseye-proxy     # accès par nginx uniquement
 
-  oseye-ui:
-    image: oseye-ui:0.2.0-alpha.1
-    restart: unless-stopped
-    # Port interne uniquement — nginx gère l'accès externe via HTTPS
-    depends_on:
-      oseye-server:
-        condition: service_healthy
-    networks:
-      - oseye-proxy     # joignable par nginx uniquement
+  # oseye-ui est supprimé : l'UI est servie directement par oseye-server
+  # (configurer OSEYE_UI_DIR=/app/ui-dist après make ui-build).
+  # Pour une UI dans un container séparé, décommenter et adapter.
 
   nginx:
     image: nginx:alpine
@@ -141,10 +146,9 @@ services:
       - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/oseye/certs:/etc/nginx/certs:ro
     depends_on:
-      - oseye-ui
       - oseye-server
     networks:
-      - oseye-proxy     # joindre oseye-server:8000 et oseye-ui:5173
+      - oseye-proxy     # joindre oseye-server:8000
 
 volumes:
   postgres_data:
@@ -171,4 +175,4 @@ networks:
     internal: true    # postgres + redis : pas d'accès internet, pas de port exposé
   oseye-proxy:
     driver: bridge
-    internal: true    # oseye-server:8000 + oseye-ui:5173 : joignables par nginx uniquement
+    internal: true    # oseye-server:8000 : joignable par nginx uniquement
