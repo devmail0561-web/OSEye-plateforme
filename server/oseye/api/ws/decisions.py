@@ -10,7 +10,7 @@ from oseye.api.ws.manager import WebSocketManager
 
 router = APIRouter(tags=["websocket"])
 
-decisions_ws_manager = WebSocketManager()
+decisions_ws_manager = WebSocketManager(channel="oseye:ws:decisions")
 
 _VALID_WS_ROLES = frozenset({"analyst", "admin"})
 

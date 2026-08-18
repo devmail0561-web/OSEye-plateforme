@@ -203,6 +203,56 @@ class Settings(BaseSettings):
         """True when the management REST API should be registered."""
         return self.management_api_enabled
 
+    # ------------------------------------------------------------------
+    # Mode de déploiement distribué
+    # ------------------------------------------------------------------
+    # Rôle de ce serveur. Contrôle quels composants démarrent.
+    # Valeurs : "all" (défaut), "collector", "worker", "api"
+    #   collector : gRPC + ingestion + enrollment. Pas de workers ni d'API management.
+    #   worker    : rule/ML/TI/correlation/decision workers. Pas de gRPC ni d'API.
+    #   api       : API REST + WebSocket. Pas de gRPC ni de workers.
+    #   all       : tout (comportement actuel, single-node)
+    server_role: str = Field(
+        default="all",
+        description=(
+            "Server deployment role: 'all' (single-node), 'collector' (gRPC only), "
+            "'worker' (analysis workers), 'api' (REST/WS only). "
+            "Use OSEYE_SERVER_ROLE env var."
+        ),
+    )
+
+    # Flags individuels pour désactiver des workers spécifiques.
+    # Prioritaires sur server_role pour les ajustements fins.
+    ml_worker_enabled: bool = Field(
+        default=True,
+        description="Run the ML scoring worker. Disable on N-1 servers in distributed mode.",
+    )
+    decision_worker_enabled: bool = Field(
+        default=True,
+        description="Run the Decision Engine worker.",
+    )
+    rule_worker_enabled: bool = Field(
+        default=True,
+        description="Run the Rule Engine worker.",
+    )
+    grpc_server_enabled: bool = Field(
+        default=True,
+        description="Start the gRPC server for agent connections.",
+    )
+
+    # Properties déduites du rôle
+    @property
+    def runs_grpc(self) -> bool:
+        return self.grpc_server_enabled and self.server_role in ("all", "collector")
+
+    @property
+    def runs_workers(self) -> bool:
+        return self.server_role in ("all", "worker")
+
+    @property
+    def runs_api(self) -> bool:
+        return self.server_role in ("all", "api")
+
     # Update checker
     update_github_repo: str = Field(
         default="oseye-security/oseye",

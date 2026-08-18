@@ -236,6 +236,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             weight_ml=settings.decision_weight_ml,
             weight_ti=settings.decision_weight_ti,
             weight_depth=settings.decision_weight_depth,
+            redis_url=settings.redis_url,
         )
         action_executor = ActionExecutor(bus=bus)
         human_queue = HumanApprovalQueue(
@@ -254,6 +255,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             bus=bus,
             default_profile=settings.default_surveillance_profile,
             rule_signer=rule_signer,
+            redis_url=settings.redis_url,
         )
         await policy_engine.load_profiles()
         _logger.info(
@@ -316,6 +318,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             alert_repo=alert_repo,
             stop_event=stop,
         )
+        from oseye.api.ws.alerts import alerts_ws_manager as _ws_alert_mgr
         from oseye.api.ws.decisions import decisions_ws_manager as _ws_dec_mgr
         decision_worker = DecisionWorker(
             bus=bus,
@@ -377,6 +380,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         _known_cns = [row.cn for row in await agent_repo.list()]
         policy_engine.seed_known_agents(_known_cns)
         _logger.info("policy_engine_seeded", known_agents=len(_known_cns))
+        await policy_engine.seed_known_agents_redis(_known_cns)
 
         # Load persisted agent blocklist so revocations survive restarts
         blocked_agents_repo = SQLBlockedAgentsRepository(backend.session_factory)
@@ -390,8 +394,11 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # stale online flags from a prior crash are cleared (AG-R-07).
         await grpc_servicer.startup()
 
-        await grpc_server.start()
-        _logger.info("grpc_server_started", port=settings.grpc_port)
+        if settings.runs_grpc:
+            await grpc_server.start()
+            _logger.info("grpc_server_started", port=settings.grpc_port)
+        else:
+            _logger.info("grpc_server_disabled — role=%s", settings.server_role)
 
         backpressure = BackpressureController(
             bus=bus,
@@ -404,18 +411,21 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             t.add_done_callback(_task_done_callback)
             return t
 
-        tasks = [
-            _make_task(_normalizer_loop(), "normalizer"),
-            _make_task(writer.run(stop_event=stop), "storage_writer"),
-            _make_task(rule_worker.run(stop_event=stop), "rule_worker"),
-            _make_task(ti_worker.run(), "ti_worker"),
-            _make_task(correlation_worker.run(), "correlation_worker"),
-            _make_task(decision_worker.run(), "decision_worker"),
-            _make_task(human_queue.run(), "human_queue"),
-            _make_task(ml_worker.run(), "ml_worker"),
-            _make_task(notify_worker.run(), "notify_worker"),
-            _make_task(backpressure.run(), "backpressure"),
-        ]
+        tasks = []
+        if settings.runs_workers:
+            tasks.append(_make_task(_normalizer_loop(), "normalizer"))
+            tasks.append(_make_task(writer.run(stop_event=stop), "storage_writer"))
+            if settings.rule_worker_enabled:
+                tasks.append(_make_task(rule_worker.run(stop_event=stop), "rule_worker"))
+            tasks.append(_make_task(ti_worker.run(), "ti_worker"))
+            tasks.append(_make_task(correlation_worker.run(), "correlation_worker"))
+            if settings.decision_worker_enabled:
+                tasks.append(_make_task(decision_worker.run(), "decision_worker"))
+            tasks.append(_make_task(human_queue.run(), "human_queue"))
+            if settings.ml_worker_enabled:
+                tasks.append(_make_task(ml_worker.run(), "ml_worker"))
+            tasks.append(_make_task(notify_worker.run(), "notify_worker"))
+        tasks.append(_make_task(backpressure.run(), "backpressure"))
         _logger.info("workers_started", count=len(tasks))
 
         # Expose shared state to API routers
@@ -426,6 +436,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             private_key_path=settings.jwt_private_key_path,
             public_key_path=settings.jwt_public_key_path,
             expire_minutes=settings.jwt_access_token_expire_minutes,
+            redis_url=settings.redis_url,
         )
         app.state.event_repo = repo  # type: ignore[attr-defined]
         app.state.alert_repo = alert_repo  # type: ignore[attr-defined]
@@ -449,6 +460,16 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # Wire repo into the servicer so ReportActions RPC can persist reports
         grpc_servicer._response_actions_repo = response_actions_repo  # noqa: SLF001
 
+        # Expose WebSocket managers and start Redis subscribers
+        app.state.ws_alert_manager = _ws_alert_mgr  # type: ignore[attr-defined]
+        app.state.ws_decision_manager = _ws_dec_mgr  # type: ignore[attr-defined]
+        if settings.redis_url:
+            _ws_alert_mgr._redis_url = settings.redis_url  # noqa: SLF001
+            _ws_dec_mgr._redis_url = settings.redis_url  # noqa: SLF001
+            await app.state.ws_alert_manager.start_redis_subscriber()
+            await app.state.ws_decision_manager.start_redis_subscriber()
+            _logger.info("ws_redis_subscribers_started")
+
         yield  # server runs here
 
         stop.set()
@@ -460,6 +481,10 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         await ti_client.close()
         await http_client.aclose()
         await ipc_server.stop()
+        if hasattr(app.state, "ws_alert_manager") and app.state.ws_alert_manager:
+            await app.state.ws_alert_manager.stop_redis_subscriber()
+        if hasattr(app.state, "ws_decision_manager") and app.state.ws_decision_manager:
+            await app.state.ws_decision_manager.stop_redis_subscriber()
         _logger.info("grpc_server_stopped")
         _logger.info("workers_stopped")
 

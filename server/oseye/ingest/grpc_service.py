@@ -129,12 +129,14 @@ class AgentServiceServicer:
         agent_repo: Any | None = None,
         *,
         require_agent_keys: bool = False,
+        policy_engine: Any | None = None,
     ) -> None:
         self._bus = bus
         self._validator = validator
         self._loop = loop
         self._agent_repo = agent_repo
         self._require_agent_keys = require_agent_keys
+        self._policy_engine = policy_engine
         # Registry of agent CN → DER-encoded Ed25519 public key bytes.
         # Populated via register_agent_key() or passed at construction time.
         # Protected by _agent_keys_lock for concurrent access from gRPC threads.
@@ -184,6 +186,16 @@ class AgentServiceServicer:
         """Remove *cn* from the blocklist."""
         with self._blocked_lock:
             self._blocked_cns.discard(cn)
+
+    @property
+    def policy_engine(self) -> Any | None:
+        """Return the currently attached policy engine (may be None)."""
+        return self._policy_engine
+
+    @policy_engine.setter
+    def policy_engine(self, engine: Any | None) -> None:
+        """Attach or replace the policy engine at runtime."""
+        self._policy_engine = engine
 
     # ------------------------------------------------------------------
     # IngestEvents — client-streaming RPC
@@ -375,6 +387,25 @@ class AgentServiceServicer:
         else:
             _logger.error("policy_stream_no_loop", agent_id=cn)
             return
+
+        # Re-sync: push the current profile immediately on (re)connection so
+        # a newly-joined server (LB failover) does not leave the agent on a
+        # stale profile.
+        if self._policy_engine is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._policy_engine.push_default_to_agent(cn),
+                    self._loop,
+                ).add_done_callback(
+                    lambda f: _logger.warning(
+                        "profile_resync_failed", cn=cn, error=str(f.exception())
+                    )
+                    if f.exception()
+                    else None
+                )
+                _logger.info("profile_resync_triggered", cn=cn)
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("profile_resync_error", cn=cn, error=str(exc))
 
         if _pb2 is None:  # pragma: no cover
             return

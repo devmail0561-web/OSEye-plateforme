@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,10 @@ class PolicyEngine:
 
     When a ``RuleSigner`` is provided, every push includes a signed ``rule_set``
     blob and the agent-facing autonomy/budget fields required by the local rule engine.
+
+    When *redis_url* is provided, the connected-agents set is mirrored in a shared
+    Redis SET (``oseye:policy:connected_agents``) so that ``push_to_all`` reaches
+    agents connected to other server instances in a distributed deployment.
     """
 
     def __init__(
@@ -34,12 +39,15 @@ class PolicyEngine:
         bus: EventBus,
         default_profile: str = "workstation",
         rule_signer: RuleSigner | None = None,
+        redis_url: str | None = None,
     ) -> None:
         self._bus = bus
         self._profiles: dict[str, SurveillanceProfile] = {}
         self._known_agents: set[str] = set()  # agent CNs (TLS certificate CN)
         self._default_profile = default_profile
         self._rule_signer = rule_signer
+        self._redis_url = redis_url
+        self._agents_redis_key = "oseye:policy:connected_agents"
 
     # ------------------------------------------------------------------
     # Profile loading
@@ -82,17 +90,47 @@ class PolicyEngine:
         return sorted(self._profiles.values(), key=lambda p: p.name)
 
     def seed_known_agents(self, cns: list[str]) -> None:
-        """Pre-populate the known-agents set from persisted CNs."""
+        """Pre-populate the known-agents set from persisted CNs (local only)."""
         self._known_agents.update(cns)
+
+    async def seed_known_agents_redis(self, cns: list[str]) -> None:
+        """Mirror *cns* into the shared Redis SET (no-op when redis_url is unset)."""
+        if not self._redis_url or not cns:
+            return
+        try:
+            import redis.asyncio as _redis  # noqa: PLC0415
+
+            async with _redis.from_url(self._redis_url) as rc:
+                await rc.sadd(self._agents_redis_key, *cns)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("policy_redis_seed_failed", error=str(exc))
 
     def unregister_agent(self, cn: str) -> None:
         """POL-01: Remove *cn* from _known_agents.
 
         Call this from the gRPC service when an agent's stream disconnects so
         that _known_agents does not grow indefinitely on long-running servers.
+        Also removes the CN from the shared Redis SET (fire-and-forget).
         """
         self._known_agents.discard(cn)
+        # Redis SREM — fire and forget via create_task if a loop is running
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._redis_srem_agent(cn))
+        except RuntimeError:
+            pass  # No running loop (tests)
         _logger.info("policy.agent_unregistered", cn=cn)
+
+    async def _redis_srem_agent(self, cn: str) -> None:
+        if not self._redis_url:
+            return
+        try:
+            import redis.asyncio as _redis  # noqa: PLC0415
+
+            async with _redis.from_url(self._redis_url) as rc:
+                await rc.srem(self._agents_redis_key, cn)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("policy_redis_srem_failed", error=str(exc))
 
     async def push_default_to_agent(self, cn: str) -> None:
         """Push the default profile to a newly connected agent."""
@@ -148,6 +186,12 @@ class PolicyEngine:
         payload: bytes = json.dumps(payload_data).encode("utf-8")
         await self._bus.publish(topic, payload)
         self._known_agents.add(cn)
+        # Redis SET — fire and forget
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._redis_sadd_one(cn))
+        except RuntimeError:
+            pass  # No running loop (tests)
         _logger.info(
             "policy.pushed",
             cn=cn,
@@ -156,6 +200,28 @@ class PolicyEngine:
             rule_set_injected=self._rule_signer is not None,
         )
 
+    async def _redis_sadd_one(self, cn: str) -> None:
+        if not self._redis_url:
+            return
+        try:
+            import redis.asyncio as _redis  # noqa: PLC0415
+
+            async with _redis.from_url(self._redis_url) as rc:
+                await rc.sadd(self._agents_redis_key, cn)
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _redis_sadd_agents(self, cns: list[str]) -> None:
+        if not self._redis_url or not cns:
+            return
+        try:
+            import redis.asyncio as _redis  # noqa: PLC0415
+
+            async with _redis.from_url(self._redis_url) as rc:
+                await rc.sadd(self._agents_redis_key, *cns)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("policy_redis_seed_failed", error=str(exc))
+
     async def push_to_all(self, profile_name: str) -> dict[str, str]:
         """Broadcast a profile to all registered agent IDs.
 
@@ -163,13 +229,32 @@ class PolicyEngine:
         stop delivery to the others.  Returns a dict mapping agent_id → "ok"
         or "error: <message>".
 
+        In a distributed deployment (redis_url set), the target set is the union
+        of local *_known_agents* and the shared Redis SET so that agents connected
+        to other server instances are also reached.
+
         Raises ``KeyError`` if *profile_name* is not loaded.
         """
         if profile_name not in self._profiles:
             raise KeyError(f"Unknown profile: {profile_name!r}")
 
+        # Union: local agents + agents from shared Redis SET (distributed)
+        all_cns: set[str] = set(self._known_agents)
+        if self._redis_url:
+            try:
+                import redis.asyncio as _redis  # noqa: PLC0415
+
+                async with _redis.from_url(self._redis_url) as rc:
+                    redis_cns = await rc.smembers(self._agents_redis_key)
+                    all_cns.update(
+                        cn.decode() if isinstance(cn, bytes) else cn
+                        for cn in redis_cns
+                    )
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("policy_redis_smembers_failed", error=str(exc))
+
         results: dict[str, str] = {}
-        for cn in list(self._known_agents):
+        for cn in all_cns:
             try:
                 await self.push_to_agent(cn, profile_name)
                 results[cn] = "ok"
@@ -180,7 +265,7 @@ class PolicyEngine:
         _logger.info(
             "policy.broadcast",
             profile=profile_name,
-            agent_count=len(self._known_agents),
+            agent_count=len(all_cns),
             ok=sum(1 for v in results.values() if v == "ok"),
             errors=sum(1 for v in results.values() if v.startswith("error:")),
         )

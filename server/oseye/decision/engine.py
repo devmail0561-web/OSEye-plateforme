@@ -143,6 +143,7 @@ class DecisionEngine:
         weight_ml: float = 0.3,
         weight_ti: float = 0.2,
         weight_depth: float = 0.1,
+        redis_url: str | None = None,
     ) -> None:
         self._journal = journal
         self._overrides = policy_overrides or PolicyOverrides()
@@ -156,6 +157,39 @@ class DecisionEngine:
         )
         self._ml_engine = ml_engine
         self._lock = asyncio.Lock()
+        self._redis_url = redis_url
+        self._leader_key = "oseye:decision:leader"
+        self._leader_ttl = 30  # secondes — renouvellement toutes les 15s
+
+    async def _is_leader(self) -> bool:
+        """Retourne True si cette instance est le leader du journal BLAKE3.
+
+        En mode single-server (redis_url non fourni), retourne toujours True.
+        En mode distribué, utilise Redis SETNX pour élire un leader unique.
+        Fail-open : si Redis est indisponible, chaque serveur agit comme leader.
+        """
+        if not self._redis_url:
+            return True  # Single-server : toujours leader
+        try:
+            import socket
+
+            import redis.asyncio as _redis
+            server_id = f"{socket.gethostname()}:{id(self)}"
+            async with _redis.from_url(self._redis_url) as rc:
+                # NX=True : n'écrit que si absent. EX=TTL.
+                result = await rc.set(self._leader_key, server_id, nx=True, ex=self._leader_ttl)
+                if result:
+                    return True  # On vient de devenir leader
+                # Vérifier si on est déjà leader
+                current = await rc.get(self._leader_key)
+                current_val = current.decode() if isinstance(current, bytes) else current
+                if current and current_val == server_id:
+                    await rc.expire(self._leader_key, self._leader_ttl)  # Renouveler
+                    return True
+                return False
+        except Exception as exc:
+            _log.warning("decision_leader_check_failed", error=str(exc))
+            return True  # Fail-open : si Redis down, chaque serveur agit comme leader
 
     async def decide(
         self,
@@ -243,35 +277,65 @@ class DecisionEngine:
             "explanation": explanation,
         }
 
-        async with self._lock:
-            prev_hash, journal_hash = self._journal.commit(decision_fields)
-            try:
-                # DE-02: Decision construction is within the lock so that a
-                # rollback on failure stays serialised with the commit.
-                decision = Decision(
-                    decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
-                    created_at=now,
-                    decision_type=primary_type,
-                    decision_types=list(decision_types),
-                    rule_score=rule_score,
-                    ml_score=ml_score,
-                    ti_score=ti_score,
-                    correlation_depth=correlation_depth,
-                    final_score=final_score,
-                    entity_id=entity_id,
-                    trigger_alert_id=alert.alert_id if alert else None,
-                    incident_chain_id=incident.incident_id,
-                    related_event_ids=list(alert.related_event_ids) if alert else [],
-                    policy_version=self._policy_version,
-                    explanation=explanation,
-                    requires_human=requires_human,
-                    timeout_at=timeout_at,
-                    prev_journal_hash=prev_hash,
-                    journal_hash=journal_hash,
-                )
-            except Exception:
-                self._journal.rollback(prev_hash)
-                raise
+        is_leader = await self._is_leader()
+        if is_leader:
+            async with self._lock:
+                prev_hash, journal_hash = self._journal.commit(decision_fields)
+                try:
+                    # DE-02: Decision construction is within the lock so that a
+                    # rollback on failure stays serialised with the commit.
+                    decision = Decision(
+                        decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
+                        created_at=now,
+                        decision_type=primary_type,
+                        decision_types=list(decision_types),
+                        rule_score=rule_score,
+                        ml_score=ml_score,
+                        ti_score=ti_score,
+                        correlation_depth=correlation_depth,
+                        final_score=final_score,
+                        entity_id=entity_id,
+                        trigger_alert_id=alert.alert_id if alert else None,
+                        incident_chain_id=incident.incident_id,
+                        related_event_ids=list(alert.related_event_ids) if alert else [],
+                        policy_version=self._policy_version,
+                        explanation=explanation,
+                        requires_human=requires_human,
+                        timeout_at=timeout_at,
+                        prev_journal_hash=prev_hash,
+                        journal_hash=journal_hash,
+                    )
+                except Exception:
+                    self._journal.rollback(prev_hash)
+                    raise
+        else:
+            # Follower : persiste la décision sans journal BLAKE3.
+            # Le journal sera reconstituable depuis le leader.
+            _log.debug(
+                "decision_follower_skip_journal",
+                decision_id=str(decision_fields["decision_id"]),
+            )
+            decision = Decision(
+                decision_id=decision_fields["decision_id"],  # type: ignore[arg-type]
+                created_at=now,
+                decision_type=primary_type,
+                decision_types=list(decision_types),
+                rule_score=rule_score,
+                ml_score=ml_score,
+                ti_score=ti_score,
+                correlation_depth=correlation_depth,
+                final_score=final_score,
+                entity_id=entity_id,
+                trigger_alert_id=alert.alert_id if alert else None,
+                incident_chain_id=incident.incident_id,
+                related_event_ids=list(alert.related_event_ids) if alert else [],
+                policy_version=self._policy_version,
+                explanation=explanation,
+                requires_human=requires_human,
+                timeout_at=timeout_at,
+                prev_journal_hash=None,
+                journal_hash=None,
+            )
 
         _log.info(
             "decision_produced",

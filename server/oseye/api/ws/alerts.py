@@ -11,7 +11,7 @@ from oseye.api.ws.manager import WebSocketManager
 router = APIRouter(tags=["websocket"])
 
 # Module-level manager — shared with the RuleWorker via app.state
-alerts_ws_manager = WebSocketManager()
+alerts_ws_manager = WebSocketManager(channel="oseye:ws:alerts")
 
 _VALID_WS_ROLES = frozenset({"analyst", "admin"})
 

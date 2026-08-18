@@ -42,6 +42,7 @@ class JWTHandler:
         expire_minutes: int,
         *,
         secret: str | None = None,
+        redis_url: str | None = None,
     ) -> None:
         self._expire_minutes = expire_minutes
         if secret is not None:
@@ -86,6 +87,7 @@ class JWTHandler:
         except OSError:
             pass
         self._revoked_lock = threading.Lock()
+        self._redis_url = redis_url
         self._revoked: dict[str, datetime] = self._load_blocklist()
 
     # ------------------------------------------------------------------
@@ -143,7 +145,8 @@ class JWTHandler:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # SEC-JWT-001: check and prune blocklist
+        # SEC-JWT-001: check blocklist (sync path — uses in-memory only)
+        # For multi-server deployments, use verify_token_async() instead.
         self._prune_revoked()
         with self._revoked_lock:
             if jti in self._revoked:
@@ -190,6 +193,92 @@ class JWTHandler:
             self._revoked[jti] = exp_dt
         self._save_blocklist()
         _logger.info("jwt_revoked", jti=jti)
+
+    async def revoke_token_async(self, token: str) -> None:
+        """Async version of revoke_token — uses Redis when available."""
+        try:
+            payload: dict[str, Any] = jwt.decode(
+                token,
+                self._verify_key,
+                algorithms=[self._algorithm],
+                options={"verify_exp": False},
+            )
+        except jwt.InvalidTokenError as exc:
+            _logger.warning("jwt_revoke_decode_failed", error=str(exc))
+            return
+        jti: str | None = payload.get("jti")
+        if not jti:
+            return
+        exp_raw = payload.get("exp")
+        if isinstance(exp_raw, (int, float)):
+            exp_dt = datetime.fromtimestamp(float(exp_raw), tz=UTC)
+        else:
+            exp_dt = datetime.now(tz=UTC) + timedelta(minutes=self._expire_minutes)
+        ttl = max(1, int((exp_dt - datetime.now(tz=UTC)).total_seconds()))
+        if self._redis_url:
+            try:
+                import redis.asyncio as _redis
+                async with _redis.from_url(self._redis_url) as rc:
+                    await rc.setex(f"oseye:jwt:revoked:{jti}", ttl, "1")
+                _logger.info("jwt_revoked_redis", jti=jti)
+                return
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("jwt_redis_revoke_failed", error=str(exc))
+                # Fall through to file-based
+        with self._revoked_lock:
+            self._revoked[jti] = exp_dt
+        self._save_blocklist()
+        _logger.info("jwt_revoked_file", jti=jti)
+
+    async def is_revoked_async(self, jti: str) -> bool:
+        """Check if jti is revoked — uses Redis when available."""
+        if self._redis_url:
+            try:
+                import redis.asyncio as _redis
+                async with _redis.from_url(self._redis_url) as rc:
+                    return bool(await rc.exists(f"oseye:jwt:revoked:{jti}"))
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("jwt_redis_check_failed", error=str(exc))
+                # Fall through to in-memory
+        self._prune_revoked()
+        with self._revoked_lock:
+            return jti in self._revoked
+
+    async def verify_token_async(self, token: str) -> dict[str, Any]:
+        """Async verify — checks Redis blocklist when available."""
+        try:
+            payload: dict[str, Any] = jwt.decode(
+                token,
+                self._verify_key,
+                algorithms=[self._algorithm],
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except jwt.InvalidTokenError as exc:
+            _logger.warning("jwt_invalid", error=str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        jti: str | None = payload.get("jti")
+        if jti is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if await self.is_revoked_async(jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return payload
 
     # ------------------------------------------------------------------
     # Internal helpers
