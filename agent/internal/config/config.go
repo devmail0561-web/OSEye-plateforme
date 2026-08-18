@@ -252,8 +252,8 @@ var criticalPaths = []string{"/", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/b
 func rejectCriticalPath(field, path string) error {
 	cleaned := filepath.Clean(path)
 	for _, cp := range criticalPaths {
-		if cleaned == cp {
-			return fmt.Errorf("config: %s must not be a critical system path (%s)", field, cp)
+		if cleaned == cp || strings.HasPrefix(cleaned, cp+string(filepath.Separator)) {
+			return fmt.Errorf("config: %s must not be inside a critical system path (%s)", field, cp)
 		}
 	}
 	return nil

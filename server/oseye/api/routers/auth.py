@@ -41,30 +41,54 @@ _WEAK_DEFAULTS: frozenset[str] = frozenset({"admin123", "analyst123"})
 _MAX_SESSION_LIFETIME_SECONDS: float = 24 * 3600  # 24 hours
 
 # ---------------------------------------------------------------------------
-# SEC-006: in-memory rate limiter for /auth/refresh — bounded LRU to 10 000 IPs
+# SEC-006: rate limiter for /auth/refresh
+# Uses Redis sliding window when OSEYE_REDIS_URL is available (shared across
+# all workers/replicas). Falls back to in-process LRU store otherwise.
 # ---------------------------------------------------------------------------
 _RATE_STORE_CAP = 10_000
-# NOTE (M): _refresh_rate_store is per-worker (in-process only). In a multi-worker
-# deployment (gunicorn --workers N, or multiple replicas behind a load-balancer),
-# each worker maintains its own independent store, making the effective per-IP
-# limit max_calls * num_workers. For accurate enforcement in production use a
-# shared Redis backend — e.g. replace _check_rate_limit with slowapi + a Redis
-# storage backend (slowapi.extension.Limiter with storage_uri="redis://...").
 _refresh_rate_store: OrderedDict[str, list[float]] = OrderedDict()
 
 
-def _check_rate_limit(ip: str, max_calls: int = 10, window_seconds: float = 60.0) -> None:
+async def _check_rate_limit(
+    ip: str, max_calls: int = 10, window_seconds: float = 60.0
+) -> None:
     """Raise HTTP 429 if *ip* has exceeded *max_calls* within *window_seconds*.
 
-    SEC-006: the store is capped at _RATE_STORE_CAP entries (LRU eviction) to
-    prevent unbounded growth under floods of distinct source IPs.
+    Tries Redis sliding window first (shared across workers). Falls back to
+    the in-process LRU store if Redis is unavailable.
     """
-    now = time.monotonic()
+    redis_url = os.environ.get("OSEYE_REDIS_URL")
+    if redis_url:
+        try:
+            import redis.asyncio as _redis
+            now = time.time()
+            key = f"rate:refresh:{ip}"
+            async with _redis.from_url(redis_url) as _rc:
+                pipe = _rc.pipeline()
+                pipe.zremrangebyscore(key, 0, now - window_seconds)
+                pipe.zadd(key, {str(now): now})
+                pipe.zcard(key)
+                pipe.expire(key, int(window_seconds) + 1)
+                results = await pipe.execute()
+            count = results[2]
+            if count > max_calls:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many refresh requests. Try again later.",
+                )
+            return
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # Redis unavailable — fall through to in-process store
+
+    # In-process fallback (single-worker or Redis unavailable)
+    now_m = time.monotonic()
     timestamps = _refresh_rate_store.get(ip, [])
-    timestamps = [t for t in timestamps if now - t < window_seconds]
+    timestamps = [t for t in timestamps if now_m - t < window_seconds]
     if len(timestamps) >= max_calls:
         raise HTTPException(status_code=429, detail="Too many requests")
-    timestamps.append(now)
+    timestamps.append(now_m)
 
     # Update the OrderedDict — move to end (most-recently-used)
     _refresh_rate_store[ip] = timestamps
@@ -225,7 +249,7 @@ async def refresh(request: Request, token: str = Body(..., embed=True)) -> dict[
         client_ip = forwarded_for.split(",")[-1].strip()
     else:
         client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(client_ip)
+    await _check_rate_limit(client_ip)
     handler = request.app.state.jwt_handler
     payload = handler.verify_token(token)
 
