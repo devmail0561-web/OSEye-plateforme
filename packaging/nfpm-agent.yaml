@@ -18,7 +18,7 @@ license: "Apache-2.0"
 
 contents:
   # Agent binary
-  - src: dist/oseye-agent-linux-amd64
+  - src: dist/oseye-agent
     dst: /usr/bin/oseye-agent
     file_info:
       mode: 0755
@@ -26,7 +26,7 @@ contents:
       group: root
 
   # Config CLI tool
-  - src: dist/oseye-config-linux-amd64
+  - src: dist/oseye-config
     dst: /usr/bin/oseye-config
     file_info:
       mode: 0755

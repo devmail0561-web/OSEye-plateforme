@@ -4,3 +4,14 @@ set -e
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload 2>/dev/null || true
 fi
+
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/oseye /var/lib/oseye
+    # Supprimer l'utilisateur système oseye si présent
+    if getent passwd oseye > /dev/null; then
+        userdel oseye 2>/dev/null || true
+    fi
+    if getent group oseye > /dev/null; then
+        groupdel oseye 2>/dev/null || true
+    fi
+fi

@@ -1,5 +1,8 @@
 # nfpm v2 — oseye-server package configuration
 # Usage: VERSION=0.2.0-alpha.1 nfpm package --config packaging/nfpm-server.yaml --target dist/
+# NOTE: Le binaire oseye-server (PyInstaller) doit être produit avant le packaging.
+# Voir le job build-server-binary dans .github/workflows/release.yml.
+# Commande de build : pyinstaller server/oseye/main.py --onefile --name oseye-server --distpath dist/
 name: oseye-server
 arch: ${ARCH}
 platform: linux

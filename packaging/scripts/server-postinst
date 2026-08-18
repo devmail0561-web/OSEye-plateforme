@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+install -d -m 700 /etc/oseye/certs
+install -d -m 750 /etc/oseye/agent_keys
+install -d -m 750 /etc/oseye/plugin_keys
+install -d -m 750 /etc/oseye/plugins
+install -d -m 750 /var/lib/oseye
+
 chown -R oseye:oseye /var/lib/oseye/server/ /etc/oseye/ 2>/dev/null || true
 
 if command -v systemctl >/dev/null 2>&1; then

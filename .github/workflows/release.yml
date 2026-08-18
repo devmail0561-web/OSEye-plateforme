@@ -62,8 +62,38 @@ jobs:
           name: binaries-${{ matrix.arch }}
           path: dist/${{ matrix.arch }}/
 
+  build-server-binary:
+    needs: validate
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller uv
+          cd server && uv pip install --system -e .
+      - name: Build server binary
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          pyinstaller server/oseye/main.py \
+            --onefile \
+            --name oseye-server \
+            --distpath dist/ \
+            --add-data "server/oseye/policy/profiles:oseye/policy/profiles" \
+            --add-data "rules:rules" \
+            --hidden-import oseye \
+            --hidden-import grpc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-binary
+          path: dist/oseye-server
+
   package:
-    needs: build
+    needs: [build, build-server-binary]
     runs-on: self-hosted
     strategy:
       matrix:
@@ -76,7 +106,8 @@ jobs:
           path: dist/
       - name: Install nfpm
         run: |
-          curl -sfL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_linux_amd64.tar.gz | tar xz -C /usr/local/bin nfpm
+          NFPM_ARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
+          curl -sfL "https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_linux_${NFPM_ARCH}.tar.gz" | tar xz -C /usr/local/bin nfpm
       - name: Package .deb and .rpm
         env:
           VERSION: ${{ github.ref_name }}
@@ -146,7 +177,8 @@ jobs:
       - name: Build and push server image
         uses: docker/build-push-action@v6
         with:
-          context: server
+          context: .
+          file: server/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
@@ -160,8 +192,37 @@ jobs:
           cosign sign --key env://COSIGN_KEY \
             ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE }}:${{ github.ref_name }}
 
+  docker-ui:
+    needs: validate
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build UI
+        run: |
+          cd ui
+          npm ci
+          npm run build
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: ui
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/oseye-ui:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/oseye-ui:latest
+
   release:
-    needs: [package, docker-agent, docker-server]
+    needs: [package, docker-agent, docker-server, docker-ui]
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4

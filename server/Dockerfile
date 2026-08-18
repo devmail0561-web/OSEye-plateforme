@@ -6,15 +6,11 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-# Install SDK first (server depends on it)
-COPY sdk/ /tmp/sdk/
-RUN uv pip install --system --no-cache /tmp/sdk && rm -rf /tmp/sdk
-
+# SDK (optionnel — non requis si oseye-sdk est installé via PyPI)
 # Install server
-COPY server/pyproject.toml .
-COPY server/oseye/ oseye/
-COPY server/workers/ workers/
-COPY server/gen/ gen/
+COPY --chown=root:root server/pyproject.toml .
+COPY --chown=root:root server/oseye/ oseye/
+COPY --chown=root:root server/gen/ gen/
 
 RUN uv pip install --system --no-cache -e .
 
@@ -23,9 +19,13 @@ RUN uv pip install --system --no-cache -e .
 # Recommended host setup: chown root:oseye /etc/oseye && chmod 750 /etc/oseye
 RUN groupadd -r oseye && useradd -r -g oseye -s /sbin/nologin oseye
 
+COPY server/docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER oseye
 
 EXPOSE 8000 50051
 
 # oseye-server is installed as a script entry point by pyproject.toml [project.scripts]
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["oseye-server", "start"]
