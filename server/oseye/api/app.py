@@ -123,31 +123,48 @@ def create_app(settings: Settings, *, lifespan: Any = None) -> FastAPI:
     )
 
     # -------------------------------------------------------------------
-    # Routers
+    # Routers — agent-facing (always registered)
     # -------------------------------------------------------------------
     app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(agents.router)
-    app.include_router(response_actions.router)
-    app.include_router(events.router)
-    app.include_router(entities.router)
-    app.include_router(alerts.router)
-    app.include_router(rules.router)
-    app.include_router(api_keys.router)
-    app.include_router(incidents.router)
-    app.include_router(ti.router)
-    app.include_router(decisions.router)
-    app.include_router(cases.router)
-    app.include_router(snapshots.router)
-    app.include_router(policies.router)
-    app.include_router(plugins.router)
     app.include_router(enrollment.router)
-    app.include_router(ws_alerts_router)
-    app.include_router(ws_decisions_router)
 
-    # Expose WS managers on app state so workers and routers can broadcast
-    app.state.ws_alert_manager = alerts_ws_manager
-    app.state.ws_decision_manager = decisions_ws_manager
+    # -------------------------------------------------------------------
+    # Routers — management API (registered only when management_api_active)
+    # -------------------------------------------------------------------
+    if settings.management_api_active:
+        import logging as _log
+        _log.getLogger(__name__).info(
+            "management_api_enabled",
+            ui_dir=settings.ui_dir,
+            explicit=settings.management_api_enabled,
+        )
+        app.include_router(auth.router)
+        app.include_router(agents.router)
+        app.include_router(response_actions.router)
+        app.include_router(events.router)
+        app.include_router(entities.router)
+        app.include_router(alerts.router)
+        app.include_router(rules.router)
+        app.include_router(api_keys.router)
+        app.include_router(incidents.router)
+        app.include_router(ti.router)
+        app.include_router(decisions.router)
+        app.include_router(cases.router)
+        app.include_router(snapshots.router)
+        app.include_router(policies.router)
+        app.include_router(plugins.router)
+        app.include_router(ws_alerts_router)
+        app.include_router(ws_decisions_router)
+        app.state.ws_alert_manager = alerts_ws_manager
+        app.state.ws_decision_manager = decisions_ws_manager
+    else:
+        import logging as _log
+        _log.getLogger(__name__).info(
+            "management_api_disabled — agent-only mode "
+            "(set OSEYE_UI_DIR or OSEYE_MANAGEMENT_API_ENABLED=true to enable)"
+        )
+        app.state.ws_alert_manager = None
+        app.state.ws_decision_manager = None
 
     # UI static file serving — mounted LAST so API routes take priority.
     # StaticFiles(html=True) serves index.html for any path not matching a file,

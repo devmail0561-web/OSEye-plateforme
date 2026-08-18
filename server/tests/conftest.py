@@ -11,6 +11,9 @@ import os
 
 import pytest
 
+# Enable the full management API in tests regardless of OSEYE_UI_DIR.
+os.environ.setdefault("OSEYE_MANAGEMENT_API_ENABLED", "true")
+
 # SEC-001 fix: api_keys.py validates OSEYE_SECRET_KEY at import time.
 # Provide a deterministic 32-char test secret so that all test suites can
 # import the module without triggering the RuntimeError guard.

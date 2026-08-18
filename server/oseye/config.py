@@ -156,7 +156,7 @@ class Settings(BaseSettings):
 
     # UI static file serving — optional
     # When set, the server mounts the built UI from this directory and serves
-    # it as a SPA (catch-all → index.html). Leave empty to run API-only.
+    # it as a SPA (catch-all → index.html). Leave empty to run agent-only mode.
     ui_dir: str | None = Field(
         default=None,
         description=(
@@ -164,6 +164,30 @@ class Settings(BaseSettings):
             "Set with: oseye-server ui set <PATH>"
         ),
     )
+
+    # Management API (alerts, decisions, rules, cases, auth …)
+    # Default: enabled only when ui_dir is set.
+    # Set to true explicitly to enable the management API without serving the UI
+    # (e.g. API-only access via curl/SDK while UI is hosted elsewhere).
+    # When false, only agent-facing endpoints are registered:
+    #   GET  /api/v1/health
+    #   POST /api/v1/enroll/*  (agent enrollment)
+    #   gRPC (always on a separate port)
+    management_api_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Enable the management REST API (auth, alerts, rules, etc.). "
+            "Defaults to true when OSEYE_UI_DIR is set, false otherwise. "
+            "Set OSEYE_MANAGEMENT_API_ENABLED=true to enable without UI."
+        ),
+    )
+
+    @property
+    def management_api_active(self) -> bool:
+        """True when the management REST API should be registered."""
+        if self.management_api_enabled is not None:
+            return self.management_api_enabled
+        return self.ui_dir is not None
 
     # Update checker
     update_github_repo: str = Field(
