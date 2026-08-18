@@ -399,17 +399,22 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
             redis_url=settings.redis_url or None,
         )
 
+        def _make_task(coro, name: str) -> asyncio.Task:  # type: ignore[type-arg]
+            t = asyncio.create_task(coro, name=name)
+            t.add_done_callback(_task_done_callback)
+            return t
+
         tasks = [
-            asyncio.create_task(_normalizer_loop(), name="normalizer"),
-            asyncio.create_task(writer.run(stop_event=stop), name="storage_writer"),
-            asyncio.create_task(rule_worker.run(stop_event=stop), name="rule_worker"),
-            asyncio.create_task(ti_worker.run(), name="ti_worker"),
-            asyncio.create_task(correlation_worker.run(), name="correlation_worker"),
-            asyncio.create_task(decision_worker.run(), name="decision_worker"),
-            asyncio.create_task(human_queue.run(), name="human_queue"),
-            asyncio.create_task(ml_worker.run(), name="ml_worker"),
-            asyncio.create_task(notify_worker.run(), name="notify_worker"),
-            asyncio.create_task(backpressure.run(), name="backpressure"),
+            _make_task(_normalizer_loop(), "normalizer"),
+            _make_task(writer.run(stop_event=stop), "storage_writer"),
+            _make_task(rule_worker.run(stop_event=stop), "rule_worker"),
+            _make_task(ti_worker.run(), "ti_worker"),
+            _make_task(correlation_worker.run(), "correlation_worker"),
+            _make_task(decision_worker.run(), "decision_worker"),
+            _make_task(human_queue.run(), "human_queue"),
+            _make_task(ml_worker.run(), "ml_worker"),
+            _make_task(notify_worker.run(), "notify_worker"),
+            _make_task(backpressure.run(), "backpressure"),
         ]
         _logger.info("workers_started", count=len(tasks))
 
