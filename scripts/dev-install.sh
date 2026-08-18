@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # OSEye — Installeur environnement développement
-# Usage : bash scripts/dev-install.sh [--no-docker] [--no-ui] [--ci]
+# Usage : bash scripts/dev-install.sh [--docker] [--no-ui] [--ci]
+#
+# Par défaut : SQLite + bus en mémoire — aucun Docker requis.
+# --docker installe Docker et démarre Redis + PostgreSQL (stack complète).
 set -euo pipefail
 
 # ── Couleurs ──────────────────────────────────────────────────────────────────
@@ -22,20 +25,24 @@ error()   { printf "${_RED}${_BOLD}ERROR${_RESET} %s\n" "$*" >&2; exit 1; }
 skip()    { printf "    ${_YELLOW}skip${_RESET} %s\n" "$*"; }
 
 # ── Options ───────────────────────────────────────────────────────────────────
-OPT_DOCKER=true
+OPT_DOCKER=false   # Docker est OPT-IN — pas nécessaire pour le dev de base
 OPT_UI=true
 OPT_CI=false
 
 for arg in "$@"; do
   case "$arg" in
-    --no-docker) OPT_DOCKER=false ;;
+    --docker)    OPT_DOCKER=true ;;   # stack complète : Redis + PostgreSQL
+    --no-docker) OPT_DOCKER=false ;;  # explicitement sans Docker (déjà le défaut)
     --no-ui)     OPT_UI=false ;;
     --ci)        OPT_CI=true ;;
     --help|-h)
-      printf "Usage: %s [--no-docker] [--no-ui] [--ci]\n" "$0"
-      printf "  --no-docker   Skip Docker installation\n"
-      printf "  --no-ui       Skip Node.js + UI setup\n"
-      printf "  --ci          Non-interactive mode (no prompts)\n"
+      printf "Usage: %s [--docker] [--no-ui] [--ci]\n" "$0"
+      printf "\n"
+      printf "  Par défaut : SQLite + bus mémoire, aucun Docker requis.\n"
+      printf "\n"
+      printf "  --docker   Installer Docker + démarrer Redis/PostgreSQL (stack complète)\n"
+      printf "  --no-ui    Skip Node.js + UI (serveur seul)\n"
+      printf "  --ci       Mode non-interactif\n"
       exit 0
       ;;
     *) error "Option inconnue : $arg. Utilisez --help." ;;
@@ -90,15 +97,17 @@ esac
 
 printf "\n"
 info "Système : $OS_PRETTY (pkg: $PKG_MGR)"
-info "Options  : docker=$OPT_DOCKER  ui=$OPT_UI  ci=$OPT_CI"
+printf "\n"
+printf "  Mode : SQLite + bus mémoire (démarrage immédiat, sans Docker)\n"
+[ "$OPT_DOCKER" = true ] && printf "  Mode : stack complète Redis + PostgreSQL (Docker)\n"
 printf "\n"
 
 # ── Confirmation (mode interactif uniquement) ─────────────────────────────────
 if [ "$OPT_CI" = false ]; then
-  printf "Ce script va installer : Go 1.25, Python 3.12, "
-  [ "$OPT_UI" = true ]     && printf "Node.js 20, "
-  [ "$OPT_DOCKER" = true ] && printf "Docker, "
-  printf "nfpm + dépendances projet.\n"
+  printf "Ce script va installer : Go 1.25, Python 3.12"
+  [ "$OPT_UI" = true ]     && printf ", Node.js 20"
+  [ "$OPT_DOCKER" = true ] && printf ", Docker"
+  printf " + dépendances projet.\n"
   printf "Continuer ? [y/N] "
   read -r _answer
   case "$_answer" in y|Y|yes|YES) ;; *) info "Annulé."; exit 0 ;; esac
@@ -409,11 +418,23 @@ fi
 # ── Résumé final ──────────────────────────────────────────────────────────────
 printf "\n"
 printf "${_GREEN}${_BOLD}==> Environnement OSEye dev prêt !${_RESET} (version %s)\n\n" "$VERSION"
-printf "   ${_BOLD}make dev-up${_RESET}          Démarrer Redis + PostgreSQL (Docker)\n"
-printf "   ${_BOLD}make run-server${_RESET}      Lancer le serveur (SQLite + InMemoryBus)\n"
-printf "   ${_BOLD}make run-agent${_RESET}       Lancer l'agent (dev)\n"
-printf "   ${_BOLD}make ui-dev${_RESET}          Lancer l'UI React (Vite)\n"
-printf "   ${_BOLD}make test${_RESET}            Lancer tous les tests\n"
+printf " Pour démarrer maintenant :\n\n"
+printf "   ${_BOLD}cd %s${_RESET}\n" "$ROOT"
+printf "   ${_BOLD}.venv/bin/python -m oseye.main${_RESET}   # serveur (SQLite, port 8000)\n"
+if [ "$OPT_UI" = true ]; then
+  printf "   ${_BOLD}cd ui && npm run dev${_RESET}            # UI React (port 5173)\n"
+fi
+printf "\n"
+if [ "$OPT_DOCKER" = true ]; then
+  printf " Stack complète (Redis + PostgreSQL) :\n\n"
+  printf "   ${_BOLD}docker compose -f infra/docker/docker-compose.dev.yml up -d${_RESET}\n\n"
+else
+  printf " ${_YELLOW}Optionnel${_RESET} — stack complète avec Redis + PostgreSQL :\n\n"
+  printf "   bash scripts/dev-install.sh --docker\n\n"
+fi
+printf " Tests :\n\n"
+printf "   ${_BOLD}.venv/bin/pytest server/tests/ -q${_RESET}\n"
+printf "   ${_BOLD}cd agent && go test ./...${_RESET}\n\n"
 printf "   ${_BOLD}make lint${_RESET}            Lint Go + Python\n"
 printf "\n"
 [ "$OPT_DOCKER" = true ] && \
