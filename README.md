@@ -76,10 +76,13 @@ serveur via un wizard interactif, et démarre `oseye-server`, `oseye-ui` et `ose
 
 | Option | Description |
 |--------|-------------|
-| _(aucune)_ | Dernière version, SQLite + bus mémoire (zéro dépendance) |
+| _(aucune)_ | Serveur + UI + agent sur la même machine (local/test) |
+| `--server-only` | Serveur + UI uniquement (machine dédiée production) |
+| `--agent-only --server HOST --token TOKEN` | Agent seul, enrollment vers un serveur distant |
+| `--grpc-port PORT` | Port gRPC du serveur (défaut: 50051) |
 | `--version X.Y.Z` | Version spécifique |
 | `--docker` | Déploiement Docker Compose |
-| `--dev` | Environnement développement (`scripts/dev-install.sh`) |
+| `--dev` | Environnement développement |
 | `--local` | Packages depuis `dist/` local (test avant release) |
 
 ### Développement (machine locale)

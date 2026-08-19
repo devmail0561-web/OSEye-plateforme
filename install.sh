@@ -15,6 +15,7 @@
 #   --agent-only     Installe uniquement l'agent (requiert --server et --token)
 #   --server HOST    Adresse du serveur OSEye (pour --agent-only)
 #   --token TOKEN    Token d'enrollment (pour --agent-only)
+#   --grpc-port PORT Port gRPC du serveur (defaut: 50051)
 #   --version X.Y.Z  Version a installer (defaut: derniere release)
 #   --local          Utilise les packages dans dist/ (test local)
 #   --docker         Deploiement Docker Compose
@@ -38,6 +39,7 @@ LOCAL=false
 REPO="devmail0561-web/OSEye-plateforme"
 AGENT_SERVER=""     # adresse serveur pour --agent-only
 AGENT_TOKEN=""      # token enrollment pour --agent-only
+AGENT_GRPC_PORT="50051"  # port gRPC (configurable via --grpc-port)
 
 _args=("$@")
 i=0
@@ -53,6 +55,8 @@ while [[ $i -lt ${#_args[@]} ]]; do
     --server=*)       AGENT_SERVER="${arg#--server=}" ;;
     --token)          i=$((i+1)); AGENT_TOKEN="${_args[$i]}" ;;
     --token=*)        AGENT_TOKEN="${arg#--token=}" ;;
+    --grpc-port)      i=$((i+1)); AGENT_GRPC_PORT="${_args[$i]}" ;;
+    --grpc-port=*)    AGENT_GRPC_PORT="${arg#--grpc-port=}" ;;
     --version)        i=$((i+1)); INSTALL_VERSION="${_args[$i]}" ;;
     --version=*)      INSTALL_VERSION="${arg#--version=}" ;;
     --help|-h)
@@ -77,8 +81,9 @@ echo "| | | \___ \|  _|  \ V /| _|"
 echo "| |_| |___) | |___  |_| | |___"
 echo " \___/|____/|_____| |_| |_____|"
 echo -e "${RESET}"
-echo "  Installation — $(cat VERSION 2>/dev/null || echo 'dev')"
-echo -e "  Mode: ${BOLD}${MODE}${RESET}"
+_display_version="${INSTALL_VERSION:-$(cat VERSION 2>/dev/null || echo 'dev')}"
+echo "  Installation — ${_display_version}"
+echo -e "  Mode: ${BOLD}${MODE}${RESET} | Scope: ${BOLD}${SCOPE}${RESET}"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -147,8 +152,8 @@ if [[ "$LOCAL" == true ]]; then
     SERVER_DEB=$(find "$DIST_DIR" -name "oseye-server_${VER_DEB}*_amd64.deb" 2>/dev/null | head -1)
     AGENT_DEB=$(find  "$DIST_DIR" -name "oseye-agent_${VER_DEB}*_amd64.deb"  2>/dev/null | head -1)
     UI_DEB=$(find     "$DIST_DIR" -name "oseye-ui_${VER_DEB}*_amd64.deb"     2>/dev/null | head -1)
-    [[ -z "$SERVER_DEB" ]] && die "Package serveur introuvable dans dist/"
-    [[ -z "$AGENT_DEB"  ]] && die "Package agent introuvable dans dist/"
+    [[ "$SCOPE" != "agent-only"  && -z "$SERVER_DEB" ]] && die "Package serveur introuvable dans dist/"
+    [[ "$SCOPE" != "server-only" && -z "$AGENT_DEB"  ]] && die "Package agent introuvable dans dist/"
     ok "Packages locaux: $DIST_DIR"
 else
     # Mode GitHub Releases : telechargement
@@ -222,9 +227,9 @@ fi
 if [[ "$SCOPE" == "agent-only" ]]; then
     step "3. Enrollment vers ${AGENT_SERVER}"
     oseye-config enroll \
-        --server "${AGENT_SERVER}" \
-        --token  "${AGENT_TOKEN}" \
-        --grpc-port 50051
+        --server    "${AGENT_SERVER}" \
+        --token     "${AGENT_TOKEN}" \
+        --grpc-port "${AGENT_GRPC_PORT}"
     systemctl enable oseye-agent
     systemctl start oseye-agent
     sleep 3
@@ -309,7 +314,10 @@ if [[ "$SCOPE" == "all" ]]; then
 
     DEFAULT_HOST=$(hostname -f 2>/dev/null || hostname)
     echo -e "  Token: ${DIM}${TOKEN}${RESET}"
-    oseye-config enroll --server "${DEFAULT_HOST}:8000" --token "$TOKEN" --grpc-port 50051
+    oseye-config enroll \
+        --server    "${DEFAULT_HOST}:8000" \
+        --token     "${TOKEN}" \
+        --grpc-port "${AGENT_GRPC_PORT}"
     systemctl enable oseye-agent
     systemctl start oseye-agent
     sleep 3
@@ -331,11 +339,13 @@ echo "  Admin     : admin / ${ADMIN_PASS}"
 echo ""
 if [[ "$SCOPE" == "server-only" ]]; then
     DEFAULT_HOST=$(hostname -f 2>/dev/null || hostname)
-    TOKEN=$(oseye-server enrollment token create --valid-hours 72 2>&1 | grep -i "token" | head -1 | awk '{print $NF}' || true)
+    # Generer un token pour faciliter l'enrollment des agents
+    ENROLL_TOKEN=$(oseye-server enrollment token create --valid-hours 72 2>&1 \
+        | grep -i "token" | head -1 | awk '{print $NF}' || echo "")
     echo "  Pour enroller un agent sur une autre machine :"
     echo "    sudo bash install.sh --agent-only \\"
     echo "      --server ${DEFAULT_HOST}:8000 \\"
-    echo "      --token ${TOKEN:-<generer: oseye-server enrollment token create>}"
+    echo "      --token ${ENROLL_TOKEN:-<oseye-server enrollment token create>}"
     echo ""
 fi
 echo "  Commandes :"
