@@ -227,9 +227,26 @@ else
     die "Le serveur n'a pas demarre. Verifier: journalctl -u oseye-server -n 30"
 fi
 
-# ── 6. Demarrage UI ──────────────────────────────────────────────────────────
+# ── 6. Demarrage UI + liaison serveur ────────────────────────────────────────
 if [[ -n "$UI_DEB" ]]; then
     step "6. Demarrage de l'UI"
+
+    # Activer l'API management (requise pour que l'UI fonctionne)
+    oseye-server api enable 2>/dev/null || true
+
+    # Declarer l'URL de l'UI cote serveur (CORS + redirect automatiques)
+    oseye-server ui url http://localhost:5173 2>/dev/null || true
+
+    # Redemarrer le serveur pour appliquer les changements
+    systemctl restart oseye-server
+    echo "  Attente du serveur..."
+    for i in $(seq 1 10); do
+        curl -sf "http://localhost:8000/api/v1/health" >/dev/null 2>&1 && break
+        sleep 2
+    done
+    ok "API management activee — UI liee au serveur"
+
+    # Demarrer l'UI
     systemctl enable oseye-ui
     systemctl start oseye-ui
     if systemctl is-active --quiet oseye-ui; then
