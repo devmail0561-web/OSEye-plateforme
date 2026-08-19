@@ -11,13 +11,13 @@
 <br/>
 
 [![Licence](https://img.shields.io/badge/Licence-Apache_2.0-0078d4?style=flat-square)](LICENSE)
-[![Agent](https://img.shields.io/badge/Agent-Go_1.23-00ADD8?style=flat-square&logo=go&logoColor=white)](agent/)
+[![Agent](https://img.shields.io/badge/Agent-Go_1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](agent/)
 [![Server](https://img.shields.io/badge/Server-Python_3.12-3776AB?style=flat-square&logo=python&logoColor=white)](server/)
 [![eBPF](https://img.shields.io/badge/Collecteur-eBPF-f97316?style=flat-square)](agent/internal/platform/linux/ebpf/)
 [![ML](https://img.shields.io/badge/ML-River_online-8b5cf6?style=flat-square)](server/oseye/ml_engine/)
 [![UI](https://img.shields.io/badge/UI-React_18-61DAFB?style=flat-square&logo=react&logoColor=black)](ui/)
 [![Transport](https://img.shields.io/badge/Transport-mTLS_TLS_1.3-22c55e?style=flat-square)](SECURITY.md)
-[![Tests](https://img.shields.io/badge/Tests-293_Python_%7C_20%2B_Go-16a34a?style=flat-square)](#qualité)
+[![Tests](https://img.shields.io/badge/Tests-585_Python_%7C_28_Go-16a34a?style=flat-square)](#qualité)
 
 <br/>
 
@@ -40,6 +40,7 @@ Elle collecte les événements système en temps réel (eBPF, auditd, procfs, r�
 - **Plugin SDK** — extensions Python sandboxées (AnalyzerPlugin, ExporterPlugin, CollectorPlugin), signature Ed25519 requise en prod, upload depuis le dashboard
 - **6 profils de surveillance** — workstation, server, investigation, minimal, compliance, stealth — hot-swap via dashboard
 - **Dashboard UI** — React 18 TypeScript, sidebar repliable, pages analyste + pages admin RBAC
+- **Déploiement distribué** — `OSEYE_SERVER_ROLE=collector|worker|api` pour déployer les composants sur des nœuds séparés. Synchronisation via Redis (JWT, WebSocket, policy push, decision leader).
 
 ## Architecture
 
@@ -63,7 +64,15 @@ Voir la [documentation complète](https://devmail0561-web.github.io/OSEye-platef
 ## Démarrage rapide
 
 ```bash
-# Prérequis : Go 1.23+, Python 3.12+, make
+# Installation et démarrage en une commande
+bash install.sh
+```
+
+> **Package développeur** : `oseye-dev.deb`/`.rpm` — installe agent + serveur configurés pour le développement (SQLite, DEBUG, API management activée).
+
+```bash
+# --- Développeurs : étapes détaillées ---
+# Prérequis : Go 1.25+, Python 3.12+, make
 git clone https://github.com/devmail0561-web/OSEye-plateforme.git
 cd oseye
 
@@ -85,7 +94,7 @@ curl http://localhost:8000/api/v1/health
 
 | Composant | Technologie |
 |-----------|-------------|
-| Agent | Go 1.23, eBPF (cilium/ebpf), gRPC, backoff full-jitter, `oseye-config` CLI |
+| Agent | Go 1.25, eBPF (cilium/ebpf), gRPC, backoff full-jitter, `oseye-config` CLI |
 | Server | Python 3.12, FastAPI, SQLAlchemy 2.0, asyncio |
 | ML | River (HalfSpaceTrees + LogisticRegression online), checkpoint pickle |
 | Bus | InMemoryBus (dev) / Redis Streams (prod) / Kafka (distribué) |
@@ -127,7 +136,7 @@ Upload depuis le dashboard admin → `/api/v1/plugins/upload`. Signature Ed25519
 
 ## Qualité
 
-**293 tests Python** (unit + integration + scénarios), **20+ packages Go** — tout vert.
+**585 tests Python** (unit + integration + scénarios), **28 packages Go** — tout vert.
 
 ## Configuration agent
 
@@ -158,7 +167,8 @@ Toutes les valeurs sont validées strictement au démarrage (ports numériques, 
 | `OSEYE_PLUGIN_REQUIRE_SIGNATURE` | `false` | Exiger signature Ed25519 pour les plugins |
 | `OSEYE_DEFAULT_SURVEILLANCE_PROFILE` | `workstation` | Profil poussé aux agents à la connexion |
 | `OSEYE_ML_CHECKPOINT_PATH` | `/var/lib/oseye/ml_checkpoint.pkl` | Persistance modèles ML |
-| `OSEYE_ED25519_SIGNING_KEY` | `/etc/oseye/certs/agent.ed25519.key` | Clé signature batches agent |
+| `OSEYE_MANAGEMENT_API_ENABLED` | `false` | Activer l'API de management (désactivée par défaut en mode agent-only) |
+| `OSEYE_SERVER_ROLE` | `standalone` | Rôle du nœud : `standalone`, `collector`, `worker`, `api` |
 
 ## Documentation
 

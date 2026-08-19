@@ -127,6 +127,34 @@ import { Tabs, TabItem, Aside, Card, CardGrid, LinkButton } from '@astrojs/starl
   </TabItem>
 </Tabs>
 
+## Package développeur
+
+### Package développeur (`oseye-dev`)
+
+Package tout-en-un pour les développeurs — agent + serveur préconfigurés pour le développement.
+Installe et démarre automatiquement.
+
+```bash
+# Debian/Ubuntu
+sudo apt install ./oseye-dev_0.3.0-alpha.1_amd64.deb
+
+# RHEL/Rocky
+sudo rpm -i oseye-dev-0.3.0-alpha.1.x86_64.rpm
+```
+
+Après installation :
+- **API** : http://localhost:8000/api/v1/health
+- **Admin** : admin123
+- **Logs** : `journalctl -u oseye-dev -f`
+
+### Installation one-shot
+
+```bash
+bash install.sh
+```
+
+Installe les prérequis, génère les certificats, configure et lance la stack production.
+
 ## Vérification d'intégrité (SHA-256)
 
 Chaque release publie un fichier `SHA256SUMS` signé GPG. Pour vérifier tous les artefacts d'un coup :

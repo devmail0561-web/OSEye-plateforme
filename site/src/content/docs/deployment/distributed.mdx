@@ -69,9 +69,8 @@ OSEYE_KAFKA_BROKERS=kafka1:9092,kafka2:9092,kafka3:9092
 ### Worker Scaling
 
 ```bash
-# Scale workers by type
-OSEYE_WORKER_TYPES=normalizer,rule_engine,ml_engine,ti_engine,correlator
-OSEYE_WORKER_CONCURRENCY=4
+# Dédier un nœud à l'analyse (workers asyncio)
+OSEYE_SERVER_ROLE=worker
 ```
 
 ## Nginx / HAProxy Configuration
@@ -252,6 +251,57 @@ OSEYE_DB_BACKEND=postgresql
 OSEYE_DB_URL=postgresql+asyncpg://oseye:PASSWORD@pgbouncer:6432/oseye
 OSEYE_DB_POOL_SIZE=10
 OSEYE_DB_MAX_OVERFLOW=20
+```
+
+## Rôles des nœuds (`OSEYE_SERVER_ROLE`)
+
+Chaque serveur démarre uniquement les composants nécessaires à son rôle :
+
+| Rôle | Composants actifs | Usage |
+|---|---|---|
+| `collector` | gRPC + ingestion + enrollment | Nœuds de collecte, proches des agents |
+| `worker` | Rule/ML/TI/Correlation/Decision workers | Nœuds d'analyse |
+| `api` | API REST + WebSocket | Nœuds frontend |
+| `all` | Tout (défaut) | Single-node / développement |
+
+**Flags individuels :**
+```env
+OSEYE_ML_WORKER_ENABLED=false       # Désactiver ML sur N-1 serveurs (un seul ML actif)
+OSEYE_RULE_WORKER_ENABLED=true
+OSEYE_DECISION_WORKER_ENABLED=true
+OSEYE_GRPC_SERVER_ENABLED=true
+```
+
+## Synchronisation multi-serveurs
+
+OSEye utilise Redis comme bus de synchronisation entre instances :
+
+| Composant | Clé Redis | Comportement |
+|---|---|---|
+| JWT blocklist | `oseye:jwt:revoked:{jti}` | Token révoqué sur srv-1 = révoqué sur tous |
+| WebSocket | `oseye:ws:alerts`, `oseye:ws:decisions` | Alertes broadcastées à tous les clients |
+| Policy push | `oseye:policy:connected_agents` | `push_to_all()` touche les agents sur tous les serveurs |
+| Decision leader | `oseye:decision:leader` | Un seul serveur écrit le journal BLAKE3 |
+
+## Exemple : 5 serveurs
+
+```env
+# srv-1,2,3 — collecteurs gRPC
+OSEYE_SERVER_ROLE=collector
+OSEYE_MANAGEMENT_API_ENABLED=false
+
+# srv-4 — workers analyse
+OSEYE_SERVER_ROLE=worker
+OSEYE_ML_WORKER_ENABLED=true   # ML sur un seul serveur uniquement
+
+# srv-5 — API REST + UI
+OSEYE_SERVER_ROLE=api
+OSEYE_MANAGEMENT_API_ENABLED=true
+OSEYE_UI_URL=https://ui.example.com
+
+# Tous partagent :
+OSEYE_DB_URL=postgresql+asyncpg://...
+OSEYE_REDIS_URL=redis://redis-cluster:6379/0
 ```
 
 ## High Availability

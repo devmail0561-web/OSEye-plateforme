@@ -502,6 +502,16 @@ sudo oseye-server uninstall --server --purge --yes
 | `OSEYE_OTEL_ENDPOINT` | `` | OTLP gRPC endpoint (ex: localhost:4317) |
 | `OSEYE_OTEL_INSECURE` | `false` | Connexion OTLP sans TLS (dev uniquement) |
 
+### Déploiement distribué
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `OSEYE_SERVER_ROLE` | `all` | Rôle : `all`, `collector`, `worker`, `api` |
+| `OSEYE_GRPC_SERVER_ENABLED` | `true` | Activer le serveur gRPC |
+| `OSEYE_ML_WORKER_ENABLED` | `true` | Worker ML scoring |
+| `OSEYE_RULE_WORKER_ENABLED` | `true` | Worker règles YAML |
+| `OSEYE_DECISION_WORKER_ENABLED` | `true` | Worker Decision Engine |
+
 ---
 
 ## 📂 Structure des répertoires
@@ -564,6 +574,14 @@ sudo oseye-server setup
 source /etc/oseye/server.env
 source /etc/oseye/secrets.env
 oseye-server start
+```
+
+### Installation production complète (one-shot)
+
+> Pour l'installation production complète (PKI + secrets + lancement), utiliser `bash install.sh` à la racine du projet.
+
+```bash
+bash install.sh
 ```
 
 ---

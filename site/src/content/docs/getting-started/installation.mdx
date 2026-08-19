@@ -149,6 +149,41 @@ sha256sum -c SHA256SUMS --ignore-missing
   </TabItem>
 </Tabs>
 
+## Package développeur (`oseye-dev`)
+
+Package tout-en-un pour les développeurs — agent + serveur préconfigurés pour le développement.
+Installe et démarre automatiquement.
+
+<Tabs>
+  <TabItem label="Debian/Ubuntu">
+    ```bash
+    sudo apt install ./oseye-dev_0.3.0-alpha.1_amd64.deb
+    ```
+  </TabItem>
+  <TabItem label="RHEL/Rocky">
+    ```bash
+    sudo rpm -i oseye-dev-0.3.0-alpha.1.x86_64.rpm
+    ```
+  </TabItem>
+</Tabs>
+
+Après installation :
+- **API** : http://localhost:8000/api/v1/health
+- **Admin** : admin123
+- **Logs** : `journalctl -u oseye-dev -f`
+
+<Aside type="note" title="Utilisateurs système">
+  **Utilisateurs système** : l'agent tourne sous `oseye-agt`, le serveur sous `oseye-srv`. Ces utilisateurs sont créés automatiquement par les scripts d'installation. Ils n'ont accès qu'à leurs propres fichiers de configuration.
+</Aside>
+
+### Installation one-shot
+
+Pour l'installation en une seule commande (prérequis, certificats, configuration et lancement de la stack production) :
+
+```bash
+bash install.sh
+```
+
 ## System Requirements
 
 | Component | Minimum | Recommended |

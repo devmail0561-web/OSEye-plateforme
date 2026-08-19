@@ -102,6 +102,27 @@ oseye-server ui url --unset      # Supprimer OSEYE_UI_URL
 | `OSEYE_UI_URL` | string | — | URL du serveur UI (ex: `https://ui.example.com`). Ajouté automatiquement aux CORS + redirect `GET /` vers cette URL. |
 | `OSEYE_UI_DIR` | string | — | Répertoire `dist/` de l'UI buildée, si l'UI est servie depuis **ce** serveur. Indépendant de `OSEYE_UI_URL`. |
 
+## Déploiement distribué
+
+Variables pour les déploiements multi-serveurs.
+
+| Variable | Type | Défaut | Description |
+|---|---|---|---|
+| `OSEYE_SERVER_ROLE` | `all\|collector\|worker\|api` | `all` | Rôle du nœud : composants démarrés sélectivement |
+| `OSEYE_GRPC_SERVER_ENABLED` | bool | `true` | Activer le serveur gRPC (agents). Défaut `false` pour role=api |
+| `OSEYE_ML_WORKER_ENABLED` | bool | `true` | Worker ML. Activer sur un seul nœud en distribué |
+| `OSEYE_RULE_WORKER_ENABLED` | bool | `true` | Worker règles YAML |
+| `OSEYE_DECISION_WORKER_ENABLED` | bool | `true` | Worker Decision Engine |
+
+**Redis requis pour la synchronisation multi-serveurs :**
+
+| Clé Redis | Rôle |
+|---|---|
+| `oseye:jwt:revoked:{jti}` | Blocklist JWT partagée |
+| `oseye:ws:alerts`, `oseye:ws:decisions` | Pub/sub WebSocket entre serveurs |
+| `oseye:policy:connected_agents` | CNs agents connectés (tous serveurs) |
+| `oseye:decision:leader` | Élection leader pour le journal BLAKE3 |
+
 ## Authentication (JWT RS256)
 
 | Variable | Default | Description |

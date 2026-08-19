@@ -167,6 +167,48 @@ Les routes `/api/v1/*` restent prioritaires sur le fichier statique.
 
 ---
 
+## Déploiement distribué
+
+Pour scaler au-delà d'un seul serveur, affecter un rôle à chaque nœud via `OSEYE_SERVER_ROLE`.
+
+### Rôles disponibles
+
+| Rôle | Composants | Usage |
+|---|---|---|
+| `collector` | gRPC + ingestion | Proches des agents, nombreux |
+| `worker` | Workers analyse | CPU/RAM dédiés au traitement |
+| `api` | REST + WebSocket | Proche des clients UI |
+| `all` | Tout | Single-node (défaut) |
+
+### Configuration Redis partagée
+
+Tous les nœuds doivent pointer vers le même Redis :
+
+```bash
+OSEYE_REDIS_URL=redis://redis-cluster:6379/0
+```
+
+Redis assure la synchronisation : JWT blocklist, WebSocket pub/sub, policy push, decision leader.
+
+### Exemple minimal 3 nœuds
+
+```bash
+# Nœud collecteur
+OSEYE_SERVER_ROLE=collector
+
+# Nœud worker (ML sur un seul)
+OSEYE_SERVER_ROLE=worker
+OSEYE_ML_WORKER_ENABLED=true
+
+# Nœud API
+OSEYE_SERVER_ROLE=api
+OSEYE_MANAGEMENT_API_ENABLED=true
+```
+
+Voir le [guide déploiement distribué](./distributed.md) pour la configuration complète.
+
+---
+
 ## Mise à jour
 
 ```bash
