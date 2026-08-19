@@ -63,31 +63,36 @@ Voir la [documentation complète](https://devmail0561-web.github.io/OSEye-platef
 
 ## Démarrage rapide
 
+### Production (serveur dédié)
+
 ```bash
-# Installation et démarrage en une commande
-bash install.sh
+# Télécharge, installe et démarre tout automatiquement
+curl -fsSL https://raw.githubusercontent.com/devmail0561-web/OSEye-plateforme/main/install.sh \
+  | sudo bash
 ```
 
-> **Package développeur** : `oseye-dev.deb`/`.rpm` — installe agent + serveur configurés pour le développement (SQLite, DEBUG, API management activée).
+`install.sh` télécharge les packages `.deb` depuis GitHub Releases, génère le PKI, configure le
+serveur via un wizard interactif, et démarre `oseye-server`, `oseye-ui` et `oseye-agent` via systemd.
+
+| Option | Description |
+|--------|-------------|
+| _(aucune)_ | Dernière version, SQLite + bus mémoire (zéro dépendance) |
+| `--version X.Y.Z` | Version spécifique |
+| `--docker` | Déploiement Docker Compose |
+| `--dev` | Environnement développement (`scripts/dev-install.sh`) |
+| `--local` | Packages depuis `dist/` local (test avant release) |
+
+### Développement (machine locale)
 
 ```bash
-# --- Développeurs : étapes détaillées ---
-# Prérequis : Go 1.25+, Python 3.12+, make
-git clone https://github.com/devmail0561-web/OSEye-plateforme.git
-cd oseye
+# Package tout-en-un — démarre sans aucune configuration
+sudo dpkg -i dist/oseye-dev_*_amd64.deb
+# API : http://localhost:8000  —  Login : admin / admin123
 
-# Générer certificats dev + stubs Protobuf
-./scripts/generate_certs.sh
-./scripts/generate_proto.sh
-
-# Lancer le serveur (SQLite + InMemoryBus)
-make run-server
-
-# Lancer l'UI (port 5173)
-make ui-dev
-
-# Vérifier
-curl http://localhost:8000/api/v1/health
+# Ou : installer les dépendances et démarrer manuellement
+bash install.sh --dev
+make run-server   # SQLite + bus mémoire, port 8000
+make ui-dev       # React dev server, port 5173
 ```
 
 ## Stack technique
