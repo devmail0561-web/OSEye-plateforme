@@ -14,17 +14,19 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-COPY --chown=root:root pyproject.toml .
-COPY --chown=root:root oseye/ oseye/
-COPY --chown=root:root gen/ gen/
+COPY --chown=root:root server/pyproject.toml .
+COPY --chown=root:root server/oseye/ oseye/
+COPY --chown=root:root server/gen/ gen/
+COPY --chown=root:root sdk/ /sdk
 
-RUN uv pip install --system --no-cache -e .
+RUN uv pip install --system --no-cache /sdk && \
+    uv pip install --system --no-cache -e .
 
 # Non-root service user. The /etc/oseye volume files written by
 # 'oseye-server init/setup' must be owned or group-accessible by this user.
 RUN groupadd -r oseye-srv && useradd -r -g oseye-srv -s /sbin/nologin oseye-srv
 
-COPY docker-entrypoint.sh /entrypoint.sh
+COPY server/docker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 USER oseye-srv

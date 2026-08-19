@@ -36,7 +36,7 @@ echo ""
 echo "📦 Étape 2/6 : Installation du nouveau package agent..."
 echo ""
 
-sudo dpkg -i dist/oseye-agent_0.2.0~alpha.1_amd64.deb
+sudo dpkg -i dist/oseye-agent_0.3.0~alpha.2_amd64.deb
 
 echo "✅ Agent installé"
 echo ""
@@ -100,7 +100,7 @@ docker run -d \
   -e OSEYE_LOG_LEVEL=info \
   -e OSEYE_TLS_CERT=/etc/oseye/certs/server.crt \
   -e OSEYE_TLS_KEY=/etc/oseye/certs/server.key \
-  oseye-server:0.2.0-alpha.1 >/dev/null
+  oseye-server:0.3.0-alpha.2 >/dev/null
 
 echo "→ Attente démarrage serveur..."
 sleep 8
@@ -119,7 +119,7 @@ docker run -d \
   --name oseye-ui \
   --network oseye-net \
   -p 5174:5173 \
-  oseye-ui:0.2.0-alpha.1 >/dev/null
+  oseye-ui:0.3.0-alpha.2 >/dev/null
 
 echo "✅ Stack serveur lancée"
 echo ""
