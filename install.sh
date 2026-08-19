@@ -184,11 +184,11 @@ else
     echo -e "  ${DIM}oseye-ui non installe (optionnel — sudo dpkg -i oseye-ui_*.deb)${RESET}"
 fi
 
-# ── 3. Initialisation PKI ────────────────────────────────────────────────────
-step "3. Initialisation (PKI + repertoires)"
+# ── 3. Initialisation (PKI + repertoires) ────────────────────────────────────
+step "3. Initialisation"
 
 if [[ -f /etc/oseye/certs/ca.crt ]] && [[ -f /etc/oseye/certs/server.crt ]]; then
-    ok "PKI deja presente (skip)"
+    ok "PKI deja presente (skip — utiliser 'oseye-server init --force' pour regenerer)"
 else
     oseye-server init
 fi
@@ -196,84 +196,15 @@ fi
 # ── 4. Configuration ─────────────────────────────────────────────────────────
 step "4. Configuration"
 
-DEFAULT_HOST=$(hostname -f 2>/dev/null || hostname)
-IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-IP=${IP:-127.0.0.1}
-
-echo -e "  ${DIM}Choisissez le backend de base de donnees :${RESET}"
-echo -e "    ${DIM}1) sqlite   — embarque, zero dependance (recommande pour test/petite infra)${RESET}"
-echo -e "    ${DIM}2) postgresql — production (necessite un serveur PostgreSQL)${RESET}"
-DB_CHOICE=$(ask "Backend (1 ou 2)" "1")
-
-if [[ "$DB_CHOICE" == "2" ]]; then
-    DB_BACKEND="postgresql"
-    DB_HOST=$(ask "PostgreSQL host" "localhost")
-    DB_PORT=$(ask "PostgreSQL port" "5432")
-    DB_NAME=$(ask "Database name" "oseye")
-    DB_USER=$(ask "Database user" "oseye")
-    read -rsp "  Database password: " DB_PASS; echo
-    DB_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+if [[ -f /etc/oseye/server.env ]] && [[ -f /etc/oseye/secrets.env ]]; then
+    ok "Configuration deja presente (skip — supprimer server.env/secrets.env pour reconfigurer)"
 else
-    DB_BACKEND="sqlite"
-    DB_URL="sqlite+aiosqlite:///var/lib/oseye/server/oseye.db"
+    # Deleguer entierement au wizard oseye-server setup
+    oseye-server setup
 fi
 
-echo -e "  ${DIM}Bus d'evenements :${RESET}"
-echo -e "    ${DIM}1) memoire  — embarque (recommande pour un seul serveur)${RESET}"
-echo -e "    ${DIM}2) redis    — pour multi-process ou clustering${RESET}"
-BUS_CHOICE=$(ask "Bus (1 ou 2)" "1")
-
-REDIS_URL=""
-if [[ "$BUS_CHOICE" == "2" ]]; then
-    REDIS_URL=$(ask "Redis URL" "redis://localhost:6379/0")
-fi
-
-ADMIN_PASS=$(ask "Mot de passe admin" "$(openssl rand -base64 12 | tr -d '=+')")
-ANALYST_PASS=$(ask "Mot de passe analyste" "$(openssl rand -base64 12 | tr -d '=+')")
-
-SECRET_KEY=$(openssl rand -hex 32)
-HMAC_KEY=$(openssl rand -hex 32)
-
-# Ecriture server.env
-cat > /etc/oseye/server.env <<EOF
-OSEYE_DB_BACKEND=${DB_BACKEND}
-OSEYE_DB_URL=${DB_URL}
-OSEYE_REDIS_URL=${REDIS_URL}
-OSEYE_GRPC_PORT=50051
-OSEYE_GRPC_MAX_WORKERS=10
-OSEYE_API_PORT=8000
-OSEYE_API_HOST=0.0.0.0
-OSEYE_API_CORS_ORIGINS=["http://localhost:5173","http://localhost:5174","https://${DEFAULT_HOST}"]
-OSEYE_TLS_CERT_FILE=/etc/oseye/certs/server.crt
-OSEYE_TLS_KEY_FILE=/etc/oseye/certs/server.key
-OSEYE_TLS_CA_CERT_FILE=/etc/oseye/certs/ca.crt
-OSEYE_TLS_CA_KEY_FILE=/etc/oseye/certs/ca.key
-OSEYE_JWT_PRIVATE_KEY_PATH=/etc/oseye/certs/jwt_private.pem
-OSEYE_JWT_PUBLIC_KEY_PATH=/etc/oseye/certs/jwt_public.pem
-OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
-OSEYE_LOG_LEVEL=info
-OSEYE_SERVICE_NAME=oseye-server
-OSEYE_ENROLLMENT_TOKEN_DIR=/etc/oseye/enrollment_tokens
-OSEYE_DATA_DIR=/var/lib/oseye/server
-OSEYE_ML_CHECKPOINT_PATH=/var/lib/oseye/server/ml_checkpoint.pkl
-OSEYE_DEFAULT_SURVEILLANCE_PROFILE=workstation
-OSEYE_MANAGEMENT_API_ENABLED=true
-OSEYE_UI_URL=http://localhost:5173
-EOF
-chown root:oseye-srv /etc/oseye/server.env
-chmod 640 /etc/oseye/server.env
-
-# Ecriture secrets.env
-cat > /etc/oseye/secrets.env <<EOF
-OSEYE_SECRET_KEY=${SECRET_KEY}
-OSEYE_CHECKPOINT_HMAC_KEY=${HMAC_KEY}
-OSEYE_ADMIN_PASSWORD=${ADMIN_PASS}
-OSEYE_ANALYST_PASSWORD=${ANALYST_PASS}
-EOF
-chown root:oseye-srv /etc/oseye/secrets.env
-chmod 600 /etc/oseye/secrets.env
-
-ok "Configuration ecrite"
+# Lire le mot de passe admin depuis secrets.env pour l'afficher dans le resume
+ADMIN_PASS=$(grep OSEYE_ADMIN_PASSWORD /etc/oseye/secrets.env 2>/dev/null | cut -d= -f2 || echo "voir /etc/oseye/secrets.env")
 
 # ── 5. Demarrage serveur ─────────────────────────────────────────────────────
 step "5. Demarrage du serveur"
@@ -322,6 +253,7 @@ if [[ -z "$TOKEN" ]]; then
 fi
 
 echo -e "  Token: ${DIM}${TOKEN}${RESET}"
+DEFAULT_HOST=$(hostname -f 2>/dev/null || hostname)
 oseye-config enroll --server "${DEFAULT_HOST}:8000" --token "$TOKEN" --grpc-port 50051
 
 systemctl enable oseye-agent
@@ -344,7 +276,7 @@ echo "  Serveur   : http://localhost:8000/api/v1/health"
 [[ -n "$UI_DEB" ]] && echo "  UI        : http://localhost:5173"
 echo "  gRPC      : localhost:50051"
 echo "  Admin     : admin / ${ADMIN_PASS}"
-echo "  Analyste  : analyst / ${ANALYST_PASS}"
+echo "  Analyste  : voir /etc/oseye/secrets.env"
 echo ""
 echo "  Commandes :"
 echo "    systemctl status oseye-server    — etat du serveur"
