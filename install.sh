@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # OSEye — Installer
-# Usage: sudo bash install.sh [--docker] [--dev]
+# Usage: sudo bash install.sh [--docker] [--dev] [--version X.Y.Z]
 #
-# Par defaut : installe les packages .deb (serveur + agent) et lance via systemd.
-# --docker  : deploiement Docker (docker-compose)
-# --dev     : redirige vers scripts/dev-install.sh
+# Par defaut : telecharge et installe les packages .deb depuis GitHub Releases.
+# --docker   : deploiement Docker (docker-compose)
+# --dev      : redirige vers scripts/dev-install.sh
+# --version  : version a installer (defaut: derniere release)
+# --local    : utilise les packages dans dist/ (pour test en local)
 set -euo pipefail
 
 GREEN='\033[0;32m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RED='\033[0;31m'; DIM='\033[2m'; RESET='\033[0m'
@@ -18,16 +20,25 @@ cd "$ROOT"
 
 # ── Options ──────────────────────────────────────────────────────────────────
 MODE="binary"
+INSTALL_VERSION=""
+LOCAL=false
+REPO="devmail0561-web/OSEye-plateforme"
+
 for arg in "$@"; do
   case "$arg" in
-    --docker)  MODE="docker" ;;
-    --dev)     exec bash scripts/dev-install.sh "${@:2}"; exit 0 ;;
+    --docker)         MODE="docker" ;;
+    --dev)            exec bash scripts/dev-install.sh "${@:2}"; exit 0 ;;
+    --local)          LOCAL=true ;;
+    --version=*)      INSTALL_VERSION="${arg#--version=}" ;;
+    --version)        shift; INSTALL_VERSION="$1" ;;
     --help|-h)
-      echo "Usage: sudo bash install.sh [--docker] [--dev]"
+      echo "Usage: sudo bash install.sh [--docker] [--dev] [--version X.Y.Z] [--local]"
       echo ""
-      echo "  (default)  Installe via packages .deb + systemd (zero Docker)"
+      echo "  (default)  Telecharge et installe depuis GitHub Releases"
       echo "  --docker   Deploiement Docker (docker-compose.prod.yml)"
-      echo "  --dev      Environnement de developpement (redirige vers scripts/dev-install.sh)"
+      echo "  --dev      Environnement de developpement"
+      echo "  --version  Version a installer (ex: 0.3.0-alpha.2)"
+      echo "  --local    Utilise les packages dans dist/ (test local)"
       exit 0
       ;;
     *) die "Option inconnue: $arg" ;;
@@ -96,24 +107,66 @@ fi
 # ── 1. Prerequis ─────────────────────────────────────────────────────────────
 step "1. Verification des prerequis"
 command -v openssl >/dev/null 2>&1 || die "openssl requis (apt install openssl)"
-ok "openssl present"
+command -v curl    >/dev/null 2>&1 || die "curl requis (apt install curl)"
+ok "openssl + curl presents"
 
-DIST_DIR="$ROOT/dist"
-VERSION=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0.3.0-alpha.2")
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Determiner les packages
-VER_DEB="${VERSION//-/\~}"
-SERVER_DEB=$(find "$DIST_DIR" -name "oseye-server_${VER_DEB}*_amd64.deb" 2>/dev/null | head -1)
-AGENT_DEB=$(find  "$DIST_DIR" -name "oseye-agent_${VER_DEB}*_amd64.deb"  2>/dev/null | head -1)
-UI_DEB=$(find     "$DIST_DIR" -name "oseye-ui_${VER_DEB}*_amd64.deb"     2>/dev/null | head -1)
+# ── Localisation des packages ─────────────────────────────────────────────────
+if [[ "$LOCAL" == true ]]; then
+    # Mode local : packages dans dist/
+    DIST_DIR="$ROOT/dist"
+    VERSION=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0.3.0-alpha.2")
+    VER_DEB="${VERSION//-/\~}"
+    SERVER_DEB=$(find "$DIST_DIR" -name "oseye-server_${VER_DEB}*_amd64.deb" 2>/dev/null | head -1)
+    AGENT_DEB=$(find  "$DIST_DIR" -name "oseye-agent_${VER_DEB}*_amd64.deb"  2>/dev/null | head -1)
+    UI_DEB=$(find     "$DIST_DIR" -name "oseye-ui_${VER_DEB}*_amd64.deb"     2>/dev/null | head -1)
+    [[ -z "$SERVER_DEB" ]] && die "Package serveur introuvable dans dist/"
+    [[ -z "$AGENT_DEB"  ]] && die "Package agent introuvable dans dist/"
+    ok "Packages locaux: $DIST_DIR"
+else
+    # Mode GitHub Releases : telechargement
+    if [[ -z "$INSTALL_VERSION" ]]; then
+        echo "  Recherche de la derniere version..."
+        INSTALL_VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases" \
+            | grep '"tag_name"' | grep -v 'latest' | head -1 \
+            | sed 's/.*"v\?\([^"]*\)".*/\1/')
+        [[ -z "$INSTALL_VERSION" ]] && die "Impossible de determiner la derniere version. Utilisez --version X.Y.Z"
+    fi
+    ok "Version : $INSTALL_VERSION"
+    VERSION="$INSTALL_VERSION"
+    VER_DEB="${VERSION//-/\~}"
+    BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
 
-[[ -z "$SERVER_DEB" ]] && die "Package serveur introuvable dans dist/ (oseye-server_*_amd64.deb)"
-[[ -z "$AGENT_DEB" ]]  && die "Package agent introuvable dans dist/ (oseye-agent_*_amd64.deb)"
+    echo "  Telechargement des packages..."
+    SERVER_DEB="$TMP_DIR/oseye-server_${VER_DEB}_amd64.deb"
+    AGENT_DEB="$TMP_DIR/oseye-agent_${VER_DEB}_amd64.deb"
+    UI_DEB="$TMP_DIR/oseye-ui_${VER_DEB}_amd64.deb"
 
-ok "Packages trouves:"
-echo -e "    ${DIM}$SERVER_DEB${RESET}"
-echo -e "    ${DIM}$AGENT_DEB${RESET}"
-[[ -n "$UI_DEB" ]] && echo -e "    ${DIM}$UI_DEB${RESET}" || echo -e "    ${DIM}oseye-ui : absent (optionnel)${RESET}"
+    curl -fsSL -o "$SERVER_DEB" "${BASE_URL}/oseye-server_${VER_DEB}_amd64.deb" \
+        || die "Package serveur introuvable sur la release v${VERSION}"
+    ok "oseye-server telecharge"
+
+    curl -fsSL -o "$AGENT_DEB" "${BASE_URL}/oseye-agent_${VER_DEB}_amd64.deb" \
+        || die "Package agent introuvable sur la release v${VERSION}"
+    ok "oseye-agent telecharge"
+
+    # UI optionnelle — pas d'echec si absente
+    if curl -fsSL -o "$UI_DEB" "${BASE_URL}/oseye-ui_${VER_DEB}_amd64.deb" 2>/dev/null; then
+        ok "oseye-ui telecharge"
+    else
+        UI_DEB=""
+        echo -e "  ${DIM}oseye-ui absent de la release — skip${RESET}"
+    fi
+
+    # Verification SHA256 si disponible
+    SHA_FILE="$TMP_DIR/SHA256SUMS"
+    if curl -fsSL -o "$SHA_FILE" "${BASE_URL}/SHA256SUMS" 2>/dev/null; then
+        (cd "$TMP_DIR" && sha256sum -c SHA256SUMS --ignore-missing 2>/dev/null) \
+            && ok "SHA256 verifie" || echo -e "  ${DIM}SHA256 non verifie (optionnel)${RESET}"
+    fi
+fi
 
 # ── 2. Installation ──────────────────────────────────────────────────────────
 step "2. Installation des packages"
@@ -128,7 +181,7 @@ if [[ -n "$UI_DEB" ]]; then
     dpkg -i "$UI_DEB"
     ok "oseye-ui installe"
 else
-    echo -e "  ${DIM}oseye-ui absent — skip (installer separement avec : sudo dpkg -i oseye-ui_*.deb)${RESET}"
+    echo -e "  ${DIM}oseye-ui non installe (optionnel — sudo dpkg -i oseye-ui_*.deb)${RESET}"
 fi
 
 # ── 3. Initialisation PKI ────────────────────────────────────────────────────
