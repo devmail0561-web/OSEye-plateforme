@@ -66,7 +66,7 @@ import { Tabs, TabItem, Aside, Card, CardGrid, LinkButton } from '@astrojs/starl
 ## Serveur
 
 <Aside type="caution" title="Nœud dédié recommandé">
-  Le serveur nécessite PostgreSQL, Redis et au minimum 2 Go de RAM. Ne pas installer sur un hôte surveillé par un agent OSEye.
+  Ne pas installer le serveur sur un hôte surveillé par un agent OSEye. Par défaut, le serveur utilise **SQLite + bus mémoire** (zéro dépendance externe). PostgreSQL et Redis sont optionnels pour les déploiements multi-nœuds.
 </Aside>
 
 <Tabs>
@@ -136,10 +136,10 @@ Installe et démarre automatiquement.
 
 ```bash
 # Debian/Ubuntu
-sudo apt install ./oseye-dev_0.3.0-alpha.1_amd64.deb
+sudo apt install ./oseye-dev_0.3.0~alpha.2_amd64.deb
 
 # RHEL/Rocky
-sudo rpm -i oseye-dev-0.3.0-alpha.1.x86_64.rpm
+sudo rpm -i oseye-dev-0.3.0~alpha.2.x86_64.rpm
 ```
 
 Après installation :
@@ -147,13 +147,14 @@ Après installation :
 - **Admin** : admin123
 - **Logs** : `journalctl -u oseye-dev -f`
 
-### Installation one-shot
+### Installation one-shot (production)
 
 ```bash
-bash install.sh
+sudo bash install.sh
 ```
 
-Installe les prérequis, génère les certificats, configure et lance la stack production.
+Installe les packages .deb, génère le PKI, configure et lance le serveur + agent via systemd.
+Pour un déploiement Docker : `sudo bash install.sh --docker`.
 
 ## Vérification d'intégrité (SHA-256)
 

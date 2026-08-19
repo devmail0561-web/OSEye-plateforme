@@ -157,12 +157,12 @@ Installe et démarre automatiquement.
 <Tabs>
   <TabItem label="Debian/Ubuntu">
     ```bash
-    sudo apt install ./oseye-dev_0.3.0-alpha.1_amd64.deb
+    sudo apt install ./oseye-dev_0.3.0~alpha.2_amd64.deb
     ```
   </TabItem>
   <TabItem label="RHEL/Rocky">
     ```bash
-    sudo rpm -i oseye-dev-0.3.0-alpha.1.x86_64.rpm
+    sudo rpm -i oseye-dev-0.3.0~alpha.2.x86_64.rpm
     ```
   </TabItem>
 </Tabs>
@@ -176,13 +176,16 @@ Après installation :
   **Utilisateurs système** : l'agent tourne sous `oseye-agt`, le serveur sous `oseye-srv`. Ces utilisateurs sont créés automatiquement par les scripts d'installation. Ils n'ont accès qu'à leurs propres fichiers de configuration.
 </Aside>
 
-### Installation one-shot
+### Installation one-shot (production)
 
-Pour l'installation en une seule commande (prérequis, certificats, configuration et lancement de la stack production) :
+Installe les packages .deb, génère le PKI, configure et lance le serveur + agent via systemd :
 
 ```bash
-bash install.sh
+sudo bash install.sh
 ```
+
+Pour un déploiement Docker : `sudo bash install.sh --docker`
+Pour un environnement de développement : `bash install.sh --dev`
 
 ## System Requirements
 

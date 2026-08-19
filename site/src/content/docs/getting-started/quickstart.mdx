@@ -17,62 +17,50 @@ L'agent requiert Linux avec kernel 5.10+ pour les collecteurs eBPF. macOS et Win
 
 <Steps>
 
-1. **Lancer la stack serveur**
+1. **Installer le package `oseye-dev`**
 
-   Cloner le dépôt et démarrer avec Docker Compose :
+   Un seul package installe et démarre serveur + agent automatiquement :
 
    ```bash
-   git clone https://github.com/devmail0561-web/OSEye-plateforme.git
-   cd OSEye-plateforme
-
-   # Construire les images
-   make package-server
-
-   # Lancer postgres, redis, serveur et UI
-   docker compose -f infra/docker/docker-compose.dev.yml up -d
+   # Télécharger depuis la release GitHub
+   curl -LO https://github.com/devmail0561-web/OSEye-plateforme/releases/latest/download/oseye-dev_0.3.0~alpha.2_amd64.deb
+   sudo dpkg -i oseye-dev_0.3.0~alpha.2_amd64.deb
    ```
 
-   Vérifier que tout est sain :
+   Le postinst crée les répertoires, démarre `oseye-dev.service` et affiche les informations de connexion.
+
+   Vérifier :
    ```bash
-   docker compose -f infra/docker/docker-compose.dev.yml ps
-   curl http://localhost:5174/api/v1/health
+   systemctl status oseye-dev
+   curl http://localhost:8000/api/v1/health
    # → {"status": "ok"}
    ```
 
    <Aside type="note">
-   **Mode agent-only** : en environnement de développement, le serveur active automatiquement l'API management (`OSEYE_MANAGEMENT_API_ENABLED=true` dans docker-compose.dev.yml). En production ou installation native, il faut l'activer explicitement.
+   Le package `oseye-dev` utilise **SQLite + bus mémoire** — zéro dépendance externe (pas de Docker, PostgreSQL ou Redis requis). L'API management est activée par défaut.
    </Aside>
 
-2. **Installer l'agent**
+2. **Créer un token d'enrollment**
 
    ```bash
-   # Construire le package agent
-   make package-agent
-
-   # Installer
-   sudo dpkg -i dist/oseye-agent_*_amd64.deb
-   ```
-
-3. **Créer un token d'enrollment**
-
-   ```bash
-   docker exec oseye-server oseye-server enrollment token create
+   sudo oseye-server enrollment token create
    # → TOKEN: abc123...
    ```
 
-4. **Enroller l'agent**
+3. **Enroller l'agent**
 
    ```bash
    sudo oseye-config enroll \
-     --server localhost:50051 \
-     --token <TOKEN>
+     --server localhost:8000 \
+     --token <TOKEN> \
+     --grpc-port 50051
    ```
 
    L'enrollment génère les certificats mTLS et configure le service systemd automatiquement.
 
-5. **Ouvrir l'UI**
+4. **Ouvrir l'UI**
 
-   Ouvrir http://localhost:5174 dans le navigateur.
+   Ouvrir http://localhost:8000 dans le navigateur.
 
    **Login :** `admin / admin123`
 

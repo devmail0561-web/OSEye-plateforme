@@ -82,7 +82,7 @@ oseye-server ui url --unset      # Supprimer OSEYE_UI_URL
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OSEYE_REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
+| `OSEYE_REDIS_URL` | _(vide)_ | Redis connection URL. Si vide, le bus in-memory est utilisé (single-node, zéro dépendance). |
 
 ## TLS / PKI
 
@@ -227,9 +227,15 @@ Variables pour les déploiements multi-serveurs.
 
 | Profile | Description |
 |---------|-------------|
-| `workstation` | Standard desktop monitoring |
-| `server` | Production server (full collectors) |
-| `investigation` | Deep monitoring — all events, no throttle |
-| `minimal` | Reduced collection for low-resource systems |
-| `compliance` | Focused on audit/compliance events |
-| `stealth` | Minimal footprint, reduced logging |
+| `workstation` | Poste de travail standard |
+| `laptop` | Poste mobile — collecteurs réseau allégés, profilage batterie |
+| `desktop` | Bureau fixe — surveillance complète sans contrainte réseau |
+| `server` | Serveur générique (tous les collecteurs) |
+| `webserver` | Serveur web — baseline nginx/apache, alertes sur exécution de process |
+| `database` | Serveur DB — surveillance des accès fichiers et connexions réseau |
+| `dns` | Serveur DNS — baseline named/unbound, surveillance des requêtes |
+| `mail` | Serveur mail — baseline postfix/dovecot, accès fichiers configuration |
+| `investigation` | Investigation — tous les events, sans throttle |
+| `minimal` | Systèmes à faibles ressources — collecte minimale |
+| `compliance` | Conformité — focus sur les événements d'audit |
+| `stealth` | Empreinte minimale — logs réduits |

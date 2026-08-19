@@ -204,16 +204,104 @@ oseye-server restart
 
 ---
 
+---
+
+### Tous les endpoints `/rules/db/*` retournent HTTP 503
+
+**Erreur :**
+```
+POST /api/v1/rules/db → 503 Service Unavailable
+{"detail": "Rule repository not available"}
+```
+
+**Cause :** Versions antérieures à v0.3.0-alpha.2 — `app.state.rule_repo` non initialisé au démarrage.
+
+**Solution :** Mettre à jour le serveur. Le bug est corrigé depuis v0.3.0-alpha.2.
+
+---
+
+### Agent offline sans raison connue
+
+**Diagnostic :**
+```bash
+# Voir la raison de déconnexion
+curl -k -H "Authorization: Bearer <TOKEN>" \
+  https://localhost:8000/api/v1/agents/<HOSTNAME>
+# → champ "disconnect_reason"
+
+# Depuis le CLI
+sudo oseye-server agents ping <HOSTNAME>
+```
+
+| Code gRPC | Cause |
+|---|---|
+| `CANCELLED` | Arrêt propre (SIGTERM) |
+| `UNAVAILABLE` | Serveur inaccessible |
+| `UNAUTHENTICATED` | Certificat expiré |
+| `EOF` | Connexion fermée côté serveur |
+
+---
+
+### Workers ne traitent qu'une fraction des événements
+
+**Cause :** Versions antérieures à v0.3.0-alpha.2 — tous les workers partageaient un seul consumer group Redis (round-robin au lieu de fan-out).
+
+**Solution :** Mettre à jour le serveur. Chaque worker a maintenant son propre consumer group.
+
+**Vérification :**
+```bash
+redis-cli XINFO GROUPS events:normalized
+# Doit lister : oseye-storage, oseye-rules, oseye-ml, oseye-ti...
+```
+
+---
+
+### Faux positifs massifs sur processus système
+
+**Cause :** Versions antérieures à v0.3.0-alpha.2 — profils de surveillance sans `baseline_apps`. Les processus OSEye eux-mêmes généraient des alertes.
+
+**Solution :** Mettre à jour le serveur. Tous les profils incluent maintenant `baseline_apps` et `ignore_processes: [oseye-agent, oseye-config]`.
+
+```bash
+# Forcer la re-synchronisation du profil
+sudo systemctl restart oseye-agent
+```
+
+---
+
+### Alertes `surveillance` redeviennent `anomaly` après redémarrage
+
+**Cause :** Versions antérieures à v0.3.0-alpha.2 — `AlertRow` sans colonne `rule_type`, rechargement depuis DB forçait le défaut `"anomaly"`.
+
+**Solution :** Mettre à jour le serveur. La colonne `rule_type` est maintenant persistée.
+
+---
+
+### EventMerger — événements `openat` auditd non dédupliqués
+
+**Comportement :** Deux événements `openat` pour la même ouverture de fichier (eBPF + auditd).
+
+**Explication :** Le parser auditd n'extrait pas le champ `filename` — fingerprint de fusion impossible. Les événements auditd `openat` passent en passthrough.
+
+**Contournement :** Désactiver auditd si eBPF est fonctionnel :
+```bash
+# Dans /etc/oseye/agent.env
+OSEYE_COLLECTOR_AUDITD_ENABLED=false
+```
+
+---
+
 ## Checklist de déploiement
 
 ```
-□ Secrets générés (secret_key, hmac_key, admin_password, db_password)
-□ PKI initialisée (oseye-server init)
-□ Certificat serveur avec SANs
+□ Secrets générés (secret_key, hmac_key, admin_password)
+□ PKI initialisée (sudo oseye-server init)
+□ Certificat serveur avec SANs (auto-généré par init)
 □ OSEYE_API_CORS_ORIGINS inclut l'URL de l'UI
-□ OSEYE_PLUGIN_IPC_SOCKET pointe vers /tmp/
-□ docker compose up -d → tous les services healthy
-□ curl /api/v1/health → {"status": "ok"}
-□ Agent enrollé et batch_ingested dans les logs
+□ systemctl is-active oseye-server → active
+□ curl http://localhost:8000/api/v1/health → {"status": "ok"}
+□ Token d'enrollment créé (sudo oseye-server enrollment token create)
+□ Agent enrollé (sudo oseye-config enroll ...)
+□ systemctl is-active oseye-agent → active
 □ Agent visible dans UI → Agents
 ```
