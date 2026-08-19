@@ -331,8 +331,9 @@ async def test_ml_worker_classifier_persisted(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_scored_counter(tmp_path: Path):
+async def test_ml_worker_scored_counter(tmp_path: Path, monkeypatch):
     """MLWorker.total_scored increments correctly."""
+    monkeypatch.setenv("OSEYE_CHECKPOINT_HMAC_KEY", "a" * 64)
     bus = InMemoryEventBus()
     engine = MLEngine()
     stop = asyncio.Event()
@@ -349,7 +350,11 @@ async def test_ml_worker_scored_counter(tmp_path: Path):
     for _ in range(5):
         await bus.publish("events:normalized", make_event_json())
 
-    await asyncio.sleep(0.1)
+    # Attendre que tous les events soient traités avant de stopper
+    for _ in range(50):
+        await asyncio.sleep(0.05)
+        if worker._total_scored >= 5:
+            break
     stop.set()
     worker_task.cancel()
     with pytest.raises((asyncio.CancelledError, Exception)):
