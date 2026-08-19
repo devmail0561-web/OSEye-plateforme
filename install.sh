@@ -102,8 +102,10 @@ DIST_DIR="$ROOT/dist"
 VERSION=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0.3.0-alpha.2")
 
 # Determiner les packages
-SERVER_DEB=$(find "$DIST_DIR" -name "oseye-server_${VERSION//-/\~}*_amd64.deb" 2>/dev/null | head -1)
-AGENT_DEB=$(find "$DIST_DIR" -name "oseye-agent_${VERSION//-/\~}*_amd64.deb" 2>/dev/null | head -1)
+VER_DEB="${VERSION//-/\~}"
+SERVER_DEB=$(find "$DIST_DIR" -name "oseye-server_${VER_DEB}*_amd64.deb" 2>/dev/null | head -1)
+AGENT_DEB=$(find  "$DIST_DIR" -name "oseye-agent_${VER_DEB}*_amd64.deb"  2>/dev/null | head -1)
+UI_DEB=$(find     "$DIST_DIR" -name "oseye-ui_${VER_DEB}*_amd64.deb"     2>/dev/null | head -1)
 
 [[ -z "$SERVER_DEB" ]] && die "Package serveur introuvable dans dist/ (oseye-server_*_amd64.deb)"
 [[ -z "$AGENT_DEB" ]]  && die "Package agent introuvable dans dist/ (oseye-agent_*_amd64.deb)"
@@ -111,6 +113,7 @@ AGENT_DEB=$(find "$DIST_DIR" -name "oseye-agent_${VERSION//-/\~}*_amd64.deb" 2>/
 ok "Packages trouves:"
 echo -e "    ${DIM}$SERVER_DEB${RESET}"
 echo -e "    ${DIM}$AGENT_DEB${RESET}"
+[[ -n "$UI_DEB" ]] && echo -e "    ${DIM}$UI_DEB${RESET}" || echo -e "    ${DIM}oseye-ui : absent (optionnel)${RESET}"
 
 # ── 2. Installation ──────────────────────────────────────────────────────────
 step "2. Installation des packages"
@@ -120,6 +123,13 @@ ok "oseye-server installe"
 
 dpkg -i "$AGENT_DEB"
 ok "oseye-agent installe"
+
+if [[ -n "$UI_DEB" ]]; then
+    dpkg -i "$UI_DEB"
+    ok "oseye-ui installe"
+else
+    echo -e "  ${DIM}oseye-ui absent — skip (installer separement avec : sudo dpkg -i oseye-ui_*.deb)${RESET}"
+fi
 
 # ── 3. Initialisation PKI ────────────────────────────────────────────────────
 step "3. Initialisation (PKI + repertoires)"
@@ -194,6 +204,8 @@ OSEYE_ENROLLMENT_TOKEN_DIR=/etc/oseye/enrollment_tokens
 OSEYE_DATA_DIR=/var/lib/oseye/server
 OSEYE_ML_CHECKPOINT_PATH=/var/lib/oseye/server/ml_checkpoint.pkl
 OSEYE_DEFAULT_SURVEILLANCE_PROFILE=workstation
+OSEYE_MANAGEMENT_API_ENABLED=true
+OSEYE_UI_URL=http://localhost:5173
 EOF
 chown root:oseye-srv /etc/oseye/server.env
 chmod 640 /etc/oseye/server.env
@@ -231,8 +243,20 @@ else
     die "Le serveur n'a pas demarre. Verifier: journalctl -u oseye-server -n 30"
 fi
 
-# ── 6. Enrollment + demarrage agent ──────────────────────────────────────────
-step "6. Enrollment et demarrage de l'agent"
+# ── 6. Demarrage UI ──────────────────────────────────────────────────────────
+if [[ -n "$UI_DEB" ]]; then
+    step "6. Demarrage de l'UI"
+    systemctl enable oseye-ui
+    systemctl start oseye-ui
+    if systemctl is-active --quiet oseye-ui; then
+        ok "UI demarree sur http://localhost:5173"
+    else
+        echo -e "  ${RED}UI non demarree — verifier: journalctl -u oseye-ui -n 20${RESET}"
+    fi
+fi
+
+# ── 7. Enrollment + demarrage agent ──────────────────────────────────────────
+step "7. Enrollment et demarrage de l'agent"
 
 # Generer un token d'enrollment
 TOKEN=$(oseye-server enrollment token create --valid-hours 72 2>&1 | grep -i "token" | head -1 | awk '{print $NF}')
@@ -264,6 +288,7 @@ echo -e "${GREEN}${BOLD}  OSEye installe et operationnel${RESET}"
 echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════════${RESET}"
 echo ""
 echo "  Serveur   : http://localhost:8000/api/v1/health"
+[[ -n "$UI_DEB" ]] && echo "  UI        : http://localhost:5173"
 echo "  gRPC      : localhost:50051"
 echo "  Admin     : admin / ${ADMIN_PASS}"
 echo "  Analyste  : analyst / ${ANALYST_PASS}"
