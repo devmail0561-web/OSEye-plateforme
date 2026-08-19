@@ -333,15 +333,8 @@ if [ "$OPT_UI" = true ]; then
     warn "ui/package.json absent — skip npm ci UI"
   fi
 
-  if [ -f "${ROOT}/site/package.json" ]; then
-    info "Installation des dépendances site (npm ci)..."
-    (cd "${ROOT}/site" && npm ci --silent)
-    success "Dépendances site installées"
-  else
-    warn "site/package.json absent — skip npm ci site"
-  fi
 else
-  skip "npm deps UI/site (--no-ui)"
+  skip "npm deps UI (--no-ui)"
 fi
 
 # ── Dev certs ─────────────────────────────────────────────────────────────────
@@ -418,13 +411,29 @@ fi
 # ── Résumé final ──────────────────────────────────────────────────────────────
 printf "\n"
 printf "${_GREEN}${_BOLD}==> Environnement OSEye dev prêt !${_RESET} (version %s)\n\n" "$VERSION"
-printf " Pour démarrer maintenant :\n\n"
-printf "   ${_BOLD}cd %s${_RESET}\n" "$ROOT"
-printf "   ${_BOLD}.venv/bin/python -m oseye.main${_RESET}   # serveur (SQLite, port 8000)\n"
+
+printf " ${_BOLD}Option A — Package oseye-dev (recommandé, zéro commandes supplémentaires) :${_RESET}\n\n"
+printf "   sudo dpkg -i %s/dist/oseye-dev_*_amd64.deb\n" "$ROOT"
+printf "   # Serveur + agent démarrés automatiquement\n"
+printf "   # API : http://localhost:8000  —  Login : admin / admin123\n\n"
+
+printf " ${_BOLD}Option B — Démarrage manuel (pour le développement du code) :${_RESET}\n\n"
+printf "   cd %s\n" "$ROOT"
+printf "   source .env.dev\n"
+printf "   .venv/bin/python -m oseye.main          # serveur (SQLite, port 8000)\n"
 if [ "$OPT_UI" = true ]; then
-  printf "   ${_BOLD}cd ui && npm run dev${_RESET}            # UI React (port 5173)\n"
+  printf "   cd ui && npm run dev                    # UI React (port 5173)\n"
 fi
 printf "\n"
+
+if [ "$OPT_UI" = true ]; then
+  printf " ${_BOLD}Package UI seul (oseye-ui) :${_RESET}\n\n"
+  printf "   make package-ui                         # build dist/ + .deb\n"
+  printf "   sudo dpkg -i dist/oseye-ui_*_amd64.deb # installe nginx sur port 5173\n"
+  printf "   sudo oseye-server ui url http://localhost:5173\n"
+  printf "   sudo oseye-server api enable && sudo oseye-server restart\n\n"
+fi
+
 if [ "$OPT_DOCKER" = true ]; then
   printf " Stack complète (Redis + PostgreSQL) :\n\n"
   printf "   ${_BOLD}docker compose -f infra/docker/docker-compose.dev.yml up -d${_RESET}\n\n"
@@ -432,6 +441,7 @@ else
   printf " ${_YELLOW}Optionnel${_RESET} — stack complète avec Redis + PostgreSQL :\n\n"
   printf "   bash scripts/dev-install.sh --docker\n\n"
 fi
+
 printf " Tests :\n\n"
 printf "   ${_BOLD}.venv/bin/pytest server/tests/ -q${_RESET}\n"
 printf "   ${_BOLD}cd agent && go test ./...${_RESET}\n\n"
