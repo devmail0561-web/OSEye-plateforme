@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # OSEye — Installer
-# bash install.sh
+# Usage: sudo bash install.sh [--docker] [--dev]
+#
+# Par defaut : installe les packages .deb (serveur + agent) et lance via systemd.
+# --docker  : deploiement Docker (docker-compose)
+# --dev     : redirige vers scripts/dev-install.sh
 set -euo pipefail
 
-GREEN='\033[0;32m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RED='\033[0;31m'; RESET='\033[0m'
+GREEN='\033[0;32m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RED='\033[0;31m'; DIM='\033[2m'; RESET='\033[0m'
 ok()   { echo -e "${GREEN}✓${RESET} $*"; }
 step() { echo -e "\n${BOLD}$*${RESET}"; }
 ask()  { read -rp "  $1 [${2}]: " _ans; echo "${_ans:-$2}"; }
@@ -11,6 +15,24 @@ die()  { echo -e "${RED}✗ $*${RESET}" >&2; exit 1; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
+
+# ── Options ──────────────────────────────────────────────────────────────────
+MODE="binary"
+for arg in "$@"; do
+  case "$arg" in
+    --docker)  MODE="docker" ;;
+    --dev)     exec bash scripts/dev-install.sh "${@:2}"; exit 0 ;;
+    --help|-h)
+      echo "Usage: sudo bash install.sh [--docker] [--dev]"
+      echo ""
+      echo "  (default)  Installe via packages .deb + systemd (zero Docker)"
+      echo "  --docker   Deploiement Docker (docker-compose.prod.yml)"
+      echo "  --dev      Environnement de developpement (redirige vers scripts/dev-install.sh)"
+      exit 0
+      ;;
+    *) die "Option inconnue: $arg" ;;
+  esac
+done
 
 echo -e "${BOLD}${CYAN}"
 echo "  ___  ____  _______   _____"
@@ -20,154 +42,239 @@ echo "| |_| |___) | |___  |_| | |___"
 echo " \___/|____/|_____| |_| |_____|"
 echo -e "${RESET}"
 echo "  Installation — $(cat VERSION 2>/dev/null || echo 'dev')"
+echo -e "  Mode: ${BOLD}${MODE}${RESET}"
 echo ""
 
-# ─────────────────────────────────────────────────────────────
-# 1. PRÉREQUIS
-# ─────────────────────────────────────────────────────────────
-step "1. Vérification des prérequis"
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODE DOCKER (comportement legacy)
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "$MODE" == "docker" ]]; then
+    step "1. Verification des prerequis"
+    for cmd in curl openssl docker; do
+        command -v "$cmd" >/dev/null 2>&1 || die "$cmd requis"
+        ok "$cmd present"
+    done
+    docker compose version >/dev/null 2>&1 || die "docker compose requis"
+    ok "docker compose present"
 
-install_if_missing() {
-    local cmd="$1" pkg="${2:-$1}"
-    if command -v "$cmd" >/dev/null 2>&1; then
-        ok "$cmd présent"
+    step "2. Configuration"
+    DEFAULT_HOST=$(hostname -f 2>/dev/null || hostname)
+    SERVER_HOST=$(ask "Hostname ou IP du serveur" "$DEFAULT_HOST")
+    ADMIN_PASS=$(ask "Mot de passe administrateur" "$(openssl rand -base64 12 | tr -d '=+')")
+
+    step "3. Initialisation (PKI)"
+    if [[ ! -f /etc/oseye/certs/ca.crt ]]; then
+        sudo mkdir -p /etc/oseye
+        VERSION_TAG=$(cat VERSION 2>/dev/null || echo "latest")
+        docker run --rm -v /etc/oseye:/etc/oseye \
+            "oseye-server:${VERSION_TAG}" oseye-server init --hostname "$SERVER_HOST" 2>/dev/null || \
+        sudo bash scripts/init-server.sh "$SERVER_HOST" 2>/dev/null || true
+        ok "Certificats generes"
     else
-        echo "  → Installation de $pkg..."
-        if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get install -y "$pkg" -qq
-        elif command -v dnf >/dev/null 2>&1; then
-            sudo dnf install -y "$pkg" -q
-        elif command -v brew >/dev/null 2>&1; then
-            brew install "$pkg" -q
-        else
-            die "$cmd introuvable et impossible à installer automatiquement."
-        fi
-        ok "$pkg installé"
+        ok "Certificats deja presents"
     fi
-}
 
-install_if_missing curl
-install_if_missing openssl
-install_if_missing docker
+    step "4. Lancement"
+    COMPOSE="infra/docker/docker-compose.prod.yml"
+    docker compose -f "$COMPOSE" up -d
+    ok "Services demarres"
 
-# Docker Compose
-if ! docker compose version >/dev/null 2>&1; then
-    echo "  → Installation de docker compose plugin..."
-    sudo apt-get install -y docker-compose-plugin -qq 2>/dev/null || \
-    sudo dnf install -y docker-compose-plugin -q 2>/dev/null || \
-    die "docker compose plugin introuvable. Installer Docker Desktop ou docker-compose-plugin."
+    echo ""
+    echo -e "${GREEN}${BOLD}  OSEye deploye via Docker${RESET}"
+    echo "  Logs : docker compose -f ${COMPOSE} logs -f"
+    exit 0
 fi
-ok "docker compose présent"
 
-# ─────────────────────────────────────────────────────────────
-# 2. CONFIGURATION
-# ─────────────────────────────────────────────────────────────
-step "2. Configuration"
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODE BINAIRE (.deb + systemd)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# Hostname
+if [[ "$(id -u)" -ne 0 ]]; then
+    die "Ce script doit etre lance en root: sudo bash install.sh"
+fi
+
+# ── 1. Prerequis ─────────────────────────────────────────────────────────────
+step "1. Verification des prerequis"
+command -v openssl >/dev/null 2>&1 || die "openssl requis (apt install openssl)"
+ok "openssl present"
+
+DIST_DIR="$ROOT/dist"
+VERSION=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0.3.0-alpha.2")
+
+# Determiner les packages
+SERVER_DEB=$(find "$DIST_DIR" -name "oseye-server_${VERSION//-/\~}*_amd64.deb" 2>/dev/null | head -1)
+AGENT_DEB=$(find "$DIST_DIR" -name "oseye-agent_${VERSION//-/\~}*_amd64.deb" 2>/dev/null | head -1)
+
+[[ -z "$SERVER_DEB" ]] && die "Package serveur introuvable dans dist/ (oseye-server_*_amd64.deb)"
+[[ -z "$AGENT_DEB" ]]  && die "Package agent introuvable dans dist/ (oseye-agent_*_amd64.deb)"
+
+ok "Packages trouves:"
+echo -e "    ${DIM}$SERVER_DEB${RESET}"
+echo -e "    ${DIM}$AGENT_DEB${RESET}"
+
+# ── 2. Installation ──────────────────────────────────────────────────────────
+step "2. Installation des packages"
+
+dpkg -i "$SERVER_DEB"
+ok "oseye-server installe"
+
+dpkg -i "$AGENT_DEB"
+ok "oseye-agent installe"
+
+# ── 3. Initialisation PKI ────────────────────────────────────────────────────
+step "3. Initialisation (PKI + repertoires)"
+
+if [[ -f /etc/oseye/certs/ca.crt ]] && [[ -f /etc/oseye/certs/server.crt ]]; then
+    ok "PKI deja presente (skip)"
+else
+    oseye-server init
+fi
+
+# ── 4. Configuration ─────────────────────────────────────────────────────────
+step "4. Configuration"
+
 DEFAULT_HOST=$(hostname -f 2>/dev/null || hostname)
-SERVER_HOST=$(ask "Hostname ou IP du serveur" "$DEFAULT_HOST")
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+IP=${IP:-127.0.0.1}
 
-# Mot de passe admin
-ADMIN_PASS=$(ask "Mot de passe administrateur" "$(openssl rand -base64 12 | tr -d '=+')")
+echo -e "  ${DIM}Choisissez le backend de base de donnees :${RESET}"
+echo -e "    ${DIM}1) sqlite   — embarque, zero dependance (recommande pour test/petite infra)${RESET}"
+echo -e "    ${DIM}2) postgresql — production (necessite un serveur PostgreSQL)${RESET}"
+DB_CHOICE=$(ask "Backend (1 ou 2)" "1")
 
-# UI
-UI_URL=$(ask "URL de l'interface web (laisser vide si non utilisée)" "")
-
-echo ""
-ok "Configuration enregistrée"
-
-# ─────────────────────────────────────────────────────────────
-# 3. INITIALISATION (PKI + secrets)
-# ─────────────────────────────────────────────────────────────
-step "3. Initialisation"
-
-VERSION_TAG=$(cat VERSION 2>/dev/null || echo "latest")
-
-if [[ ! -f /etc/oseye/certs/ca.crt ]]; then
-    echo "  → Génération des certificats (CA, serveur, JWT)..."
-    sudo mkdir -p /etc/oseye
-    docker run --rm \
-        -v /etc/oseye:/etc/oseye \
-        "ghcr.io/devmail0561-web/oseye-plateforme/oseye-server:${VERSION_TAG}" \
-        oseye-server init \
-        --hostname "$SERVER_HOST" 2>/dev/null || \
-    ( echo "  → Image non disponible — génération locale via oseye-server init" && \
-      sudo bash scripts/init-server.sh "$SERVER_HOST" 2>/dev/null ) || \
-    echo "  → Skip PKI (sera générée au premier démarrage)"
-    ok "Certificats prêts"
+if [[ "$DB_CHOICE" == "2" ]]; then
+    DB_BACKEND="postgresql"
+    DB_HOST=$(ask "PostgreSQL host" "localhost")
+    DB_PORT=$(ask "PostgreSQL port" "5432")
+    DB_NAME=$(ask "Database name" "oseye")
+    DB_USER=$(ask "Database user" "oseye")
+    read -rsp "  Database password: " DB_PASS; echo
+    DB_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 else
-    ok "Certificats déjà présents"
+    DB_BACKEND="sqlite"
+    DB_URL="sqlite+aiosqlite:///var/lib/oseye/server/oseye.db"
 fi
 
-echo "  → Génération des secrets..."
-sudo mkdir -p /etc/oseye/secrets
-sudo chmod 700 /etc/oseye/secrets
-if [[ ! -f /etc/oseye/secrets/secret_key.txt ]]; then
-    printf '%s' "$(openssl rand -hex 16)"       | sudo tee /etc/oseye/secrets/secret_key.txt >/dev/null
-    printf '%s' "$(openssl rand -hex 32)"       | sudo tee /etc/oseye/secrets/hmac_key.txt >/dev/null
-    printf '%s' "$ADMIN_PASS"                   | sudo tee /etc/oseye/secrets/admin_password.txt >/dev/null
-    printf '%s' "$(openssl rand -base64 16)"    | sudo tee /etc/oseye/secrets/analyst_password.txt >/dev/null
-    printf '%s' "$(openssl rand -base64 16)"    | sudo tee /etc/oseye/secrets/db_password.txt >/dev/null
-    printf '%s' "$(openssl rand -base64 16)"    | sudo tee /etc/oseye/secrets/redis_password.txt >/dev/null
-    sudo chmod 600 /etc/oseye/secrets/*.txt
-    ok "Secrets générés"
-else
-    ok "Secrets déjà présents"
+echo -e "  ${DIM}Bus d'evenements :${RESET}"
+echo -e "    ${DIM}1) memoire  — embarque (recommande pour un seul serveur)${RESET}"
+echo -e "    ${DIM}2) redis    — pour multi-process ou clustering${RESET}"
+BUS_CHOICE=$(ask "Bus (1 ou 2)" "1")
+
+REDIS_URL=""
+if [[ "$BUS_CHOICE" == "2" ]]; then
+    REDIS_URL=$(ask "Redis URL" "redis://localhost:6379/0")
 fi
 
-# Injecter UI_URL dans server.env si configurée
-if [[ -n "$UI_URL" ]]; then
-    echo "OSEYE_UI_URL=${UI_URL}" | sudo tee -a /etc/oseye/server.env >/dev/null 2>&1 || true
-fi
+ADMIN_PASS=$(ask "Mot de passe admin" "$(openssl rand -base64 12 | tr -d '=+')")
+ANALYST_PASS=$(ask "Mot de passe analyste" "$(openssl rand -base64 12 | tr -d '=+')")
 
-# ─────────────────────────────────────────────────────────────
-# 4. LANCEMENT
-# ─────────────────────────────────────────────────────────────
-step "4. Lancement"
+SECRET_KEY=$(openssl rand -hex 32)
+HMAC_KEY=$(openssl rand -hex 32)
 
-COMPOSE="infra/docker/docker-compose.prod.yml"
-echo "  → Démarrage des services..."
-docker compose -f "$COMPOSE" pull --quiet 2>/dev/null || true
-docker compose -f "$COMPOSE" up -d
-ok "Services démarrés"
+# Ecriture server.env
+cat > /etc/oseye/server.env <<EOF
+OSEYE_DB_BACKEND=${DB_BACKEND}
+OSEYE_DB_URL=${DB_URL}
+OSEYE_REDIS_URL=${REDIS_URL}
+OSEYE_GRPC_PORT=50051
+OSEYE_GRPC_MAX_WORKERS=10
+OSEYE_API_PORT=8000
+OSEYE_API_HOST=0.0.0.0
+OSEYE_API_CORS_ORIGINS=["http://localhost:5173","http://localhost:5174","https://${DEFAULT_HOST}"]
+OSEYE_TLS_CERT_FILE=/etc/oseye/certs/server.crt
+OSEYE_TLS_KEY_FILE=/etc/oseye/certs/server.key
+OSEYE_TLS_CA_CERT_FILE=/etc/oseye/certs/ca.crt
+OSEYE_TLS_CA_KEY_FILE=/etc/oseye/certs/ca.key
+OSEYE_JWT_PRIVATE_KEY_PATH=/etc/oseye/certs/jwt_private.pem
+OSEYE_JWT_PUBLIC_KEY_PATH=/etc/oseye/certs/jwt_public.pem
+OSEYE_JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+OSEYE_LOG_LEVEL=info
+OSEYE_SERVICE_NAME=oseye-server
+OSEYE_ENROLLMENT_TOKEN_DIR=/etc/oseye/enrollment_tokens
+OSEYE_DATA_DIR=/var/lib/oseye/server
+OSEYE_ML_CHECKPOINT_PATH=/var/lib/oseye/server/ml_checkpoint.pkl
+OSEYE_DEFAULT_SURVEILLANCE_PROFILE=workstation
+EOF
+chown root:oseye-srv /etc/oseye/server.env
+chmod 640 /etc/oseye/server.env
 
-# Attendre que le serveur réponde
-echo "  → Attente du serveur..."
-for i in $(seq 1 30); do
+# Ecriture secrets.env
+cat > /etc/oseye/secrets.env <<EOF
+OSEYE_SECRET_KEY=${SECRET_KEY}
+OSEYE_CHECKPOINT_HMAC_KEY=${HMAC_KEY}
+OSEYE_ADMIN_PASSWORD=${ADMIN_PASS}
+OSEYE_ANALYST_PASSWORD=${ANALYST_PASS}
+EOF
+chown root:oseye-srv /etc/oseye/secrets.env
+chmod 600 /etc/oseye/secrets.env
+
+ok "Configuration ecrite"
+
+# ── 5. Demarrage serveur ─────────────────────────────────────────────────────
+step "5. Demarrage du serveur"
+
+systemctl daemon-reload
+systemctl enable oseye-server
+systemctl start oseye-server
+
+echo "  Attente du serveur..."
+for i in $(seq 1 15); do
     if curl -sf "http://localhost:8000/api/v1/health" >/dev/null 2>&1; then
         break
     fi
     sleep 2
 done
 
-if curl -sf "http://localhost:8000/api/v1/health" >/dev/null 2>&1; then
-    ok "Serveur opérationnel"
+if systemctl is-active --quiet oseye-server; then
+    ok "Serveur demarre et operationnel"
 else
-    echo "  (Le serveur met plus de temps à démarrer — vérifier : docker compose -f $COMPOSE logs)"
+    die "Le serveur n'a pas demarre. Verifier: journalctl -u oseye-server -n 30"
 fi
 
-# Token d'enrollment
-echo "  → Génération du token d'enrollment..."
-ENROLL_TOKEN=$(docker exec oseye-server oseye-server enrollment token create 2>/dev/null \
-    | grep "Token" | awk '{print $3}') || ENROLL_TOKEN=""
+# ── 6. Enrollment + demarrage agent ──────────────────────────────────────────
+step "6. Enrollment et demarrage de l'agent"
 
-# ─────────────────────────────────────────────────────────────
-# RÉSUMÉ
-# ─────────────────────────────────────────────────────────────
+# Generer un token d'enrollment
+TOKEN=$(oseye-server enrollment token create --valid-hours 72 2>&1 | grep -i "token" | head -1 | awk '{print $NF}')
+if [[ -z "$TOKEN" ]]; then
+    TOKEN=$(ls /etc/oseye/enrollment_tokens/ 2>/dev/null | head -1)
+fi
+
+if [[ -z "$TOKEN" ]]; then
+    die "Impossible de generer un token d'enrollment"
+fi
+
+echo -e "  Token: ${DIM}${TOKEN}${RESET}"
+oseye-config enroll --server "${DEFAULT_HOST}:8000" --token "$TOKEN" --grpc-port 50051
+
+systemctl enable oseye-agent
+systemctl start oseye-agent
+sleep 3
+
+if systemctl is-active --quiet oseye-agent; then
+    ok "Agent enrolle et demarre"
+else
+    echo -e "  ${RED}Agent non demarre — verifier: journalctl -u oseye-agent -n 20${RESET}"
+fi
+
+# ── Resume ────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}${BOLD}═══════════════════════════════════════════${RESET}"
-echo -e "${GREEN}${BOLD}  OSEye installé et démarré                ${RESET}"
-echo -e "${GREEN}${BOLD}═══════════════════════════════════════════${RESET}"
+echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════════${RESET}"
+echo -e "${GREEN}${BOLD}  OSEye installe et operationnel${RESET}"
+echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════════${RESET}"
 echo ""
-echo "  API       : https://${SERVER_HOST}/api/v1/health"
-[[ -n "$UI_URL" ]] && echo "  UI        : ${UI_URL}"
-echo "  Admin     : ${ADMIN_PASS}"
+echo "  Serveur   : http://localhost:8000/api/v1/health"
+echo "  gRPC      : localhost:50051"
+echo "  Admin     : admin / ${ADMIN_PASS}"
+echo "  Analyste  : analyst / ${ANALYST_PASS}"
 echo ""
-[[ -n "$ENROLL_TOKEN" ]] && echo "  Token enrollment agent :"
-[[ -n "$ENROLL_TOKEN" ]] && echo "    oseye-config enroll --server ${SERVER_HOST}:50051 --token ${ENROLL_TOKEN}"
+echo "  Commandes :"
+echo "    systemctl status oseye-server    — etat du serveur"
+echo "    systemctl status oseye-agent     — etat de l'agent"
+echo "    oseye-server status              — sante detaillee"
+echo "    journalctl -u oseye-server -f    — logs serveur"
+echo "    journalctl -u oseye-agent -f     — logs agent"
 echo ""
-echo "  Arrêter   : docker compose -f ${COMPOSE} down"
-echo "  Logs      : docker compose -f ${COMPOSE} logs -f"
-echo "  Réinstaller un token : docker exec oseye-server oseye-server enrollment token create"
+echo "  Desinstaller :"
+echo "    sudo oseye-server uninstall --server --agent --purge"
 echo ""

@@ -15,7 +15,7 @@ env:
 
 jobs:
   validate:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -31,7 +31,7 @@ jobs:
 
   build:
     needs: validate
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -64,7 +64,7 @@ jobs:
 
   build-server-binary:
     needs: validate
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -83,10 +83,29 @@ jobs:
             --onefile \
             --name oseye-server \
             --distpath dist/ \
+            --workpath /tmp/pyinstaller-build \
+            --specpath /tmp/pyinstaller-spec \
             --add-data "server/oseye/policy/profiles:oseye/policy/profiles" \
             --add-data "rules:rules" \
             --hidden-import oseye \
-            --hidden-import grpc
+            --hidden-import grpc \
+            --hidden-import aiosqlite \
+            --hidden-import asyncpg \
+            --hidden-import sqlalchemy.dialects.sqlite \
+            --hidden-import sqlalchemy.dialects.postgresql.asyncpg \
+            --hidden-import sqlalchemy.ext.asyncio \
+            --hidden-import passlib.handlers.bcrypt \
+            --exclude-module sklearn \
+            --exclude-module skimage \
+            --exclude-module matplotlib \
+            --exclude-module grpc_tools \
+            --exclude-module IPython \
+            --exclude-module ipykernel \
+            --exclude-module notebook \
+            --exclude-module pandas \
+            --exclude-module pytest \
+            --noconfirm \
+            --clean
       - uses: actions/upload-artifact@v4
         with:
           name: server-binary
@@ -94,7 +113,7 @@ jobs:
 
   package:
     needs: [build, build-server-binary]
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -108,7 +127,12 @@ jobs:
         run: |
           NFPM_ARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
           curl -sfL "https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_linux_${NFPM_ARCH}.tar.gz" | tar xz -C /usr/local/bin nfpm
-      - name: Package .deb and .rpm
+      - uses: actions/download-artifact@v4
+        if: matrix.arch == 'amd64'
+        with:
+          name: server-binary
+          path: dist/
+      - name: Package agent .deb and .rpm
         env:
           VERSION: ${{ github.ref_name }}
           ARCH: ${{ matrix.arch }}
@@ -117,6 +141,19 @@ jobs:
           chmod +x dist/oseye-agent dist/oseye-config
           VERSION=$VERSION ARCH=$ARCH nfpm package --config packaging/nfpm-agent.yaml --target dist/ --packager deb
           VERSION=$VERSION ARCH=$ARCH nfpm package --config packaging/nfpm-agent.yaml --target dist/ --packager rpm
+          # Tarballs agent
+          tar czf "dist/oseye-agent-linux-${ARCH}-${VERSION}.tar.gz" -C dist oseye-agent oseye-config
+      - name: Package server .deb and .rpm
+        if: matrix.arch == 'amd64'
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          VERSION="${VERSION#v}"
+          chmod +x dist/oseye-server
+          VERSION=$VERSION ARCH=$ARCH nfpm package --config packaging/nfpm-server.yaml --target dist/ --packager deb
+          VERSION=$VERSION ARCH=$ARCH nfpm package --config packaging/nfpm-server.yaml --target dist/ --packager rpm
+          tar czf "dist/oseye-server-linux-amd64-${VERSION}.tar.gz" -C dist oseye-server
       - name: Sign packages (GPG)
         if: env.GPG_PRIVATE_KEY != ''
         env:
@@ -132,11 +169,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: packages-${{ matrix.arch }}
-          path: dist/*.deb dist/*.rpm dist/*.asc
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.tar.gz
+            dist/*.asc
 
   docker-agent:
     needs: validate
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -154,7 +195,6 @@ jobs:
           build-args: VERSION=${{ github.ref_name }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.AGENT_IMAGE }}:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ env.AGENT_IMAGE }}:latest
       - name: Sign with cosign
         if: env.COSIGN_KEY != ''
         env:
@@ -165,7 +205,7 @@ jobs:
 
   docker-server:
     needs: validate
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -177,12 +217,12 @@ jobs:
       - name: Build and push server image
         uses: docker/build-push-action@v6
         with:
-          context: server
+          context: .
+          file: server/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE }}:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE }}:latest
       - name: Sign with cosign
         if: env.COSIGN_KEY != ''
         env:
@@ -193,7 +233,7 @@ jobs:
 
   docker-ui:
     needs: validate
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -218,11 +258,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}/oseye-ui:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ github.repository }}/oseye-ui:latest
 
   release:
     needs: [package, docker-agent, docker-server, docker-ui]
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -232,7 +271,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum *.deb *.rpm 2>/dev/null > SHA256SUMS || true
+          sha256sum *.deb *.rpm *.tar.gz 2>/dev/null > SHA256SUMS || true
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -241,5 +280,6 @@ jobs:
           files: |
             artifacts/*.deb
             artifacts/*.rpm
+            artifacts/*.tar.gz
             artifacts/*.asc
             artifacts/SHA256SUMS

@@ -322,9 +322,9 @@ $(DIST_DIR)/oseye-config-$(PLATFORM):
 package-agent: $(DIST_DIR)/oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-config-$(PLATFORM)
 	@echo "==> Packaging oseye-agent $(VERSION) (.deb + .rpm) [$(PLATFORM)]"
 	mkdir -p $(DIST_DIR)
-	# nfpm needs unversioned names — symlink then package
-	ln -sf oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-agent
-	ln -sf oseye-config-$(PLATFORM) $(DIST_DIR)/oseye-config
+	# nfpm needs unversioned names — hard-copy (not symlink) so nfpm packages the real binary
+	cp -fL $(DIST_DIR)/oseye-agent-$(PLATFORM) $(DIST_DIR)/oseye-agent
+	cp -fL $(DIST_DIR)/oseye-config-$(PLATFORM) $(DIST_DIR)/oseye-config
 	VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
 	  --config packaging/nfpm-agent.yaml \
 	  --packager deb \

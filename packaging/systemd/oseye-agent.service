@@ -20,7 +20,7 @@ AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_NET_ADMIN CAP_SYS_PTRACE
 #   AmbientCapabilities=CAP_SYS_ADMIN CAP_NET_ADMIN CAP_SYS_PTRACE
 
 NoNewPrivileges=true
-EnvironmentFile=/etc/oseye/agent.env
+EnvironmentFile=-/etc/oseye/agent.env
 ExecStart=/usr/bin/oseye-agent
 Restart=on-failure
 RestartSec=5s

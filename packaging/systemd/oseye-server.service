@@ -9,6 +9,7 @@ Type=simple
 User=oseye-srv
 Group=oseye-srv
 EnvironmentFile=-/etc/oseye/server.env
+EnvironmentFile=-/etc/oseye/secrets.env
 ExecStart=/usr/bin/oseye-server start
 ExecStop=/usr/bin/oseye-server stop
 ExecReload=/usr/bin/oseye-server restart
@@ -21,7 +22,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/oseye/server /etc/oseye
+ReadWritePaths=/var/lib/oseye/server /etc/oseye /var/lib/oseye
 CapabilityBoundingSet=
 AmbientCapabilities=
 
