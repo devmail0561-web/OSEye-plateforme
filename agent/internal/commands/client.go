@@ -15,6 +15,7 @@ import (
 
 	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
+	"google.golang.org/grpc/status"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/collector"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/config"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
@@ -101,7 +102,8 @@ func (c *CommandClient) Run(ctx context.Context) {
 		if err == nil || ctx.Err() != nil {
 			return
 		}
-		slog.Warn("commands stream error, reconnecting", "err", err, "delay", delay)
+		grpcCode := status.Code(err).String()
+		slog.Warn("commands stream error, reconnecting", "err", err, "grpc_code", grpcCode, "delay", delay)
 
 		t := time.NewTimer(delay)
 		select {
@@ -181,6 +183,10 @@ func (c *CommandClient) dispatch(cmd *gen.AgentCommand) {
 		}
 		slog.Info("autonomy re-enabled by server command")
 		c.reporter.Send(cmd.GetCommandId(), "executed", "")
+
+	case "PING":
+		c.reporter.Send(cmd.GetCommandId(), "executed", "pong")
+		slog.Debug("ping_received_pong_sent")
 
 	default:
 		slog.Warn("unknown command", "type", cmd.GetCommandType())

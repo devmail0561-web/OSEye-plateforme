@@ -132,6 +132,7 @@ class RuleWorker:
                 "rule_id": match.rule_id,
                 "rule_name": match.rule_name,
                 "severity": match.severity,
+                "rule_type": match.rule_type,
                 "actions": match.actions,
                 "tags": match.tags,
                 "mitre": match.mitre,
@@ -152,8 +153,10 @@ class RuleWorker:
                 )
                 continue
 
-            # Create alert in storage if ALERT action is requested
-            if "ALERT" in match.actions:
+            # Create alert in storage if ALERT action is requested.
+            # Surveillance rules always create an alert (audit trail) but skip
+            # automated response actions — handled inside _create_alert.
+            if "ALERT" in match.actions or match.rule_type == "surveillance":
                 await self._create_alert(event, match)
 
     async def _create_alert(self, event: UniversalEvent, match: RuleMatch) -> None:
@@ -171,7 +174,13 @@ class RuleWorker:
             return
         self._alert_cooldowns[cooldown_key] = now_ts
 
-        severity = match.severity if match.severity != "info" else "low"
+        # Surveillance rules are capped at "medium" — audit trail, not an attack signal.
+        if match.rule_type == "surveillance":
+            severity_order = ["low", "medium", "high", "critical"]
+            raw_sev = match.severity if match.severity != "info" else "low"
+            severity = raw_sev if severity_order.index(raw_sev) <= severity_order.index("medium") else "medium"
+        else:
+            severity = match.severity if match.severity != "info" else "low"
         alert = Alert(
             alert_id=uuid.uuid4(),
             created_at=now,
@@ -179,6 +188,7 @@ class RuleWorker:
             severity=severity,  # type: ignore[arg-type]
             status="open",
             rule_id=match.rule_id,
+            rule_type=match.rule_type,
             ml_triggered=False,
             ti_triggered=False,
             entity_id=f"{event.hostname}:{event.pid}",
@@ -221,8 +231,10 @@ class RuleWorker:
             except Exception as exc:  # noqa: BLE001
                 _log.debug("ml_learn_from_alert_error", error=str(exc))
 
-        # F-01: ALWAYS publish alerts:created so CorrelationWorker and DecisionWorker
-        # receive non-network alerts (filesystem, process, privilege escalation, etc.).
+        # Anomaly alerts go through the full correlation+decision pipeline.
+        # Surveillance alerts are stored for audit only — no automated response.
+        if match.rule_type == "surveillance":
+            return
         try:
             await self._bus.publish(
                 "alerts:created",

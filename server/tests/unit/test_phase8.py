@@ -31,12 +31,15 @@ from oseye.policy.engine import PolicyEngine
 
 @pytest.mark.asyncio
 async def test_policy_engine_loads_all_builtin_profiles():
-    """load_profiles() must load the 6 built-in YAML profiles."""
+    """load_profiles() must load all 12 built-in YAML profiles."""
     bus = InMemoryEventBus()
     engine = PolicyEngine(bus)
     await engine.load_profiles()
     profiles = {p.name for p in engine.list_profiles()}
-    expected = {"workstation", "server", "investigation", "minimal", "compliance", "stealth"}
+    expected = {
+        "workstation", "server", "investigation", "minimal", "compliance", "stealth",
+        "webserver", "database", "dns", "mail", "laptop", "desktop",
+    }
     assert profiles == expected
 
 

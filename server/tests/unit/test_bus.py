@@ -107,3 +107,43 @@ async def test_memory_bus_empty_message(bus: InMemoryEventBus) -> None:
     await bus.publish("test:empty", b"")
     results = await collect_n(sub, 1)
     assert results == [b""]
+
+
+# ---------------------------------------------------------------------------
+# Fan-out tests — each subscriber must receive every message independently
+# ---------------------------------------------------------------------------
+
+
+async def test_memory_bus_fanout_two_workers() -> None:
+    """Two subscribers on the same topic both receive the message (fan-out)."""
+    bus = InMemoryEventBus()
+    sub1 = await bus.subscribe("events:normalized")
+    sub2 = await bus.subscribe("events:normalized")
+    await bus.publish("events:normalized", b"event-data")
+    r1 = await collect_n(sub1, 1)
+    r2 = await collect_n(sub2, 1)
+    assert r1 == [b"event-data"]
+    assert r2 == [b"event-data"]
+
+
+async def test_memory_bus_fanout_three_workers() -> None:
+    """Three subscribers all receive the same message independently."""
+    bus = InMemoryEventBus()
+    subs = [await bus.subscribe("events:normalized") for _ in range(3)]
+    await bus.publish("events:normalized", b"broadcast")
+    for sub in subs:
+        results = await collect_n(sub, 1)
+        assert results == [b"broadcast"]
+
+
+async def test_memory_bus_fanout_multiple_messages() -> None:
+    """Two subscribers both receive all messages in order."""
+    bus = InMemoryEventBus()
+    sub1 = await bus.subscribe("events:normalized")
+    sub2 = await bus.subscribe("events:normalized")
+    for i in range(3):
+        await bus.publish("events:normalized", f"msg-{i}".encode())
+    r1 = await collect_n(sub1, 3)
+    r2 = await collect_n(sub2, 3)
+    assert r1 == [b"msg-0", b"msg-1", b"msg-2"]
+    assert r2 == [b"msg-0", b"msg-1", b"msg-2"]

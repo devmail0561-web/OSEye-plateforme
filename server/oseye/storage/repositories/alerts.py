@@ -39,6 +39,7 @@ def _row_to_alert(row: AlertRow, notes: list[AlertNote] | None = None) -> Alert:
         dst_ip=row.dst_ip,
         pid=row.pid,
         process_name=row.process_name,
+        rule_type=row.rule_type if hasattr(row, "rule_type") else "anomaly",
     )
 
 
@@ -65,6 +66,7 @@ def _alert_to_row(alert: Alert) -> AlertRow:
         dst_ip=alert.dst_ip,
         pid=alert.pid,
         process_name=alert.process_name,
+        rule_type=alert.rule_type if hasattr(alert, "rule_type") else "anomaly",
     )
 
 
@@ -144,6 +146,8 @@ class SQLAlertRepository:
                 row.dst_ip = alert.dst_ip
                 row.pid = alert.pid
                 row.process_name = alert.process_name
+                if hasattr(alert, "rule_type"):
+                    row.rule_type = alert.rule_type
         return alert
 
     async def list(self, filters: dict[str, object], pagination: Pagination) -> PageResult[Alert]:

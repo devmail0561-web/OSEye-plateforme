@@ -4,6 +4,34 @@ All notable changes to OSEye are documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0-alpha.2] — 2026-08-19
+
+### Added
+- **Fan-out Redis** : `create_worker_bus()` dans `bus/factory.py` — chaque worker a son propre consumer group Redis (`oseye-storage`, `oseye-rules`, `oseye-ml`, `oseye-ti`, `oseye-correlation`, `oseye-decision`, `oseye-notify`)
+- **EventMerger** : `agent/internal/merger/` — fenêtre 300ms, fusion eBPF+netlink (enrichissement `src_ip`/`src_port`) et déduplication eBPF+auditd
+- **P2 Ping** : `POST /api/v1/agents/{cn}/ping` + handler agent + `oseye-server agents ping <cn>`
+- **P3 Collecteurs** : `GET /api/v1/agents/{cn}/collectors` — état en temps réel des collecteurs par agent
+- **P7 Règles CRUD** : `POST/PUT/DELETE /api/v1/rules/db/*`, `oseye-server rules create/edit/delete`
+- **P9 Versionnement** : table `rule_change_log`, `GET /rules/db/{id}/history`, `POST /rules/db/{id}/assign-profile`
+- **P10 Profils** : 6 nouveaux profils YAML (`webserver`, `database`, `dns`, `mail`, `laptop`, `desktop`)
+- **P8 rule_type** : champ `anomaly | surveillance` dans `RuleDefinition`, `Rule` Go, YAML de règles — pipeline différencié dans `rule_worker.py`
+- **P5 Baselines** : champs `baseline_apps`, `baseline_net_dests`, `baseline_users` dans `SurveillanceProfile` — peuplés dans les 12 profils
+
+### Fixed
+- **P1** : `disconnect_reason` persisté en DB + événement `agent:disconnected` sur le bus avec code gRPC status
+- **P4** : `agent_id` retourné par `GET /agents`, UUID loggué au démarrage agent
+- **P6** : `ignore_processes: [oseye-agent, oseye-config]` + `ignore_paths_prefix` dans tous les profils ; filtre `os.Getpid()` dans `controller.go`
+- **source="grpc"** : normalizer loop production utilisait `source="procfs"` incorrect
+- **AlertRow.rule_type** : colonne manquante — les alertes `surveillance` étaient misclassifiées `anomaly` après redémarrage
+- **Shutdown buses** : les 8 buses Redis n'étaient pas fermés au shutdown (`await _b.close()`)
+- **webserver.yaml** : binaires web (`nginx`, `apache2`, etc.) retirés de `ignore_processes` (conflit avec `baseline_apps`)
+- **RULES-001** : `app.state.rule_repo` non assigné dans le lifespan → tous les endpoints `/rules/db/*` retournaient 503
+- **MERGE-001** : drop silencieux d'événements dans `flushGroup()` → `slog.Warn` + log
+- **MERGE-003** : goroutine leak `evMerger.Run()` non trackée dans `batcherWg`
+- **MERGE-004** : `sourcePriority` code mort — eBPF maintenant promu correctement quand netlink arrive en premier
+
+---
+
 ## [0.3.0-alpha.1] — 2026-08-18
 
 ### Added

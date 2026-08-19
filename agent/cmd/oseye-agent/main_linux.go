@@ -29,6 +29,7 @@ import (
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/mapper"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/platform"
 	// Platform driver is registered via platform_<os>.go in this package.
+	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/merger"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/policy"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/responder"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/signer"
@@ -80,6 +81,7 @@ func main() {
 		agentUUID = uuid.New()
 	}
 	agentIDBytes := agentUUID[:]
+	log.Info("agent_identity", "uuid", agentUUID.String(), "hostname", hostname)
 	mp := mapper.New(hostname, agentIDBytes)
 
 	// ── Auto-enrollment (first boot only) ────────────────────────────────────
@@ -296,10 +298,24 @@ func main() {
 	// Events are forwarded to both the batcher (for server send) and the
 	// autonomy controller (for local evaluation). The controller processes
 	// events inline — it parses the raw JSON and evaluates rules.
+	//
+	// The EventMerger sits between the collector manager and the batcher.
+	// It deduplicates overlapping sources (eBPF+netlink, eBPF+auditd) within
+	// a 300ms window, enriching eBPF network events with src_ip/src_port from
+	// netlink and dropping auditd duplicates of eBPF execve/openat.
+	evMerger := merger.New(300 * time.Millisecond)
+
 	batcher := transport.NewBatcher(cfg.BatchSize, cfg.BatchTimeout)
 	batcherCh := make(chan collector.RawEvent, fanInBufSize)
 
 	var batcherWg sync.WaitGroup
+	// Track the merger goroutine so shutdown waits for flushAll to complete.
+	batcherWg.Add(1)
+	go func() {
+		defer batcherWg.Done()
+		evMerger.Run(ctx, mgr.Events())
+	}()
+
 	batcherWg.Add(1)
 	go func() {
 		defer batcherWg.Done()
@@ -311,13 +327,13 @@ func main() {
 		}
 	}()
 
-	// Fanout goroutine: reads from collector manager, sends to batcher,
+	// Fanout goroutine: reads from merger (deduplicated events), sends to batcher,
 	// and feeds the autonomy controller.
 	batcherWg.Add(1)
 	go func() {
 		defer batcherWg.Done()
 		defer close(batcherCh)
-		for ev := range mgr.Events() {
+		for ev := range evMerger.Events() {
 			// Forward to batcher (blocking — batcher drains fast enough in normal operation;
 			// if it blocks, backpressure propagates to collectors which is preferable to event loss).
 			select {
@@ -333,6 +349,46 @@ func main() {
 					parsed["_source"] = ev.Source
 					parsed["_timestamp"] = ev.Timestamp
 					autoController.ProcessEvent(parsed)
+				}
+			}
+		}
+	}()
+
+	// ── Collector health reporter ─────────────────────────────────────────────
+	// Every 30s, push a synthetic event carrying collector health data so the
+	// server can expose it via GET /agents/{cn}/collectors.
+	batcherWg.Add(1)
+	go func() {
+		defer batcherWg.Done()
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				healths := mgr.Healths()
+				raw, err := json.Marshal(healths)
+				if err != nil {
+					continue
+				}
+				ev := collector.RawEvent{
+					Source:    "collector_health",
+					OS:        "linux",
+					Timestamp: time.Now().UnixNano(),
+					Raw:       raw,
+				}
+				// Guard against a send-on-closed-channel panic: batcherCh is closed
+				// by the fanout goroutine's defer, which may race with this ticker.
+				func() {
+					defer func() { recover() }() //nolint:errcheck
+					select {
+					case batcherCh <- ev:
+					case <-ctx.Done():
+					}
+				}()
+				if ctx.Err() != nil {
+					return
 				}
 			}
 		}

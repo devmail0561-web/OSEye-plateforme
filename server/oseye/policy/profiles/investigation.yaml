@@ -13,3 +13,14 @@ collectors:
   udev: {enabled: true, throttle: 0.5}
 min_severity: info
 push_interval_s: 5
+ignore_processes:
+  - oseye-agent
+  - oseye-config
+ignore_paths_prefix:
+  - /etc/oseye/
+  - /var/lib/oseye/
+  - /tmp/oseye
+baseline_apps:
+  - systemd
+baseline_users:
+  - root

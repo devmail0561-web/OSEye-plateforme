@@ -111,6 +111,8 @@ class AlertRow(Base):
     assigned_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
     false_positive_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    rule_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="anomaly")
+
     # Context fields required for ISOLATE / KILL_PROCESS response actions (D-R-02)
     dst_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -392,6 +394,41 @@ class ResponseActionRow(Base):
     error:          Mapped[str | None]     = mapped_column(Text, nullable=True)
 
 
+class RuleRow(Base):
+    """Admin-managed rules persisted in DB (CRUD via API/CLI)."""
+
+    __tablename__ = "rules_db"
+
+    rule_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    rule_type: Mapped[str] = mapped_column(String(32), nullable=False, default="anomaly")
+    priority: Mapped[str] = mapped_column(String(32), nullable=False, default="medium")
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    yaml_content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    profile_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    author: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+class RuleChangeLogRow(Base):
+    """Audit trail for admin-managed rule changes (create / update / delete)."""
+
+    __tablename__ = "rule_change_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rule_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    change_type: Mapped[str] = mapped_column(String(32), nullable=False)  # created|updated|deleted
+    diff_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    author: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    changed_at: Mapped[str] = mapped_column(String(64), nullable=False)
+    yaml_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class AgentRow(Base):
     """Tracks connected agents — updated on gRPC stream events."""
 
@@ -403,5 +440,6 @@ class AgentRow(Base):
     version:        Mapped[str | None]     = mapped_column(String(64),  nullable=True)
     active_profile: Mapped[str]            = mapped_column(String(64),  nullable=False, default="workstation")  # noqa: E501
     ip_address:     Mapped[str | None]     = mapped_column(String(45),  nullable=True)
-    online:         Mapped[bool]           = mapped_column(Boolean,     nullable=False, default=False)  # noqa: E501
-    platform:       Mapped[str]            = mapped_column(String(16),  nullable=False, default="linux", server_default="linux")  # noqa: E501
+    online:             Mapped[bool]           = mapped_column(Boolean,     nullable=False, default=False)  # noqa: E501
+    platform:           Mapped[str]            = mapped_column(String(16),  nullable=False, default="linux", server_default="linux")  # noqa: E501
+    disconnect_reason:  Mapped[str | None]     = mapped_column(String(64),  nullable=True)

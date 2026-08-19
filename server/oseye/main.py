@@ -22,7 +22,7 @@ from oseye_sdk.ipc import IPCServer
 
 from oseye.api.app import create_app
 from oseye.api.auth.jwt import JWTHandler
-from oseye.bus.factory import create_bus
+from oseye.bus.factory import create_bus, create_worker_bus
 from oseye.config import Settings
 from oseye.core.observability import get_logger
 from oseye.correlation.engine import CorrelationEngine
@@ -102,6 +102,13 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 )
 
         bus = create_bus(settings)
+        storage_bus = create_worker_bus(settings, bus, "oseye-storage")
+        rules_bus = create_worker_bus(settings, bus, "oseye-rules")
+        ml_bus = create_worker_bus(settings, bus, "oseye-ml")
+        ti_bus = create_worker_bus(settings, bus, "oseye-ti")
+        correlation_bus = create_worker_bus(settings, bus, "oseye-correlation")
+        decision_bus = create_worker_bus(settings, bus, "oseye-decision")
+        notify_bus = create_worker_bus(settings, bus, "oseye-notify")
         backend = create_backend(settings)
         await backend.init()
         repo = SQLEventRepository(backend.session_factory)
@@ -109,7 +116,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
 
         normalizer = NormalizerEngine(bus=bus, hostname=socket.gethostname())
         writer = StorageWriter(
-            bus=bus,
+            bus=storage_bus,
             repo=repo,
             flush_interval_ms=settings.batch_flush_interval_ms,
             batch_max_size=settings.batch_max_size,
@@ -121,7 +128,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         ml_engine = MLEngine()
 
         rule_worker = RuleWorker(
-            bus=bus,
+            bus=rules_bus,
             alert_repo=alert_repo,
             rules_root=_RULES_ROOT,
             hot_reload=False,  # engine already hot-reloads
@@ -209,7 +216,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # ------------------------------------------------------------------
 
         ml_worker = MLWorker(
-            bus=bus,
+            bus=ml_bus,
             engine=ml_engine,
             checkpoint_path=Path(settings.ml_checkpoint_path),
             checkpoint_interval_s=settings.ml_checkpoint_interval_s,
@@ -307,13 +314,13 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         # ------------------------------------------------------------------
 
         ti_worker = TIWorker(
-            bus=bus,
+            bus=ti_bus,
             ti_client=ti_client,
             alert_repo=alert_repo,
             stop_event=stop,
         )
         correlation_worker = CorrelationWorker(
-            bus=bus,
+            bus=correlation_bus,
             engine=correlation_engine,
             alert_repo=alert_repo,
             stop_event=stop,
@@ -321,7 +328,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         from oseye.api.ws.alerts import alerts_ws_manager as _ws_alert_mgr
         from oseye.api.ws.decisions import decisions_ws_manager as _ws_dec_mgr
         decision_worker = DecisionWorker(
-            bus=bus,
+            bus=decision_bus,
             engine=decision_engine,
             decision_repo=decision_repo,
             incident_repo=incident_repo,
@@ -334,7 +341,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
 
         # NE-R-01: NotificationWorker consumes notifications:pending so that
         # messages published by ActionExecutor._emit_notification are not dropped.
-        notify_worker = NotificationWorker(bus=bus, stop_event=stop)
+        notify_worker = NotificationWorker(bus=notify_bus, stop_event=stop)
 
         async def _normalizer_loop() -> None:
             async for topic, message in await bus.subscribe_pattern("events:raw:*"):
@@ -342,7 +349,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
                 agent_id = parts[2] if len(parts) >= 3 else "unknown"
                 await normalizer.process(
                     raw_payload=message,
-                    source="procfs",
+                    source="grpc",
                     os_name="linux",
                     agent_id=agent_id,
                 )
@@ -441,6 +448,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         app.state.event_repo = repo  # type: ignore[attr-defined]
         app.state.alert_repo = alert_repo  # type: ignore[attr-defined]
         app.state.rule_engine = rule_engine  # type: ignore[attr-defined]
+        from oseye.storage.repositories.rules import SQLRuleRepository
+        app.state.rule_repo = SQLRuleRepository(backend.session_factory)  # type: ignore[attr-defined]
         app.state.api_key_repo = SQLApiKeyRepository(backend.session_factory)  # type: ignore[attr-defined]
         app.state.rule_version_repo = SQLRuleVersionRepository(backend.session_factory)  # type: ignore[attr-defined]
         app.state.ti_client = ti_client  # type: ignore[attr-defined]
@@ -449,6 +458,7 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         app.state.human_queue = human_queue  # type: ignore[attr-defined]
         app.state.case_manager = case_manager  # type: ignore[attr-defined]
         app.state.grpc_servicer = grpc_servicer  # type: ignore[attr-defined]
+        app.state.bus = bus  # type: ignore[attr-defined]
         app.state.agent_repo = agent_repo  # type: ignore[attr-defined]
         app.state.action_executor = action_executor  # type: ignore[attr-defined]
         app.state.plugin_manager = plugin_manager  # type: ignore[attr-defined]
@@ -477,6 +487,8 @@ def _build_lifespan(settings: Settings):  # type: ignore[no-untyped-def]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        for _b in [bus, storage_bus, rules_bus, ml_bus, ti_bus, correlation_bus, decision_bus, notify_bus]:
+            await _b.close()
         await backpressure.close()
         await ti_client.close()
         await http_client.aclose()

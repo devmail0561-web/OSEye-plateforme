@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/devmail0561-web/OSEye-plateforme/agent/gen"
 	"github.com/devmail0561-web/OSEye-plateforme/agent/internal/backoff"
+	"google.golang.org/grpc/status"
 )
 
 // PolicyClient maintains the server→agent SurveillanceProfile stream and
@@ -58,7 +59,8 @@ func (c *PolicyClient) Run(ctx context.Context) {
 			return
 		}
 		if err != nil {
-			slog.Warn("policy stream error, reconnecting", "err", err, "delay", delay)
+			grpcCode := status.Code(err).String()
+			slog.Warn("policy stream error, reconnecting", "err", err, "grpc_code", grpcCode, "delay", delay)
 			t := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():

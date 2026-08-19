@@ -7,3 +7,14 @@ collectors:
   netlink: {enabled: true, throttle: 10.0}
 min_severity: high
 push_interval_s: 120
+ignore_processes:
+  - oseye-agent
+  - oseye-config
+ignore_paths_prefix:
+  - /etc/oseye/
+  - /var/lib/oseye/
+  - /tmp/oseye
+baseline_apps:
+  - systemd
+baseline_users:
+  - root

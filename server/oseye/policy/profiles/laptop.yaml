@@ -1,7 +1,7 @@
-name: workstation
-description: "Lightweight workstation monitoring"
+name: laptop
+description: "Laptop monitoring — mobile workstation with VPN and wifi"
 version: 1
-platforms: [linux, windows, darwin]
+platforms: [linux, darwin, windows]
 collectors:
   procfs: {enabled: true, throttle: 1.0}
   auditd: {enabled: true, throttle: 1.0}
@@ -17,6 +17,7 @@ ignore_paths_prefix:
   - /etc/oseye/
   - /var/lib/oseye/
   - /tmp/oseye
+  - /run/NetworkManager/
 baseline_apps:
   - systemd
   - sshd
@@ -28,12 +29,16 @@ baseline_apps:
   - apt-get
   - dpkg
   - NetworkManager
+  - wpa_supplicant
+  - dhclient
+  - vpnc
+  - openvpn
+  - openconnect
   - journald
   - rsyslog
   - dbus-daemon
   - polkitd
-  - udisksd
   - gnome-shell
-  - Xorg
+  - gnome-keyring-daemon
 baseline_users:
   - root

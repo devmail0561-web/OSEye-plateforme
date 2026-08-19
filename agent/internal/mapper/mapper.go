@@ -81,6 +81,8 @@ func (m *EventMapper) mapCategory(source string) string {
 		return "device"
 	case "auditd":
 		return "audit"
+	case "collector_health":
+		return "agent_health"
 	// Windows
 	case "wmi", "toolhelp32":
 		return "process"
@@ -238,6 +240,9 @@ func (m *EventMapper) mapFields(payload map[string]interface{}, source string, e
 
 	case "es":
 		ev.Type = strField(payload, "event_type")
+
+	case "collector_health":
+		ev.Type = "collector_status"
 	}
 }
 

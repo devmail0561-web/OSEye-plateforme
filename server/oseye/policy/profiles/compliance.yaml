@@ -9,3 +9,20 @@ collectors:
   procfs: {enabled: true, throttle: 1.0}
 min_severity: info
 push_interval_s: 60
+ignore_processes:
+  - oseye-agent
+  - oseye-config
+ignore_paths_prefix:
+  - /etc/oseye/
+  - /var/lib/oseye/
+  - /tmp/oseye
+baseline_apps:
+  - systemd
+  - sshd
+  - auditd
+  - rsyslog
+  - cron
+  - bash
+  - sh
+baseline_users:
+  - root

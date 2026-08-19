@@ -1,7 +1,7 @@
-name: workstation
-description: "Lightweight workstation monitoring"
+name: desktop
+description: "Desktop monitoring — fixed workstation"
 version: 1
-platforms: [linux, windows, darwin]
+platforms: [linux, windows]
 collectors:
   procfs: {enabled: true, throttle: 1.0}
   auditd: {enabled: true, throttle: 1.0}
@@ -28,12 +28,12 @@ baseline_apps:
   - apt-get
   - dpkg
   - NetworkManager
+  - wpa_supplicant
+  - dhclient
   - journald
   - rsyslog
   - dbus-daemon
   - polkitd
-  - udisksd
   - gnome-shell
-  - Xorg
 baseline_users:
   - root

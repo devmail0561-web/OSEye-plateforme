@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+RuleType = Literal["anomaly", "surveillance"]
 
 
 @dataclass(slots=True)
@@ -25,6 +27,7 @@ class RuleDefinition:
     explanation: str
     source: str  # builtin | custom
     entity_key: str | None = None  # e.g. "hostname:src_ip" for temporal rules
+    rule_type: RuleType = "anomaly"
     # Pre-compiled bytecode for the condition — set at load time, None means
     # compile-on-first-eval (fallback for dynamically created rules).
     compiled_code: Any = field(default=None)
@@ -41,4 +44,5 @@ class RuleMatch:
     tags: list[str]
     mitre: list[str]
     explanation: str
+    rule_type: RuleType = "anomaly"
     matched_fields: dict[str, Any] = field(default_factory=dict)

@@ -37,6 +37,7 @@ type Rule struct {
 	Name       string  `json:"name"`
 	Version    int     `json:"version"`
 	Severity   string  `json:"severity"`
+	RuleType   string  `json:"rule_type"` // "anomaly" | "surveillance"
 	Autonomy   string  `json:"autonomy"`
 	Threshold  float64 `json:"threshold"`
 	Response   string  `json:"response"`

@@ -482,6 +482,171 @@ journalctl -u oseye-server | grep "worker_task_crashed"
 
 ---
 
+---
+
+### 15. Tous les endpoints `/rules/db/*` retournent HTTP 503
+
+**Symptômes :**
+```
+POST /api/v1/rules/db → 503 Service Unavailable
+{"detail": "Rule repository not available"}
+```
+
+**Cause :**
+`app.state.rule_repo` n'était pas assigné dans le lifespan du serveur dans les versions antérieures
+à 2026-08-19.
+
+**Solution :**
+Mettre à jour le serveur. Le bug est corrigé — `SQLRuleRepository` est maintenant correctement
+instancié et assigné à `app.state.rule_repo` au démarrage.
+
+```bash
+docker restart oseye-server
+```
+
+**Vérification :**
+```bash
+curl -k -H "Authorization: Bearer <TOKEN>" https://localhost:443/api/v1/rules/db
+# Doit retourner 200 avec liste JSON (vide si aucune règle en DB)
+```
+
+---
+
+### 16. Agent offline sans raison connue
+
+**Symptômes :**
+L'agent passe offline dans l'UI sans message d'erreur. `systemctl status oseye-agent` montre
+`inactive (dead)` sans cause explicite.
+
+**Diagnostic :**
+```bash
+# Voir la raison de déconnexion depuis l'API (depuis v0.3.0)
+curl -k -H "Authorization: Bearer <TOKEN>" \
+  https://localhost:443/api/v1/agents/<HOSTNAME>
+# → champ "disconnect_reason": "CANCELLED" | "UNAVAILABLE" | "EOF" | ...
+
+# Logs agent avec code gRPC status
+journalctl -u oseye-agent -f | grep "grpc_code"
+```
+
+**Codes gRPC courants :**
+
+| Code | Cause probable |
+|---|---|
+| `CANCELLED` | Arrêt propre (SIGTERM/SIGINT) |
+| `UNAVAILABLE` | Serveur inaccessible ou réseau coupé |
+| `DEADLINE_EXCEEDED` | Timeout — réseau instable ou charge serveur |
+| `UNAUTHENTICATED` | Certificat expiré ou révoqué |
+| `EOF` | Connexion fermée proprement côté serveur |
+
+**Test de connectivité :**
+```bash
+# Depuis l'UI : bouton "Ping" sur la page Agents
+# Depuis le CLI :
+oseye-server agents ping <HOSTNAME> --timeout 5
+# → "ok (latency: 42ms)" ou "TIMEOUT"
+```
+
+---
+
+### 17. Workers ne traitent qu'une fraction des événements
+
+**Symptômes :**
+Des alertes sont générées sporadiquement. Le RuleWorker loggue beaucoup moins d'events que le
+StorageWriter. Certains events sont stockés en DB mais n'ont jamais déclenché d'évaluation.
+
+**Cause :**
+Dans les versions antérieures à 2026-08-19, tous les workers partageaient le même consumer group
+Redis `"oseye"`. Redis distribuait les messages en round-robin → chaque event n'était traité que
+par UN seul worker sur N.
+
+**Solution :**
+Mettre à jour le serveur. Le bug est corrigé — chaque worker a maintenant son propre consumer group
+(`oseye-storage`, `oseye-rules`, `oseye-ml`, `oseye-ti`, etc.).
+
+**Vérification :**
+```bash
+# Vérifier les consumer groups créés sur le stream events:normalized
+docker exec oseye-redis redis-cli XINFO GROUPS events:normalized
+# Doit afficher plusieurs groupes distincts (oseye-storage, oseye-rules, oseye-ml...)
+```
+
+---
+
+### 18. Faux positifs massifs sur processus système (`systemd`, `sshd`, `cron`…)
+
+**Symptômes :**
+Des centaines d'alertes par heure sur des processus légitimes. L'agent génère des alertes sur
+ses propres connexions gRPC vers le serveur.
+
+**Cause :**
+Les profils de surveillance n'avaient pas de section `baseline_apps` — les baselines arrivaient
+vides à l'agent. De plus, `ignore_processes` n'incluait pas les binaires OSEye eux-mêmes.
+
+**Solution :**
+Mettre à jour le serveur (corrigé depuis 2026-08-19). Tous les profils incluent maintenant :
+- `baseline_apps` : liste des processus légitimes par rôle (systemd, sshd, nginx, etc.)
+- `ignore_processes: [oseye-agent, oseye-config]`
+- `ignore_paths_prefix: [/etc/oseye/, /var/lib/oseye/]`
+
+**Si les faux positifs persistent après mise à jour :**
+```bash
+# Forcer la re-synchronisation du profil vers l'agent
+oseye-server policy push <HOSTNAME>
+# ou redémarrer l'agent pour déclencher la re-sync au reconnect
+sudo systemctl restart oseye-agent
+```
+
+---
+
+### 19. Alertes `surveillance` redeviennent `anomaly` après redémarrage du serveur
+
+**Symptômes :**
+Des alertes créées avec `rule_type: surveillance` apparaissent comme `anomaly` après un redémarrage.
+Les règles fonctionnent correctement avant le redémarrage mais pas après rechargement depuis la DB.
+
+**Cause :**
+Dans les versions antérieures à 2026-08-19, `AlertRow` n'avait pas de colonne `rule_type`. Les
+alertes rechargées depuis la DB héritaient silencieusement du défaut Pydantic `"anomaly"`.
+
+**Solution :**
+Mettre à jour le serveur. La colonne `rule_type` est maintenant présente dans `AlertRow` et
+correctement persistée/rechargée. Un redémarrage du serveur suffit après mise à jour.
+
+**Vérification :**
+```bash
+# Vérifier que la colonne existe dans la DB SQLite/PostgreSQL
+# SQLite :
+sqlite3 /var/lib/oseye/oseye.db "SELECT rule_type FROM alerts LIMIT 5;"
+# PostgreSQL :
+docker exec oseye-postgres psql -U oseye -c "SELECT rule_type FROM alerts LIMIT 5;"
+```
+
+---
+
+### 20. EventMerger — événements `openat` auditd non dédupliqués avec eBPF
+
+**Comportement attendu :**
+Les événements `openat` captés simultanément par eBPF et auditd ne sont pas fusionnés.
+Deux événements distincts apparaissent pour la même ouverture de fichier.
+
+**Explication :**
+C'est une limitation connue du parser auditd actuel : le champ `filename` (fichier accédé)
+n'est pas extrait des records `PATH` associés au SYSCALL auditd. Sans ce champ, le fingerprint
+de fusion ne peut pas être calculé. Les événements auditd `openat` passent en mode `passthrough`
+(non fusionnés).
+
+**Impact :** Léger bruit supplémentaire uniquement si auditd et eBPF sont actifs simultanément.
+eBPF étant prioritaire, auditd est redondant dans ce cas.
+
+**Contournement :** Désactiver le collecteur auditd si eBPF est disponible et fonctionnel :
+```bash
+# Dans agent.env ou la configuration agent
+OSEYE_COLLECTOR_AUDITD_ENABLED=false
+```
+
+---
+
 ## Contacts
 
 Pour signaler un bug ou demander de l'aide :

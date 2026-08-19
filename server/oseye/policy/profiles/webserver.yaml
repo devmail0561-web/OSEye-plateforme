@@ -1,5 +1,5 @@
-name: server
-description: "Full server monitoring"
+name: webserver
+description: "Web server monitoring (nginx, apache, node)"
 version: 1
 platforms: [linux]
 collectors:
@@ -19,14 +19,22 @@ ignore_paths_prefix:
   - /etc/oseye/
   - /var/lib/oseye/
   - /tmp/oseye
+  - /var/log/nginx/
+  - /var/log/apache2/
 baseline_apps:
   - systemd
+  - nginx
+  - apache2
+  - httpd
+  - node
+  - php-fpm
+  - python3
   - sshd
   - cron
-  - bash
-  - sh
   - rsyslog
-  - journald
   - dbus-daemon
 baseline_users:
   - root
+  - www-data
+  - nginx
+  - apache

@@ -10,6 +10,10 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
+import json
+import time
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
@@ -54,14 +58,16 @@ def _get_agent_repo(request: Request) -> Any:
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     return {
-        "cn":             row.cn,
-        "online":         row.online,
-        "first_seen":     row.first_seen.isoformat() if row.first_seen else None,
-        "last_seen":      row.last_seen.isoformat() if row.last_seen else None,
-        "version":        row.version,
-        "active_profile": row.active_profile,
-        "ip_address":     row.ip_address,
-        "platform":       getattr(row, "platform", "linux"),
+        "cn":                row.cn,
+        "agent_id":          row.cn,  # mTLS CN is the stable agent identity
+        "online":            row.online,
+        "first_seen":        row.first_seen.isoformat() if row.first_seen else None,
+        "last_seen":         row.last_seen.isoformat() if row.last_seen else None,
+        "version":           row.version,
+        "active_profile":    row.active_profile,
+        "ip_address":        row.ip_address,
+        "platform":          getattr(row, "platform", "linux"),
+        "disconnect_reason": getattr(row, "disconnect_reason", None),
     }
 
 
@@ -100,6 +106,61 @@ async def get_agent(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return _row_to_dict(row)
+
+
+@router.get("/{cn}/collectors")
+async def get_agent_collectors(
+    cn: Annotated[str, Path(max_length=253)],
+    request: Request,
+    _auth: dict[str, Any] = Depends(require_analyst),
+) -> dict[str, Any]:
+    """Return the latest collector health snapshot for a given agent."""
+    servicer = getattr(request.app.state, "grpc_servicer", None)
+    healths: list[dict[str, Any]] = []
+    if servicer is not None and hasattr(servicer, "get_collector_healths"):
+        healths = servicer.get_collector_healths(cn)
+    return {"cn": cn, "collectors": healths}
+
+
+@router.post("/{cn}/ping")
+async def ping_agent(
+    cn: Annotated[str, Path(max_length=253)],
+    request: Request,
+    timeout: float = Query(default=5.0, ge=0.5, le=30.0),
+    _auth: dict[str, Any] = Depends(require_analyst),
+) -> dict[str, Any]:
+    """Test connectivity to an agent by sending a PING command and waiting for the reply.
+
+    Returns latency_ms if the agent replies within timeout, or status=timeout otherwise.
+    """
+    bus = getattr(request.app.state, "bus", None)
+    servicer = getattr(request.app.state, "grpc_servicer", None)
+    if bus is None or servicer is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bus or gRPC servicer not initialised",
+        )
+
+    command_id = str(uuid.uuid4())
+    event = asyncio.Event()
+    servicer.register_ping(command_id, event)
+
+    start = time.monotonic()
+    try:
+        payload = json.dumps(
+            {"command_id": command_id, "command_type": "PING", "payload": {}}
+        ).encode()
+        await bus.publish(f"commands:{cn}", payload)
+
+        await asyncio.wait_for(event.wait(), timeout=timeout)
+        latency_ms = int((time.monotonic() - start) * 1000)
+        _logger.info("agent_ping_ok", cn=cn, latency_ms=latency_ms)
+        return {"cn": cn, "status": "ok", "latency_ms": latency_ms}
+    except TimeoutError:
+        _logger.info("agent_ping_timeout", cn=cn)
+        return {"cn": cn, "status": "timeout", "latency_ms": None}
+    finally:
+        servicer.unregister_ping(command_id)
 
 
 @router.delete("/{cn}", status_code=status.HTTP_204_NO_CONTENT)

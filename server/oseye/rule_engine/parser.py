@@ -12,6 +12,7 @@ from oseye.rule_engine.models import RuleDefinition
 _log = get_logger(__name__)
 
 _VALID_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+_VALID_RULE_TYPES = {"anomaly", "surveillance"}
 
 
 def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
@@ -52,6 +53,10 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
         explanation = str(data.get("explanation", ""))
         entity_key_raw = data.get("entity_key")
         entity_key = str(entity_key_raw) if entity_key_raw else None
+        rule_type_raw = str(data.get("rule_type", "anomaly"))
+        if rule_type_raw not in _VALID_RULE_TYPES:
+            _log.warning("rule_invalid_rule_type", rule_id=rule_id, rule_type=rule_type_raw)
+            rule_type_raw = "anomaly"
         if timeframe is not None and timeframe <= 0:
             _log.warning("rule_invalid_timeframe", rule_id=rule_id, timeframe=timeframe)
             return None
@@ -75,6 +80,7 @@ def _parse_rule(data: dict[str, object], source: str) -> RuleDefinition | None:
             explanation=explanation,
             source=source,
             entity_key=entity_key,
+            rule_type=rule_type_raw,  # type: ignore[arg-type]
         )
     except (KeyError, TypeError, ValueError) as exc:
         _log.warning("rule_parse_error", error=str(exc))

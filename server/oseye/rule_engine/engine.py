@@ -142,6 +142,7 @@ class RuleEngine:
                             tags=rule.tags,
                             mitre=rule.mitre,
                             explanation=rule.explanation,
+                            rule_type=rule.rule_type,
                             matched_fields={
                                 "category": event.category,
                                 "type": event.type,

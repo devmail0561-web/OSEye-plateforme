@@ -58,8 +58,9 @@ async def _collect_published(bus: InMemoryEventBus, topic: str, count: int, time
 
 
 @pytest.mark.asyncio
-async def test_ml_worker_publishes_score(tmp_path: Path):
+async def test_ml_worker_publishes_score(tmp_path: Path, monkeypatch):
     """MLWorker publishes a score to analysis:ml for every valid event."""
+    monkeypatch.setenv("OSEYE_CHECKPOINT_HMAC_KEY", "a" * 64)
     bus = InMemoryEventBus()
     engine = MLEngine()
     stop = asyncio.Event()

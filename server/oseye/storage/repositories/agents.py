@@ -58,13 +58,15 @@ class SQLAgentRepository:
                     if platform:
                         row.platform = platform
 
-    async def set_offline(self, cn: str) -> None:
-        """Mark an agent as offline."""
+    async def set_offline(self, cn: str, reason: str | None = None) -> None:
+        """Mark an agent as offline with an optional disconnect reason."""
         async with self._session_factory() as session:
             async with session.begin():
                 row = await session.get(AgentRow, cn)
                 if row is not None:
                     row.online = False
+                    if reason is not None:
+                        row.disconnect_reason = reason
 
     async def list(self) -> list[AgentRow]:
         """Return all known agents ordered by last_seen desc."""

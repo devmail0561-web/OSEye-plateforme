@@ -8,3 +8,15 @@ collectors:
   auditd: {enabled: false}
 min_severity: high
 push_interval_s: 300
+ignore_processes:
+  - oseye-agent
+  - oseye-config
+ignore_paths_prefix:
+  - /etc/oseye/
+  - /var/lib/oseye/
+  - /tmp/oseye
+baseline_apps:
+  - systemd
+  - sshd
+baseline_users:
+  - root

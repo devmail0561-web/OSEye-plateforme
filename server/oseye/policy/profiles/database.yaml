@@ -1,12 +1,12 @@
-name: server
-description: "Full server monitoring"
+name: database
+description: "Database server monitoring (postgres, mysql, redis)"
 version: 1
 platforms: [linux]
 collectors:
   procfs: {enabled: true, throttle: 0.5}
   auditd: {enabled: true, throttle: 0.5}
-  fanotify: {enabled: true, throttle: 1.0}
-  inotify: {enabled: true, throttle: 1.0}
+  fanotify: {enabled: true, throttle: 0.5}
+  inotify: {enabled: true, throttle: 0.5}
   netlink: {enabled: true, throttle: 0.5}
   journald: {enabled: true, throttle: 1.0}
   syslog: {enabled: true, throttle: 1.0}
@@ -19,14 +19,22 @@ ignore_paths_prefix:
   - /etc/oseye/
   - /var/lib/oseye/
   - /tmp/oseye
+  - /var/lib/postgresql/
+  - /var/lib/mysql/
+  - /var/lib/redis/
 baseline_apps:
   - systemd
+  - postgres
+  - mysqld
+  - redis-server
+  - pg_dump
+  - pg_restore
+  - psql
   - sshd
   - cron
-  - bash
-  - sh
   - rsyslog
-  - journald
-  - dbus-daemon
 baseline_users:
   - root
+  - postgres
+  - mysql
+  - redis

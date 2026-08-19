@@ -103,6 +103,12 @@ def main(argv: list[str] | None = None) -> None:
     elif cmd == "update":
         from .cmd_update import run
         run(rest)
+    elif cmd == "agents":
+        from .cmd_agents import run
+        run(rest)
+    elif cmd == "rules":
+        from .cmd_rules import run
+        run(rest)
     elif cmd == "uninstall":
         from .cmd_uninstall import run
         run(rest)

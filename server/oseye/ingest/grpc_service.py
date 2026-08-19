@@ -152,6 +152,15 @@ class AgentServiceServicer:
         self._active_cns: set[str] = set()
         self._active_cns_lock = threading.Lock()
 
+        # Latest collector health snapshot per agent CN.
+        # Populated from synthetic "collector_health" events sent by agents every 30s.
+        self._collector_healths: dict[str, list[dict[str, Any]]] = {}
+        self._collector_healths_lock = threading.Lock()
+
+        # Pending ping requests: command_id → asyncio.Event to signal on reply.
+        self._pending_pings: dict[str, asyncio.Event] = {}
+        self._pending_pings_lock = threading.Lock()
+
     @property
     def active_cns(self) -> frozenset[str]:
         """Snapshot of CNs with an active IngestEvents stream."""
@@ -166,6 +175,26 @@ class AgentServiceServicer:
     def _get_agent_key(self, cn: str) -> bytes | None:
         with self._agent_keys_lock:
             return self._agent_keys.get(cn)
+
+    def _publish_agent_disconnected(self, cn: str, reason: str) -> None:
+        """Publish an agent:disconnected event on the bus (fire-and-forget)."""
+        if self._loop is None or not self._loop.is_running():
+            return
+        payload = json.dumps({"agent_cn": cn, "reason": reason}).encode()
+        asyncio.run_coroutine_threadsafe(
+            self._bus.publish("agent:disconnected", payload),
+            self._loop,
+        ).add_done_callback(_on_db_fut_error)
+
+    def register_ping(self, command_id: str, event: asyncio.Event) -> None:
+        """Register a pending ping so ReportActions can signal it on reply."""
+        with self._pending_pings_lock:
+            self._pending_pings[command_id] = event
+
+    def unregister_ping(self, command_id: str) -> None:
+        """Remove a pending ping entry (called after timeout or reply)."""
+        with self._pending_pings_lock:
+            self._pending_pings.pop(command_id, None)
 
     async def startup(self) -> None:
         """Call once before the gRPC server starts accepting connections.
@@ -186,6 +215,11 @@ class AgentServiceServicer:
         """Remove *cn* from the blocklist."""
         with self._blocked_lock:
             self._blocked_cns.discard(cn)
+
+    def get_collector_healths(self, cn: str) -> list[dict[str, Any]]:
+        """Return the latest collector health snapshot for agent *cn*."""
+        with self._collector_healths_lock:
+            return list(self._collector_healths.get(cn, []))
 
     @property
     def policy_engine(self) -> Any | None:
@@ -215,6 +249,7 @@ class AgentServiceServicer:
         # (normal end-of-stream, context.abort(), exception).
         with self._active_cns_lock:
             self._active_cns.add(cn)
+        _disconnect_reason: str | None = None
         try:
             if self._agent_repo is not None and self._loop is not None:
                 _peer = context.peer() or ""
@@ -288,6 +323,19 @@ class AgentServiceServicer:
                 for event_index, pb_event in enumerate(request.events):
                     if event_index in rejected_indices:
                         continue
+                    # Intercept collector health snapshots — store locally, skip bus publish.
+                    if pb_event.category == "agent_health" and pb_event.extra_json:
+                        try:
+                            healths_raw = json.loads(pb_event.extra_json)
+                            healths = [
+                                {"name": k, **v} if isinstance(v, dict) else {"name": k}
+                                for k, v in healths_raw.items()
+                            ]
+                            with self._collector_healths_lock:
+                                self._collector_healths[cn] = healths
+                        except Exception:  # noqa: BLE001
+                            pass
+                        continue
                     event = pb_to_event(pb_event, agent_id_override=cn)
                     batch_payloads.append(event.model_dump_json().encode("utf-8"))
 
@@ -324,22 +372,49 @@ class AgentServiceServicer:
             if _pb2 is None:  # pragma: no cover
                 return None
 
-            # Mark agent offline when stream ends
+            # Mark agent offline when stream ends (clean EOF — no error reason)
             if self._agent_repo is not None and self._loop is not None:
                 _fut = asyncio.run_coroutine_threadsafe(
-                    self._agent_repo.set_offline(cn),
+                    self._agent_repo.set_offline(cn, reason="EOF"),
                     self._loop,
                 )
                 _fut.add_done_callback(_on_db_fut_error)
+            _disconnect_reason = "EOF"
+            self._publish_agent_disconnected(cn, "EOF")
 
             return _pb2.IngestResponse(
                 accepted=total_accepted,
                 rejected=total_rejected,
                 errors=all_errors,
             )
+        except grpc.RpcError as _grpc_exc:
+            _code = _grpc_exc.code().name if hasattr(_grpc_exc, "code") else "UNKNOWN"
+            _disconnect_reason = _code
+            _logger.warning("agent_stream_error", cn=cn, grpc_code=_code)
+            if self._agent_repo is not None and self._loop is not None:
+                _fut = asyncio.run_coroutine_threadsafe(
+                    self._agent_repo.set_offline(cn, reason=_code),
+                    self._loop,
+                )
+                _fut.add_done_callback(_on_db_fut_error)
+            self._publish_agent_disconnected(cn, _code)
+            raise
+        except Exception as _exc:
+            _reason = type(_exc).__name__
+            _disconnect_reason = _reason
+            _logger.warning("agent_stream_exception", cn=cn, reason=_reason)
+            if self._agent_repo is not None and self._loop is not None:
+                _fut = asyncio.run_coroutine_threadsafe(
+                    self._agent_repo.set_offline(cn, reason=_reason),
+                    self._loop,
+                )
+                _fut.add_done_callback(_on_db_fut_error)
+            self._publish_agent_disconnected(cn, _reason)
+            raise
         finally:
             with self._active_cns_lock:
                 self._active_cns.discard(cn)
+            _ = _disconnect_reason  # consumed above
 
     # ------------------------------------------------------------------
     # ReceivePolicy — server-streaming RPC
@@ -538,6 +613,12 @@ class AgentServiceServicer:
                 command_id=command_id,
                 status=status,
             )
+
+            # Signal any waiting ping request for this command_id.
+            with self._pending_pings_lock:
+                ping_event = self._pending_pings.get(command_id)
+            if ping_event is not None and self._loop is not None:
+                self._loop.call_soon_threadsafe(ping_event.set)
 
             if repo is not None and self._loop is not None:
                 # AG-R-01: IDOR guard — verify the command was issued to this agent.

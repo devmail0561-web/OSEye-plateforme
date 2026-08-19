@@ -1,5 +1,5 @@
-name: server
-description: "Full server monitoring"
+name: mail
+description: "Mail server monitoring (postfix, dovecot)"
 version: 1
 platforms: [linux]
 collectors:
@@ -19,14 +19,25 @@ ignore_paths_prefix:
   - /etc/oseye/
   - /var/lib/oseye/
   - /tmp/oseye
+  - /var/mail/
+  - /var/spool/mail/
+  - /var/spool/postfix/
+  - /etc/postfix/
+  - /etc/dovecot/
 baseline_apps:
   - systemd
+  - postfix
+  - dovecot
+  - master
+  - smtpd
+  - pickup
+  - cleanup
+  - qmgr
   - sshd
   - cron
-  - bash
-  - sh
   - rsyslog
-  - journald
-  - dbus-daemon
 baseline_users:
   - root
+  - postfix
+  - dovecot
+  - mail

@@ -1,5 +1,5 @@
-name: server
-description: "Full server monitoring"
+name: dns
+description: "DNS server monitoring (bind, unbound)"
 version: 1
 platforms: [linux]
 collectors:
@@ -19,14 +19,22 @@ ignore_paths_prefix:
   - /etc/oseye/
   - /var/lib/oseye/
   - /tmp/oseye
+  - /var/lib/bind/
+  - /var/cache/bind/
+  - /etc/bind/
+  - /etc/unbound/
 baseline_apps:
   - systemd
+  - named
+  - unbound
+  - bind9
+  - dig
+  - nslookup
   - sshd
   - cron
-  - bash
-  - sh
   - rsyslog
-  - journald
-  - dbus-daemon
 baseline_users:
   - root
+  - bind
+  - named
+  - unbound

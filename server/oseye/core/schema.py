@@ -122,6 +122,7 @@ class Alert(BaseModel):
     status: Literal["open", "acknowledged", "investigating", "resolved", "false_positive"]
 
     rule_id: str | None = None
+    rule_type: Literal["anomaly", "surveillance"] = "anomaly"
     ml_triggered: bool = False
     ti_triggered: bool = False
 
@@ -263,6 +264,8 @@ class Rule(BaseModel):
     mitre: list[str] = Field(default_factory=list)
     explanation: str = ""
 
+    rule_type: Literal["anomaly", "surveillance"] = "anomaly"
+
     match_count: int = 0
     last_matched: datetime | None = None
     false_positive_count: int = 0
@@ -310,6 +313,12 @@ class SurveillanceProfile(BaseModel):
     ignore_paths_prefix: list[str] = Field(default_factory=list)
     ignore_processes: list[str] = Field(default_factory=list)
 
+    baseline_apps: list[str] = Field(default_factory=list)
+    baseline_net_dests: list[str] = Field(default_factory=list)
+    baseline_users: list[str] = Field(default_factory=list)
+
+    rule_ids: list[str] = Field(default_factory=list)
+
     min_severity: Literal["info", "low", "medium", "high", "critical"] = "low"
     push_interval_s: int = 60
 
@@ -332,6 +341,7 @@ class AgentInfo(BaseModel):
     revoked: bool = False
     online: bool = False
     platform: str = "linux"  # "linux" | "windows" | "darwin"
+    disconnect_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------
