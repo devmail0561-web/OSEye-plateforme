@@ -42,10 +42,8 @@ ui/dist/
 ui/.env.local
 ui/coverage/
 
-# Site docs (sources trackés, artefacts ignorés)
-site/node_modules/
-site/dist/
-site/.astro/
+# Site docs — local uniquement, non tracké sur GitHub
+site/
 
 # IDE
 .idea/
