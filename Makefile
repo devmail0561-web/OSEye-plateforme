@@ -397,8 +397,28 @@ package-server: ## Build oseye-server binary, .deb, .rpm and Docker image
 		-f server/Dockerfile .
 	@echo "==> Image oseye-server:$(VERSION) prête"
 
-## Build ALL production artifacts (agent + server binaries + packages + Docker)
-package-all: package-agent package-server
+## Build UI .deb + .rpm (nécessite npm, nginx sur la cible)
+package-ui: ## Build oseye-ui package — dashboard React servi par nginx
+	@echo "==> [1/2] Build UI React (production)"
+	cd ui && npm ci --ignore-scripts && VITE_API_URL="" npm run build
+	@echo "==> [2/2] Packaging oseye-ui $(VERSION) (.deb + .rpm)"
+	@if command -v nfpm >/dev/null 2>&1; then \
+		VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+			--config packaging/nfpm-ui.yaml \
+			--packager deb \
+			--target $(DIST_DIR); \
+		VERSION=$(VERSION) ARCH=$(ARCH) $(NFPM) package \
+			--config packaging/nfpm-ui.yaml \
+			--packager rpm \
+			--target $(DIST_DIR); \
+		echo "==> Packages UI:"; \
+		ls -lh $(DIST_DIR)/oseye-ui_* $(DIST_DIR)/oseye-ui-*.rpm 2>/dev/null || true; \
+	else \
+		echo "==> nfpm non trouvé — skip .deb/.rpm"; \
+	fi
+
+## Build ALL production artifacts (agent + server + ui binaries + packages + Docker)
+package-all: package-agent package-server package-ui
 	@echo ""
 	@echo "==> Artefacts prod disponibles dans $(DIST_DIR)/"
 	@ls -lh $(DIST_DIR)/ 2>/dev/null | grep -v "^total" | grep -v "^l" || true

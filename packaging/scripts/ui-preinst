@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+# Vérifier que nginx est installé
+if ! command -v nginx >/dev/null 2>&1; then
+    echo "nginx est requis. Installation..."
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get install -y nginx-light 2>/dev/null || apt-get install -y nginx
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y nginx
+    else
+        echo "ERROR: nginx introuvable. Installez nginx manuellement puis relancez." >&2
+        exit 1
+    fi
+fi

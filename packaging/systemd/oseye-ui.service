@@ -1,0 +1,19 @@
+[Unit]
+Description=OSEye UI — React dashboard (nginx)
+Documentation=https://github.com/devmail0561-web/OSEye-plateforme
+After=network.target oseye-server.service
+Wants=network.target
+
+[Service]
+Type=forking
+PIDFile=/run/nginx-oseye-ui.pid
+ExecStartPre=/usr/sbin/nginx -c /etc/oseye/ui-nginx.conf -t
+ExecStart=/usr/sbin/nginx -c /etc/oseye/ui-nginx.conf
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+PrivateTmp=yes
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

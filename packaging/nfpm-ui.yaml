@@ -1,0 +1,58 @@
+# nfpm v2 — oseye-ui package configuration
+# Usage: VERSION=0.3.0-alpha.2 ARCH=amd64 nfpm package --config packaging/nfpm-ui.yaml --target dist/
+# Prérequis: npm run build doit avoir été lancé dans ui/ avant le packaging.
+name: oseye-ui
+arch: ${ARCH}
+platform: linux
+version: "${VERSION}"
+version_schema: semver
+maintainer: "OSEye Project <contact@oseye.io>"
+description: |
+  OSEye UI — Interface web React (dashboard EDR/SIEM).
+  Servie par nginx sur le port 5173. Se connecte à oseye-server via proxy.
+  Configurer /etc/oseye/ui-nginx.conf pour pointer vers votre serveur OSEye.
+homepage: "https://github.com/devmail0561-web/OSEye-plateforme"
+license: "Apache-2.0"
+
+depends:
+  - nginx | nginx-light | nginx-full
+
+contents:
+  # Fichiers UI buildés (dist React)
+  - src: ui/dist/
+    dst: /usr/share/oseye/ui/
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+  # Config nginx (installée comme exemple — postinst copie vers ui-nginx.conf)
+  - src: packaging/config/ui-nginx.conf
+    dst: /etc/oseye/ui-nginx.conf.example
+    type: config|noreplace
+    file_info:
+      mode: 0644
+      owner: root
+      group: root
+
+  # Service systemd
+  - src: packaging/systemd/oseye-ui.service
+    dst: /usr/lib/systemd/system/oseye-ui.service
+    file_info:
+      mode: 0644
+      owner: root
+      group: root
+
+scripts:
+  preinstall:  packaging/scripts/ui-preinst
+  postinstall: packaging/scripts/ui-postinst
+  preremove:   packaging/scripts/ui-prerm
+  postremove:  packaging/scripts/ui-postrm
+
+deb:
+  fields:
+    Installed-Size: "5000"
+
+rpm:
+  group: "Applications/Internet"
+  summary: "OSEye EDR — Interface web"

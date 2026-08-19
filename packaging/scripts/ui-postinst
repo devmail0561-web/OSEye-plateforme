@@ -1,0 +1,32 @@
+#!/bin/sh
+set -e
+
+# Créer répertoire de logs
+install -d -m 755 /var/log/oseye
+chown root:adm /var/log/oseye 2>/dev/null || true
+
+# Installer la config nginx si absente
+if [ ! -f /etc/oseye/ui-nginx.conf ]; then
+    cp /etc/oseye/ui-nginx.conf.example /etc/oseye/ui-nginx.conf
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl enable oseye-ui
+
+    echo ""
+    echo "OSEye UI installée."
+    echo ""
+    echo "  Configuration : /etc/oseye/ui-nginx.conf"
+    echo "  → Modifier le proxy_pass pour pointer vers votre serveur OSEye"
+    echo "    (par défaut : http://localhost:8000)"
+    echo ""
+    echo "  Démarrer : sudo systemctl start oseye-ui"
+    echo "  Accès    : http://localhost:5173"
+    echo ""
+    echo "  Pour lier à un serveur distant :"
+    echo "    sudo oseye-server ui url http://<HOST>:5173   (côté serveur)"
+    echo "    sudo oseye-server api enable                  (si API management non activée)"
+    echo "    Editer /etc/oseye/ui-nginx.conf               (changer proxy_pass)"
+    echo "    sudo systemctl restart oseye-ui"
+fi
