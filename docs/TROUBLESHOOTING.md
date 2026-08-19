@@ -292,7 +292,7 @@ if context.cancelled():
 
 Rebuild et redéployer :
 ```bash
-docker build -t oseye-server:0.2.0-alpha.1 -f server/Dockerfile .
+docker build -t oseye-server:0.3.0-alpha.2 -f server/Dockerfile .
 docker restart oseye-server
 ```
 

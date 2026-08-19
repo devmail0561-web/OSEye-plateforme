@@ -8,7 +8,7 @@ Le serveur OSEye dispose d'une CLI pour l'initialisation, la configuration et la
 
 ### Docker (recommandé pour production)
 ```bash
-docker pull oseye-server:0.2.0-alpha.1
+docker pull oseye-server:0.3.0-alpha.2
 ```
 
 ### Installation native
@@ -188,7 +188,7 @@ docker run -d \
   -p 50051:50051 \
   --env-file /etc/oseye/server.env \
   --env-file /etc/oseye/secrets.env \
-  oseye-server:0.2.0-alpha.1
+  oseye-server:0.3.0-alpha.2
 ```
 
 ---
@@ -383,7 +383,7 @@ Options:
 ```bash
 # Vérifier si mise à jour disponible
 sudo oseye-server update --check-only
-# Current: 0.2.0-alpha.1
+# Current: 0.3.0-alpha.2
 # Latest:  0.3.0
 # Update available
 

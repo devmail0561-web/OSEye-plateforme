@@ -153,7 +153,7 @@ services:
     restart: unless-stopped
 
   oseye-server:
-    image: oseye-server:0.2.0-alpha.1
+    image: oseye-server:0.3.0-alpha.2
     environment:
       OSEYE_DB_BACKEND: postgresql
       OSEYE_DB_URL: postgresql+asyncpg://oseye:${DB_PASSWORD}@postgres:5432/oseye
@@ -196,7 +196,7 @@ services:
     restart: unless-stopped
 
   oseye-ui:
-    image: oseye-ui:0.2.0-alpha.1
+    image: oseye-ui:0.3.0-alpha.2
     environment:
       VITE_API_URL: https://oseye.example.com
       VITE_WS_URL: wss://oseye.example.com
@@ -361,7 +361,7 @@ which oseye-agent oseye-config
 # /usr/bin/oseye-config
 
 oseye-config --version
-# oseye-config 0.2.0-alpha.1
+# oseye-config 0.3.0-alpha.2
 ```
 
 ### 4.2 Enrollment
@@ -566,7 +566,7 @@ Aucun log `batch_ingested`.
 
 **Solution :** Passer `--build-arg` au moment du build :
 ```bash
-docker build -t oseye-ui:0.2.0-alpha.1 \
+docker build -t oseye-ui:0.3.0-alpha.2 \
   --build-arg VITE_API_URL=https://localhost:443 \
   -f ui/Dockerfile ui/
 ```
@@ -672,7 +672,7 @@ OSEye supporte le scale-out via Redis :
 ```yaml
 services:
   oseye-server:
-    image: oseye-server:0.2.0-alpha.1
+    image: oseye-server:0.3.0-alpha.2
     deploy:
       replicas: 3  # 3 instances
     # ... même config

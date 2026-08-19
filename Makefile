@@ -357,6 +357,21 @@ package-server: ## Build oseye-server binary, .deb, .rpm and Docker image
 		--add-data "rules:rules" \
 		--hidden-import oseye \
 		--hidden-import grpc \
+		--hidden-import aiosqlite \
+		--hidden-import asyncpg \
+		--hidden-import sqlalchemy.dialects.sqlite \
+		--hidden-import sqlalchemy.dialects.postgresql.asyncpg \
+		--hidden-import sqlalchemy.ext.asyncio \
+		--hidden-import passlib.handlers.bcrypt \
+		--exclude-module sklearn \
+		--exclude-module skimage \
+		--exclude-module matplotlib \
+		--exclude-module grpc_tools \
+		--exclude-module IPython \
+		--exclude-module ipykernel \
+		--exclude-module notebook \
+		--exclude-module pandas \
+		--exclude-module pytest \
 		--noconfirm \
 		--clean
 	@echo "==> [2/3] Packaging .deb + .rpm"
